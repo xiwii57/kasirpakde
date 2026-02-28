@@ -23,8 +23,7 @@ function redirectToCanonical(request: Request, url: URL): Response | null {
     return new Response(null, {
         status: request.method === "GET" ? 301 : 308,
         headers: {
-            "Location":      canonical.toString(),
-                        "Cache-Control": "public, max-age=31536000, immutable",
+            "Location":      canonical.toString(), "Cache-Control": "no-store",
         },
     });
 }
@@ -60,11 +59,8 @@ const PROTECTED_PREFIXES = [
 ];
 
 const STATIC_EXTS = /\.(ico|png|jpg|jpeg|webp|svg|gif|woff2?|ttf|otf|css|js|map|txt|xml|json)$/i;
-
-const MAX_BODY_BYTES = 512 * 1024; // 512 KB
-
+const MAX_BODY_BYTES = 512 * 1024;
 const ALLOWED_METHODS = new Set(["GET", "POST", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
-
 const REQUIRED_CONTENT_TYPE_METHODS = new Set(["POST", "PATCH"]);
 
 // ─── Nonce ────────────────────────────────────────────────────────────────────
@@ -114,10 +110,7 @@ function makeRateKey(ip: string, category: RateCategory): string {
     return `${category}:${safeIp}`;
 }
 
-function checkRateLimit(
-    ip: string,
-    category: RateCategory,
-): { allowed: boolean; retryAfter: number } {
+function checkRateLimit(ip: string, category: RateCategory): { allowed: boolean; retryAfter: number } {
     const cfg = RATE_CONFIG[category];
     const key  = makeRateKey(ip, category);
     const now  = Date.now();
@@ -130,16 +123,13 @@ function checkRateLimit(
         });
         return { allowed: true, retryAfter: 0 };
     }
-
     if (rec.strikes >= cfg.maxStrikes) {
         console.warn(`[Middleware] Blokir permanen IP: ${ip} (${category})`);
         return { allowed: false, retryAfter: 9999 };
     }
-
     if (rec.blocked && now < rec.blockUntil) {
         return { allowed: false, retryAfter: Math.ceil((rec.blockUntil - now) / 1000) };
     }
-
     if (rec.blocked && now >= rec.blockUntil) {
         rateStore.set(key, {
             count: 1, resetAt: now + cfg.windowMs,
@@ -147,7 +137,6 @@ function checkRateLimit(
         });
         return { allowed: true, retryAfter: 0 };
     }
-
     rec.count++;
     if (rec.count > cfg.maxAttempts) {
         const strikes  = rec.strikes + 1;
@@ -159,7 +148,6 @@ function checkRateLimit(
         console.warn(`[Middleware] Rate limit (${category}) IP diblokir: ${ip}, strike: ${strikes}, durasi: ${Math.round(blockMs / 60000)}m`);
         return { allowed: false, retryAfter: Math.ceil(blockMs / 1000) };
     }
-
     return { allowed: true, retryAfter: 0 };
 }
 
@@ -183,10 +171,8 @@ if (typeof setInterval !== "undefined") {
 function getClientIp(request: Request): string {
     const cfIp = request.headers.get("cf-connecting-ip");
     if (cfIp) return cfIp.trim().slice(0, 45);
-
     const forwarded = request.headers.get("x-forwarded-for");
     if (forwarded) return forwarded.split(",")[0].trim().slice(0, 45);
-
     return request.headers.get("x-real-ip")?.trim().slice(0, 45) ?? "0.0.0.0";
 }
 
@@ -212,20 +198,13 @@ function redirectRes(url: URL, path: string): Response {
 function jsonError(message: string, status: number): Response {
     return new Response(JSON.stringify({ error: message }), {
         status,
-        headers: {
-            "Content-Type":  "application/json; charset=utf-8",
-            "Cache-Control": "no-store",
-        },
+        headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
     });
 }
 
 function clearSessionCookies(): string[] {
-    // SameSite=Lax — harus sama persis dengan saat set di login.ts
     const base = `Path=/; Max-Age=0; HttpOnly; SameSite=Lax${IS_PROD ? "; Secure" : ""}`;
-    return [
-        `sb-access-token=; ${base}`,
-        `sb-refresh-token=; ${base}`,
-    ];
+    return [`sb-access-token=; ${base}`, `sb-refresh-token=; ${base}`];
 }
 
 function safeCompare(a: string, b: string): boolean {
@@ -234,10 +213,109 @@ function safeCompare(a: string, b: string): boolean {
     const aBytes = enc.encode(a);
     const bBytes = enc.encode(b);
     let diff = 0;
-    for (let i = 0; i < aBytes.length; i++) {
-        diff |= aBytes[i] ^ bBytes[i];
-    }
+    for (let i = 0; i < aBytes.length; i++) diff |= aBytes[i] ^ bBytes[i];
     return diff === 0;
+}
+
+// ─── GET USER VIA REST API (NO WASM) ─────────────────────────────────────────
+//
+// ⚠️ ROOT CAUSE FIX: supabase.auth.getUser() menggunakan WebAssembly internal
+// untuk JWT verification. Vercel Serverless memblokir kompilasi WASM:
+//   "CompileError: WebAssembly.compile(): Wasm code generation disallowed by embedder"
+//
+// Solusi: panggil Supabase Auth REST API langsung via fetch().
+// - Token tetap diverifikasi SERVER-SIDE oleh Supabase (bukan client-side)
+// - Hasil identik dengan getUser() — user object dengan email, id, dll
+// - Zero WASM, zero CompileError
+// - Timeout 5 detik untuk hindari hanging request
+//
+interface SupabaseUser {
+    id:                  string;
+    email?:              string;
+    email_confirmed_at?: string;
+    [key: string]:       unknown;
+}
+
+async function getUserFromToken(accessToken: string): Promise<{
+    user:  SupabaseUser | null;
+    error: string | null;
+}> {
+    try {
+        const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+            method:  "GET",
+            headers: {
+                "Authorization": `Bearer ${accessToken}`,
+                "apikey":        SUPABASE_ANON_KEY,
+                "Content-Type":  "application/json",
+            },
+            signal: AbortSignal.timeout(5000),
+        });
+
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({})) as { message?: string };
+            return { user: null, error: body.message ?? `HTTP ${res.status}` };
+        }
+
+        const user = await res.json() as SupabaseUser;
+        return { user, error: null };
+
+    } catch (err) {
+        return { user: null, error: err instanceof Error ? err.message : "fetch error" };
+    }
+}
+
+// ─── REFRESH TOKEN VIA REST API (NO WASM) ────────────────────────────────────
+//
+// Sama seperti getUserFromToken — hindari WASM dengan panggil REST API langsung.
+// Digunakan saat access token expired tapi refresh token masih valid.
+//
+interface RefreshResult {
+    accessToken:  string;
+    refreshToken: string;
+    expiresIn:    number;
+    user:         SupabaseUser;
+}
+
+async function refreshSessionFromToken(refreshToken: string): Promise<{
+    data:  RefreshResult | null;
+    error: string | null;
+}> {
+    try {
+        const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+            method:  "POST",
+            headers: {
+                "apikey":       SUPABASE_ANON_KEY,
+                "Content-Type": "application/json",
+            },
+            body:   JSON.stringify({ refresh_token: refreshToken }),
+                                signal: AbortSignal.timeout(5000),
+        });
+
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({})) as { message?: string };
+            return { data: null, error: body.message ?? `HTTP ${res.status}` };
+        }
+
+        const body = await res.json() as {
+            access_token:  string;
+            refresh_token: string;
+            expires_in:    number;
+            user:          SupabaseUser;
+        };
+
+        return {
+            data: {
+                accessToken:  body.access_token,
+                refreshToken: body.refresh_token,
+                expiresIn:    body.expires_in ?? 3600,
+                user:         body.user,
+            },
+            error: null,
+        };
+
+    } catch (err) {
+        return { data: null, error: err instanceof Error ? err.message : "fetch error" };
+    }
 }
 
 // ─── CSP & Security Headers ───────────────────────────────────────────────────
@@ -262,17 +340,6 @@ function buildCSP(nonce: string): string {
         ].join("; ");
     }
 
-    // Production CSP:
-    // - 'wasm-unsafe-eval': diperlukan untuk Supabase JS client yang menggunakan
-    //   WebAssembly internal untuk JWT verification dan crypto operations.
-    //   Directive ini HANYA mengizinkan kompilasi WASM binary, TIDAK membuka
-    //   celah untuk arbitrary JavaScript eval().
-    //
-    // - 'require-trusted-types-for' DIHAPUS: directive ini memblokir semua
-    //   innerHTML assignment dan DOM manipulation di script halaman (login form,
-    //   kasir, produk). Browser melempar TrustedTypes violation dan script berhenti.
-    //   Implementasi Trusted Types memerlukan refactor besar seluruh codebase.
-    //   Referensi: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy/require-trusted-types-for
     return [
         "default-src 'none'",
         `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' https://challenges.cloudflare.com`,
@@ -292,11 +359,7 @@ function buildCSP(nonce: string): string {
     ].join("; ");
 }
 
-function applySecurityHeaders(
-    response:   Response,
-    nonce:      string,
-    isApiRoute: boolean,
-): Response {
+function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boolean): Response {
     const h = new Headers(response.headers);
 
     h.set("Content-Security-Policy",   buildCSP(nonce));
@@ -305,11 +368,9 @@ function applySecurityHeaders(
     h.set("Referrer-Policy",           "no-referrer");
     h.set("X-XSS-Protection",          "0");
     h.set("Permissions-Policy", [
-        "camera=()", "microphone=()", "geolocation=()",
-          "payment=()", "usb=()", "bluetooth=()",
-          "accelerometer=()", "gyroscope=()", "magnetometer=()",
-          "interest-cohort=()",
-          "browsing-topics=()",
+        "camera=()", "microphone=()", "geolocation=()", "payment=()", "usb=()",
+          "bluetooth=()", "accelerometer=()", "gyroscope=()", "magnetometer=()",
+          "interest-cohort=()", "browsing-topics=()",
     ].join(", "));
 
     if (!h.has("Cache-Control") || h.get("Cache-Control") === "") {
@@ -327,13 +388,11 @@ function applySecurityHeaders(
     if (IS_PROD) {
         h.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
     }
-
     if (!isApiRoute) {
         h.set("Cross-Origin-Opener-Policy",   "same-origin");
         h.set("Cross-Origin-Embedder-Policy", "unsafe-none");
         h.set("Cross-Origin-Resource-Policy", "same-origin");
     }
-
     if (isApiRoute) {
         h.set("X-Content-Type-Options",       "nosniff");
         h.set("Cross-Origin-Resource-Policy", "same-site");
@@ -360,11 +419,8 @@ function checkOrigin(request: Request, url: URL): boolean {
     ]);
 
     if (origin && origin !== "null") {
-        try {
-            return allowedOrigins.has(new URL(origin).origin);
-        } catch {
-            return false;
-        }
+        try { return allowedOrigins.has(new URL(origin).origin); }
+        catch { return false; }
     }
 
     if (origin === "null") {
@@ -377,11 +433,8 @@ function checkOrigin(request: Request, url: URL): boolean {
     }
 
     if (referer) {
-        try {
-            return allowedOrigins.has(new URL(referer).origin);
-        } catch {
-            return false;
-        }
+        try { return allowedOrigins.has(new URL(referer).origin); }
+        catch { return false; }
     }
 
     if (IS_PROD) {
@@ -395,27 +448,14 @@ function checkOrigin(request: Request, url: URL): boolean {
 
 function isSuspiciousRequest(request: Request, pathname: string): boolean {
     const ua = request.headers.get("user-agent") ?? "";
-
     if (pathname.includes("../") || pathname.includes("..\\")) return true;
     if (pathname.includes("\0")) return true;
-
     if (/%[0-9a-f]{2}/i.test(pathname)) {
         const decoded = decodeURIComponent(pathname);
-        if (decoded.includes("../") || decoded.includes("<script") || decoded.includes("javascript:")) {
-            return true;
-        }
+        if (decoded.includes("../") || decoded.includes("<script") || decoded.includes("javascript:")) return true;
     }
-
     if (!ua && pathname.startsWith("/api/")) return true;
-
-    if (
-        ua.toLowerCase().includes("sqlmap")  ||
-        ua.toLowerCase().includes("nikto")   ||
-        ua.toLowerCase().includes("masscan")
-    ) {
-        return true;
-    }
-
+    if (ua.toLowerCase().includes("sqlmap") || ua.toLowerCase().includes("nikto") || ua.toLowerCase().includes("masscan")) return true;
     return false;
 }
 
@@ -441,34 +481,22 @@ export function invalidateSessionCache(accessToken: string): void {
     sessionCache.delete(getSessionCacheKey(accessToken));
 }
 
-async function validateSession(
-    accessToken:  string,
-    refreshToken: string,
-): Promise<SessionResult> {
+async function validateSession(accessToken: string, refreshToken: string): Promise<SessionResult> {
     if (!accessToken || !refreshToken) return { valid: false, isAdmin: false };
 
     const jwtPattern = /^[\w-]+\.[\w-]+\.[\w-]+$/;
-    if (!jwtPattern.test(accessToken)) {
-        return { valid: false, isAdmin: false };
-    }
+    if (!jwtPattern.test(accessToken)) return { valid: false, isAdmin: false };
 
     const cacheKey = getSessionCacheKey(accessToken);
     const cached   = sessionCache.get(cacheKey);
 
-    // FIX: hanya gunakan cache jika result valid=true.
-    // Jika cache menyimpan valid=false (misalnya karena transient network error),
-    // jangan gunakan — coba validasi ulang ke Supabase.
+    // Hanya gunakan cache jika valid=true — jangan cache hasil gagal
     if (cached && Date.now() < cached.expiresAt && cached.result.valid) {
         return cached.result;
     }
-
-    // Hapus cache yang stale atau invalid sebelum validasi ulang
-    if (cached) {
-        sessionCache.delete(cacheKey);
-    }
+    if (cached) sessionCache.delete(cacheKey);
 
     const store = (result: SessionResult) => {
-        // Hanya cache jika valid, agar invalid result tidak menghalangi login berikutnya
         if (result.valid) {
             sessionCache.set(cacheKey, { result, expiresAt: Date.now() + SESSION_CACHE_TTL_MS });
         }
@@ -476,18 +504,10 @@ async function validateSession(
     };
 
     try {
-        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-            auth: {
-                autoRefreshToken:   false,
-                persistSession:     false,
-                detectSessionInUrl: false,
-            },
-            global: {
-                headers: { Authorization: `Bearer ${accessToken}` },
-            },
-        });
-
-        const { data: { user }, error } = await supabase.auth.getUser(accessToken);
+        // ✅ FIX UTAMA: gunakan REST API langsung — tidak ada WASM, tidak ada CompileError
+        // Sebelumnya: supabase.auth.getUser(accessToken) → WASM crash di Vercel
+        // Sekarang:   fetch ke /auth/v1/user dengan Authorization header → zero WASM
+        const { user, error } = await getUserFromToken(accessToken);
 
         if (!error && user) {
             const isAdmin = safeCompare(
@@ -497,21 +517,11 @@ async function validateSession(
             return store({ valid: true, isAdmin, email: user.email });
         }
 
-        // Access token expired — refresh menggunakan service role
-        const sbService = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
-            auth: {
-                autoRefreshToken:   false,
-                persistSession:     false,
-                detectSessionInUrl: false,
-            },
-        });
+        // Access token expired — coba refresh via REST API (juga no WASM)
+        const { data: rd, error: re } = await refreshSessionFromToken(refreshToken);
 
-        const { data: rd, error: re } = await sbService.auth.refreshSession({
-            refresh_token: refreshToken,
-        });
-
-        if (re || !rd?.user || !rd?.session) {
-            return { valid: false, isAdmin: false }; // tidak di-cache
+        if (re || !rd) {
+            return { valid: false, isAdmin: false };
         }
 
         const isAdmin = safeCompare(
@@ -519,18 +529,18 @@ async function validateSession(
                                     ADMIN_EMAIL_NORMALIZED,
         );
 
-        // Token baru — jangan cache di sini, biarkan request berikutnya cache token baru
+        // Token baru — kembalikan tanpa cache agar request berikutnya cache token baru
         return {
             valid:           true,
             isAdmin,
             email:           rd.user.email,
-            newAccessToken:  rd.session.access_token,
-            newExpiresIn:    rd.session.expires_in ?? 3600,
+            newAccessToken:  rd.accessToken,
+            newExpiresIn:    rd.expiresIn,
         };
 
     } catch (err) {
         console.error("[Middleware] Session validation error:", err instanceof Error ? err.message : "unknown");
-        return { valid: false, isAdmin: false }; // tidak di-cache
+        return { valid: false, isAdmin: false };
     }
 }
 
@@ -556,9 +566,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     (locals as App.Locals).nonce = nonce;
 
     // ── 1. Aset statis ────────────────────────────────────────────────────────
-    if (isStaticAsset(pathname)) {
-        return next();
-    }
+    if (isStaticAsset(pathname)) return next();
 
     // ── 1b. Canonical domain redirect ─────────────────────────────────────────
     const domainRedirect = redirectToCanonical(request, url);
@@ -567,39 +575,27 @@ export const onRequest = defineMiddleware(async (context, next) => {
     // ── 2. Deteksi request mencurigakan ───────────────────────────────────────
     if (isSuspiciousRequest(request, pathname)) {
         console.warn(`[Middleware] Request mencurigakan dari IP: ${ip}, path: ${pathname}`);
-        return applySecurityHeaders(
-            new Response("Bad Request", { status: 400 }),
-                                    nonce, isApiRoute,
-        );
+        return applySecurityHeaders(new Response("Bad Request", { status: 400 }), nonce, isApiRoute);
     }
 
     // ── 3. Blokir method berbahaya ────────────────────────────────────────────
     if (!ALLOWED_METHODS.has(method)) {
         return applySecurityHeaders(
-            new Response("Method Not Allowed", {
-                status:  405,
-                headers: { Allow: [...ALLOWED_METHODS].join(", ") },
-            }),
-            nonce, isApiRoute,
+            new Response("Method Not Allowed", { status: 405, headers: { Allow: [...ALLOWED_METHODS].join(", ") } }),
+                                    nonce, isApiRoute,
         );
     }
 
     // ── 4. Cegah body terlalu besar ───────────────────────────────────────────
     const contentLength = parseInt(request.headers.get("content-length") ?? "0", 10);
     if (Number.isNaN(contentLength) || contentLength > MAX_BODY_BYTES) {
-        return applySecurityHeaders(
-            jsonError("Payload terlalu besar", 413),
-                                    nonce, isApiRoute,
-        );
+        return applySecurityHeaders(jsonError("Payload terlalu besar", 413), nonce, isApiRoute);
     }
 
     // ── 5. CSRF check ─────────────────────────────────────────────────────────
     if (!checkOrigin(request, url)) {
         console.warn(`[Middleware] CSRF check gagal — IP: ${ip}, path: ${pathname}, method: ${method}`);
-        return applySecurityHeaders(
-            jsonError("Forbidden: origin tidak valid", 403),
-                                    nonce, isApiRoute,
-        );
+        return applySecurityHeaders(jsonError("Forbidden: origin tidak valid", 403), nonce, isApiRoute);
     }
 
     // ── 6. Content-Type validation ────────────────────────────────────────────
@@ -609,10 +605,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         ct.includes("application/x-www-form-urlencoded") ||
         ct.includes("multipart/form-data");
         if (!validCT) {
-            return applySecurityHeaders(
-                jsonError("Content-Type tidak valid", 415),
-                                        nonce, isApiRoute,
-            );
+            return applySecurityHeaders(jsonError("Content-Type tidak valid", 415), nonce, isApiRoute);
         }
     }
 
@@ -625,14 +618,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
             return applySecurityHeaders(
                 new Response(
                     JSON.stringify({ error: `Terlalu banyak percobaan. Coba lagi dalam ${minutes}.` }),
-                             {
-                                 status:  429,
-                                 headers: {
-                                     "Content-Type":  "application/json; charset=utf-8",
-                                     "Retry-After":   String(retryAfter),
-                             "Cache-Control": "no-store",
-                                 },
-                             },
+                             { status: 429, headers: { "Content-Type": "application/json; charset=utf-8", "Retry-After": String(retryAfter), "Cache-Control": "no-store" } },
                 ),
                 nonce, isApiRoute,
             );
@@ -646,14 +632,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
             return applySecurityHeaders(
                 new Response(
                     JSON.stringify({ error: "Terlalu banyak request. Coba lagi sebentar." }),
-                             {
-                                 status:  429,
-                                 headers: {
-                                     "Content-Type":  "application/json; charset=utf-8",
-                                     "Retry-After":   String(retryAfter),
-                             "Cache-Control": "no-store",
-                                 },
-                             },
+                             { status: 429, headers: { "Content-Type": "application/json; charset=utf-8", "Retry-After": String(retryAfter), "Cache-Control": "no-store" } },
                 ),
                 nonce, isApiRoute,
             );
@@ -672,60 +651,42 @@ export const onRequest = defineMiddleware(async (context, next) => {
         const refreshToken = cookies.get("sb-refresh-token")?.value ?? "";
 
         if (!accessToken || !refreshToken) {
-            const fail    = isApiRoute
-            ? jsonError("Autentikasi diperlukan.", 401)
-            : redirectRes(url, "/?error=session_expired");
+            const fail    = isApiRoute ? jsonError("Autentikasi diperlukan.", 401) : redirectRes(url, "/?error=session_expired");
             const headers = new Headers(fail.headers);
             clearSessionCookies().forEach((c) => headers.append("Set-Cookie", c));
-            return applySecurityHeaders(
-                new Response(fail.body, { status: fail.status, headers }),
-                                        nonce, isApiRoute,
-            );
+            return applySecurityHeaders(new Response(fail.body, { status: fail.status, headers }), nonce, isApiRoute);
         }
 
         const session = await validateSession(accessToken, refreshToken);
 
         if (!session.valid) {
             console.warn(`[Middleware] Sesi tidak valid — IP: ${ip}, path: ${pathname}`);
-            const fail    = isApiRoute
-            ? jsonError("Sesi tidak valid.", 401)
-            : redirectRes(url, "/?error=session_expired");
+            const fail    = isApiRoute ? jsonError("Sesi tidak valid.", 401) : redirectRes(url, "/?error=session_expired");
             const headers = new Headers(fail.headers);
             clearSessionCookies().forEach((c) => headers.append("Set-Cookie", c));
-            return applySecurityHeaders(
-                new Response(fail.body, { status: fail.status, headers }),
-                                        nonce, isApiRoute,
-            );
+            return applySecurityHeaders(new Response(fail.body, { status: fail.status, headers }), nonce, isApiRoute);
         }
 
         if (!session.isAdmin) {
             console.warn(`[Middleware] Non-admin ditolak: ${session.email} — IP: ${ip}`);
-            const fail    = isApiRoute
-            ? jsonError("Akses ditolak.", 403)
-            : redirectRes(url, "/?error=unauthorized");
+            const fail    = isApiRoute ? jsonError("Akses ditolak.", 403) : redirectRes(url, "/?error=unauthorized");
             const headers = new Headers(fail.headers);
             clearSessionCookies().forEach((c) => headers.append("Set-Cookie", c));
-            return applySecurityHeaders(
-                new Response(fail.body, { status: fail.status, headers }),
-                                        nonce, isApiRoute,
-            );
+            return applySecurityHeaders(new Response(fail.body, { status: fail.status, headers }), nonce, isApiRoute);
         }
 
         (locals as App.Locals).user = { email: session.email ?? "", isAdmin: true };
-
         resetLoginRateLimit(ip);
 
         const response = await next();
 
+        // Token direfresh — update cookie sb-access-token dengan token baru
         if (session.newAccessToken) {
             const expiresIn  = session.newExpiresIn ?? 3600;
             const cookieOpts = `Path=/; HttpOnly; SameSite=Lax; Max-Age=${expiresIn}${IS_PROD ? "; Secure" : ""}`;
             const headers    = new Headers(response.headers);
             headers.append("Set-Cookie", `sb-access-token=${session.newAccessToken}; ${cookieOpts}`);
-            return applySecurityHeaders(
-                new Response(response.body, { status: response.status, headers }),
-                                        nonce, isApiRoute,
-            );
+            return applySecurityHeaders(new Response(response.body, { status: response.status, headers }), nonce, isApiRoute);
         }
 
         return applySecurityHeaders(response, nonce, isApiRoute);
