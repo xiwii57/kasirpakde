@@ -356,22 +356,39 @@ function checkOrigin(request: Request, url: URL): boolean {
     const origin  = request.headers.get("origin");
     const referer = request.headers.get("referer");
 
-    // Hanya proses origin jika ada dan bukan string literal "null"
+    // Semua origin yang valid
+    const allowedOrigins = new Set([
+        url.origin,
+        ...(CANONICAL_DOMAIN ? [`https://${CANONICAL_DOMAIN}`] : []),
+    ]);
+
+    // Origin ada dan bukan "null" — validasi normal
     if (origin && origin !== "null") {
         try {
-            return new URL(origin).origin === url.origin;
+            return allowedOrigins.has(new URL(origin).origin);
         } catch {
             return false;
         }
     }
 
-    // Fallback ke referer jika origin absen atau "null"
+    // Referer ada — validasi dari referer
     if (referer) {
         try {
-            return new URL(referer).origin === url.origin;
+            return allowedOrigins.has(new URL(referer).origin);
         } catch {
             return false;
         }
+    }
+
+    // origin === "null" (form submit browser) — validasi dari Host header
+    // Browser mengirim origin:"null" untuk same-site form submit dalam kondisi tertentu
+    if (origin === "null") {
+        const host           = request.headers.get("host") ?? "";
+        const expectedHosts  = new Set([
+            url.host,
+            ...(CANONICAL_DOMAIN ? [CANONICAL_DOMAIN] : []),
+        ]);
+        return expectedHosts.has(host.split(":")[0]) || expectedHosts.has(host);
     }
 
     if (IS_PROD) {
