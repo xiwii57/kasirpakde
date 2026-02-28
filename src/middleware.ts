@@ -1,4 +1,5 @@
 // src/middleware.ts
+import { defineMiddleware } from "astro:middleware";
 
 // ─── Konstanta ────────────────────────────────────────────────────────────────
 
@@ -21,7 +22,8 @@ function redirectToCanonical(request: Request, url: URL): Response | null {
     return new Response(null, {
         status: request.method === "GET" ? 301 : 308,
         headers: {
-            "Location":      canonical.toString(), "Cache-Control": "no-store",
+            "Location":      canonical.toString(),
+                        "Cache-Control": "public, max-age=31536000, immutable",
         },
     });
 }
