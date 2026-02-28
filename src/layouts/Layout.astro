@@ -1,0 +1,36 @@
+---
+import "../styles/global.css";
+import Sidebar from "../components/Sidebar.astro";
+import { ViewTransitions } from 'astro:transitions';
+
+interface Props {
+  title: string;
+  active: string;
+  nonce?: string;
+}
+
+const { title, active, nonce = "" } = Astro.props;
+---
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{title} — Kasir Warung</title>
+  <ViewTransitions />
+  <meta name="astro-prefetch" content="hover" />
+</head>
+<body class="min-h-screen bg-[#f7f3ee]" style="font-family:'DM Sans',sans-serif">
+
+  <div class="flex h-screen overflow-hidden">
+
+    <Sidebar active={active} />
+
+    <main class="flex-1 overflow-y-auto" id="main">
+      <slot />
+    </main>
+
+  </div>
+
+</body>
+</html>

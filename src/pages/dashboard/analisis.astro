@@ -1,0 +1,599 @@
+---
+// src/pages/dashboard/analisis.astro
+export const prerender = false;
+import "../../styles/global.css";
+import { createServiceClient } from "../../lib/supabase";
+import Layout from "../../layouts/Layout.astro";
+
+const accessToken = Astro.cookies.get("sb-access-token");
+if (!accessToken?.value) return Astro.redirect("/");
+
+Astro.response.headers.set('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+
+const nonce = (Astro.locals as App.Locals).nonce ?? "";
+const sb = createServiceClient();
+
+// ── Ambil data 30 hari terakhir ──────────────────────────────────────────
+const since30 = new Date();
+since30.setDate(since30.getDate() - 29);
+since30.setHours(0, 0, 0, 0);
+const since30UTC = new Date(since30.getTime() - 7 * 60 * 60 * 1000);
+
+const { data: trxRaw } = await sb
+  .from("transaksi")
+  .select(`
+    id, created_at, total, metode_bayar,
+    transaksi_item ( produk_id, nama_produk, harga_jual, harga_beli, qty )
+  `)
+  .eq("status", "paid")
+  .gte("created_at", since30UTC.toISOString())
+  .order("created_at", { ascending: true });
+
+const trx = trxRaw ?? [];
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+function toWIB(iso: string) {
+  return new Date(new Date(iso).getTime() + 7 * 60 * 60 * 1000);
+}
+function dateKey(iso: string) {
+  const d = toWIB(iso);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function rp(n: number) {
+  return new Intl.NumberFormat("id-ID", { style:"currency", currency:"IDR", minimumFractionDigits:0 }).format(n);
+}
+function pad2(n: number) { return String(n).padStart(2,'0'); }
+
+// ── Kalkulasi per hari (30 slot) ─────────────────────────────────────────
+const days: Record<string, { omset:number; modal:number; laba:number; trx:number; label:string }> = {};
+for (let i = 29; i >= 0; i--) {
+  const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0,0,0,0);
+  const wib = new Date(d.getTime() + 7*60*60*1000);
+  const k = `${wib.getFullYear()}-${pad2(wib.getMonth()+1)}-${pad2(wib.getDate())}`;
+  const lbl = `${pad2(wib.getMonth()+1)}/${pad2(wib.getDate())}`;
+  days[k] = { omset:0, modal:0, laba:0, trx:0, label:lbl };
+}
+for (const t of trx) {
+  const k = dateKey(t.created_at);
+  if (!days[k]) continue;
+  days[k].trx++;
+  for (const item of (t.transaksi_item ?? [])) {
+    const o = item.harga_jual * item.qty;
+    const m = item.harga_beli * item.qty;
+    days[k].omset += o;
+    days[k].modal += m;
+    days[k].laba  += o - m;
+  }
+}
+const dayList = Object.entries(days).map(([date, v]) => ({ date, ...v }));
+
+// Today key
+const nowWIB = toWIB(new Date().toISOString());
+const todayKey = `${nowWIB.getFullYear()}-${pad2(nowWIB.getMonth()+1)}-${pad2(nowWIB.getDate())}`;
+
+// ── Max values untuk skala bar ───────────────────────────────────────────
+const maxOmset = Math.max(...dayList.map(d => d.omset), 1);
+const maxLaba  = Math.max(...dayList.map(d => d.laba),  1);
+
+// ── Summary 30 hari ──────────────────────────────────────────────────────
+const totalOmset = dayList.reduce((s,d) => s + d.omset, 0);
+const totalLaba  = dayList.reduce((s,d) => s + d.laba,  0);
+const totalTrx   = dayList.reduce((s,d) => s + d.trx,   0);
+const marginPct  = totalOmset > 0 ? ((totalLaba / totalOmset) * 100).toFixed(1) : "0.0";
+const avgTrx     = totalTrx > 0 ? rp(Math.round(totalOmset / totalTrx)) : "Rp 0";
+const perHari    = rp(Math.round(totalOmset / 30));
+
+// ── Produk terlaris ──────────────────────────────────────────────────────
+const produkMap: Record<string, { nama:string; qty:number; omset:number }> = {};
+for (const t of trx) {
+  for (const item of (t.transaksi_item ?? [])) {
+    const key = item.produk_id ?? item.nama_produk;
+    if (!produkMap[key]) produkMap[key] = { nama:item.nama_produk, qty:0, omset:0 };
+    produkMap[key].qty   += item.qty;
+    produkMap[key].omset += item.harga_jual * item.qty;
+  }
+}
+const terlaris = Object.values(produkMap).sort((a,b) => b.qty - a.qty).slice(0, 10);
+const maxQty = terlaris[0]?.qty ?? 1;
+
+// ── Metode bayar ─────────────────────────────────────────────────────────
+const qrisCount = trx.filter(t => t.metode_bayar === "qris").length;
+const cashCount = trx.filter(t => t.metode_bayar !== "qris").length;
+const tot2      = qrisCount + cashCount;
+const qrisPct   = tot2 > 0 ? Math.round((qrisCount / tot2) * 100) : 0;
+const cashPct   = 100 - qrisPct;
+const R=36, CX=44, CY=44;
+const circ     = 2 * Math.PI * R;
+const qrisDash = (qrisPct / 100) * circ;
+const cashDash = circ - qrisDash;
+
+// ── Jam tersibuk ─────────────────────────────────────────────────────────
+const jamMap: number[] = new Array(24).fill(0);
+for (const t of trx) jamMap[toWIB(t.created_at).getHours()]++;
+const jamMax   = Math.max(...jamMap, 1);
+const jamPeak  = jamMap.indexOf(Math.max(...jamMap));
+const jamTotal = trx.length;
+
+// ── Label x-axis omset (tiap 5 bar) ─────────────────────────────────────
+// Prekalkulasi: tampilkan label tiap 5 hari + hari ini
+const showLabelIdx = new Set<number>();
+dayList.forEach((d,i) => {
+  if (i % 5 === 0 || d.date === todayKey || i === dayList.length-1) showLabelIdx.add(i);
+});
+---
+
+<Layout title="Analisis" active="analisis" nonce={nonce}>
+<style>
+:root {
+  --an-surface:#ffffff; --an-border:#e8eaed; --an-text:#1a1d23;
+  --an-muted:#6b7280; --an-primary:#2563eb; --an-green:#16a34a;
+  --an-radius:10px; --an-shadow:0 1px 4px rgba(0,0,0,.06),0 0 0 1px var(--an-border);
+}
+.an-wrap { padding:20px 20px 48px; max-width:1100px; margin:0 auto; }
+
+/* Header */
+.an-header { display:flex; align-items:center; gap:10px; margin-bottom:20px; }
+.an-header h1 { font-size:1.1rem; font-weight:700; color:var(--an-text); margin:0; }
+
+/* Cards */
+.an-cards { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
+@media(max-width:800px){ .an-cards{grid-template-columns:repeat(2,1fr);} }
+.an-card {
+  background:var(--an-surface); border-radius:var(--an-radius);
+  box-shadow:var(--an-shadow); padding:14px 16px 16px;
+}
+.an-card-lbl {
+  font-size:.65rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:.07em; color:var(--an-muted); margin-bottom:6px;
+  display:flex; align-items:center; gap:5px;
+}
+.an-card-val { font-size:1.2rem; font-weight:800; color:var(--an-text); line-height:1.15; margin-bottom:3px; }
+.an-card-val.c-blue  { color:var(--an-primary); }
+.an-card-val.c-green { color:var(--an-green); }
+.an-card-sub { font-size:.68rem; color:var(--an-muted); }
+
+/* Panel */
+.an-panel { background:var(--an-surface); border-radius:var(--an-radius); box-shadow:var(--an-shadow); overflow:hidden; margin-bottom:14px; }
+.an-panel-head { padding:12px 16px; border-bottom:1px solid var(--an-border); display:flex; align-items:center; gap:7px; }
+.an-panel-head h2 { font-size:.78rem; font-weight:700; color:var(--an-text); margin:0; }
+.an-panel-lbl { margin-left:auto; font-size:.65rem; color:var(--an-muted); }
+.an-panel-body { padding:16px; }
+.an-row { display:grid; gap:14px; margin-bottom:14px; }
+.an-r-21 { grid-template-columns:2fr 1fr; }
+.an-r-11 { grid-template-columns:1fr 1fr; }
+@media(max-width:700px){ .an-r-21,.an-r-11{grid-template-columns:1fr;} }
+
+/* ═══════════════════════════════════════════════════════════════════
+   BAR CHART — server-side rendered, sama persis dengan jam tersibuk
+   Struktur: .chart-wrap > .chart-col*n
+             .chart-col berisi .chart-col-inner (flex column, align-items:flex-end)
+               └ .chart-bar  (warna, tinggi via inline style)
+             label via ::after pseudo, tidak ada teks di dalam bar
+   ═══════════════════════════════════════════════════════════════════ */
+.chart-wrap {
+  display:flex;
+  align-items:flex-end;
+  gap:2px;
+  height:120px;
+  border-bottom:1px solid var(--an-border);
+  overflow:visible;
+  position:relative;
+}
+
+/* Satu kolom per hari */
+.chart-col {
+  flex:1;
+  height:100%;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  align-items:stretch;
+  position:relative;
+  cursor:default;
+}
+
+/* Bar warna — satu-satunya child visual, TIDAK ADA TEXT di dalamnya */
+.chart-bar {
+  width:100%;
+  border-radius:3px 3px 0 0;
+  min-height:0;
+  /* transisi warna saat hover */
+  transition:filter .12s;
+}
+.chart-col:hover .chart-bar { filter:brightness(.78); }
+
+/* Tooltip — absolute, opacity 0 default, hanya muncul saat hover */
+.chart-col .chart-tip {
+  position:absolute;
+  bottom:calc(100% + 6px);
+  left:50%;
+  transform:translateX(-50%);
+  background:#1a1d23;
+  color:#fff;
+  font-size:.6rem;
+  line-height:1.55;
+  padding:5px 8px;
+  border-radius:5px;
+  white-space:nowrap;
+  pointer-events:none;
+  z-index:50;
+  opacity:0;
+  transition:opacity .12s;
+  text-align:center;
+}
+.chart-col .chart-tip::after {
+  content:'';
+  position:absolute;
+  top:100%; left:50%; transform:translateX(-50%);
+  border:4px solid transparent;
+  border-top-color:#1a1d23;
+}
+.chart-col:hover .chart-tip { opacity:1; }
+
+/* X-axis label — pakai data-lbl + ::before pseudo trick agar
+   TIDAK ada teks sebagai flow content di dalam .chart-col */
+.chart-col[data-lbl]::after {
+  content: attr(data-lbl);
+  position:absolute;
+  bottom:-20px;
+  left:50%;
+  transform:translateX(-50%);
+  font-size:.57rem;
+  color:var(--an-muted);
+  white-space:nowrap;
+  pointer-events:none;
+}
+.chart-col.is-today[data-lbl]::after {
+  color:var(--an-primary);
+  font-weight:700;
+}
+.chart-col.is-today .chart-bar {
+  outline:2px solid var(--an-primary);
+  outline-offset:1px;
+}
+
+/* Padding bawah agar label tidak terpotong */
+.chart-outer {
+  padding-bottom:26px;
+  overflow:visible;
+}
+
+/* ── Jam chart (tidak berubah — sudah benar) ───────────────────────────── */
+.jam-bars {
+  display:flex; align-items:flex-end; gap:2px;
+  height:60px; border-bottom:1px solid var(--an-border);
+  margin-bottom:4px; overflow:visible;
+}
+.j-col { flex:1; height:100%; display:flex; align-items:flex-end; position:relative; }
+.j-col:hover .j-bar { background:var(--an-primary); }
+.j-bar { width:100%; border-radius:2px 2px 0 0; background:#bfdbfe; min-height:1px; transition:background .12s; }
+.j-col .j-tip {
+  position:absolute; bottom:calc(100%+4px); left:50%; transform:translateX(-50%);
+  background:#1a1d23; color:#fff; font-size:.58rem; padding:3px 6px;
+  border-radius:4px; white-space:nowrap; z-index:50; pointer-events:none;
+  opacity:0; transition:opacity .12s;
+}
+.j-col:hover .j-tip { opacity:1; }
+.jam-axis { display:flex; justify-content:space-between; font-size:.58rem; color:var(--an-muted); margin-top:2px; }
+.jam-peak-note { margin-top:8px; font-size:.68rem; color:var(--an-muted); text-align:center; }
+
+/* ── Terlaris ──────────────────────────────────────────────────────────── */
+.terlaris-list { display:flex; flex-direction:column; }
+.terlaris-row {
+  display:grid; grid-template-columns:22px 1fr 38px 88px;
+  align-items:center; gap:8px; padding:7px 0;
+  border-bottom:1px solid var(--an-border);
+}
+.terlaris-row:last-child { border-bottom:none; }
+.t-rank { font-size:.65rem; font-weight:700; color:var(--an-muted); text-align:center; }
+.t-rank.gold   { color:#d97706; }
+.t-rank.silver { color:#9ca3af; }
+.t-rank.bronze { color:#b45309; }
+.t-name-wrap { position:relative; overflow:hidden; border-radius:3px; }
+.t-fill { position:absolute; inset:0; background:#eff6ff; border-radius:3px; z-index:0; }
+.t-name { position:relative; z-index:1; font-size:.76rem; font-weight:600; color:var(--an-text); padding:2px 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.t-qty   { font-size:.7rem; color:var(--an-muted); text-align:center; }
+.t-omset { font-size:.72rem; font-weight:700; color:var(--an-text); text-align:right; }
+
+/* ── Metode ─────────────────────────────────────────────────────────────── */
+.metode-wrap   { display:flex; align-items:center; gap:20px; padding:4px 0; }
+.metode-legend { display:flex; flex-direction:column; gap:10px; flex:1; }
+.m-item { display:flex; align-items:center; gap:9px; }
+.m-dot  { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+.m-info { flex:1; }
+.m-label { font-size:.76rem; font-weight:600; color:var(--an-text); }
+.m-sub   { font-size:.63rem; color:var(--an-muted); }
+.m-pct   { font-size:.82rem; font-weight:800; }
+
+/* Empty */
+.an-empty { display:flex; flex-direction:column; align-items:center; gap:6px; padding:28px 16px; color:var(--an-muted); font-size:.75rem; }
+.an-empty svg { opacity:.25; }
+@media(max-width:480px){ .an-wrap{padding:12px 12px 36px;} }
+</style>
+
+<div class="an-wrap">
+
+  <!-- Header -->
+  <div class="an-header">
+    <button onclick="window.openSidebar&&window.openSidebar()"
+      class="lg:hidden flex-shrink-0 w-8 h-8 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100"
+      aria-label="Menu">
+      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+    </button>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <line x1="18" y1="20" x2="18" y2="10"/>
+      <line x1="12" y1="20" x2="12" y2="4"/>
+      <line x1="6"  y1="20" x2="6"  y2="14"/>
+    </svg>
+    <h1>Analisis</h1>
+    <span style="margin-left:auto;font-size:.7rem;color:var(--an-muted);background:var(--an-surface);border:1px solid var(--an-border);border-radius:6px;padding:3px 10px">
+      30 hari terakhir
+    </span>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="an-cards">
+    <div class="an-card">
+      <div class="an-card-lbl">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/>
+        </svg>Omset
+      </div>
+      <div class="an-card-val c-blue">{rp(totalOmset)}</div>
+      <div class="an-card-sub">{totalTrx} transaksi</div>
+    </div>
+    <div class="an-card">
+      <div class="an-card-lbl">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
+        </svg>Laba Bersih
+      </div>
+      <div class="an-card-val c-green">{rp(totalLaba)}</div>
+      <div class="an-card-sub">Margin {marginPct}%</div>
+    </div>
+    <div class="an-card">
+      <div class="an-card-lbl">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <line x1="18" y1="20" x2="18" y2="10"/>
+          <line x1="12" y1="20" x2="12" y2="4"/>
+          <line x1="6"  y1="20" x2="6"  y2="14"/>
+        </svg>Transaksi
+      </div>
+      <div class="an-card-val">{totalTrx}</div>
+      <div class="an-card-sub">Rata-rata {avgTrx}/trx</div>
+    </div>
+    <div class="an-card">
+      <div class="an-card-lbl">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+          <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+        </svg>Omset / Hari
+      </div>
+      <div class="an-card-val">{perHari}</div>
+      <div class="an-card-sub">Rata-rata harian</div>
+    </div>
+  </div>
+
+  <!-- Omset harian + Jam tersibuk -->
+  <div class="an-row an-r-21">
+    <div class="an-panel">
+      <div class="an-panel-head">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        <h2>Omset Harian</h2>
+        <span class="an-panel-lbl">30 hari</span>
+      </div>
+      <div class="an-panel-body">
+        <div class="chart-outer">
+          <div class="chart-wrap">
+            {dayList.map((d, i) => {
+              const pct     = maxOmset > 0 ? (d.omset / maxOmset) * 100 : 0;
+              const isToday = d.date === todayKey;
+              const showLbl = showLabelIdx.has(i);
+              const color   = isToday ? '#2563eb' : '#bfdbfe';
+              const tipHtml = `${rp(d.omset)}\n${d.trx} transaksi`;
+              return (
+                <div
+                  class={`chart-col${isToday ? ' is-today' : ''}`}
+                  data-lbl={showLbl ? d.label : undefined}
+                >
+                  {/* Tooltip — server-rendered, opacity:0 via CSS, hanya muncul saat hover */}
+                  <div class="chart-tip">
+                    {rp(d.omset)}<br/>{d.trx} transaksi
+                  </div>
+                  {/* Bar — HANYA elemen visual, tidak ada teks */}
+                  <div
+                    class="chart-bar"
+                    style={`height:${pct > 0 ? Math.max(pct, 1.5) : 0}%;background:${color}`}
+                  ></div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Jam tersibuk -->
+    <div class="an-panel">
+      <div class="an-panel-head">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <h2>Jam Tersibuk</h2>
+      </div>
+      <div class="an-panel-body">
+        {jamTotal === 0 ? (
+          <div class="an-empty">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+            </svg>
+            Belum ada data
+          </div>
+        ) : (
+          <>
+            <div class="jam-bars">
+              {jamMap.map((count, h) => (
+                <div class="j-col">
+                  <div class="j-bar" style={`height:${Math.max((count/jamMax)*100, count>0?5:0)}%`}></div>
+                  <div class="j-tip">{pad2(h)}:00 — {count} trx</div>
+                </div>
+              ))}
+            </div>
+            <div class="jam-axis">
+              <span>00</span><span>06</span><span>12</span><span>18</span><span>23</span>
+            </div>
+            <div class="jam-peak-note">
+              Puncak {pad2(jamPeak)}:00–{pad2(jamPeak+1)}:00 &nbsp;·&nbsp; {Math.max(...jamMap)} transaksi
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  </div>
+
+  <!-- Produk terlaris + Metode bayar -->
+  <div class="an-row an-r-11">
+    <div class="an-panel">
+      <div class="an-panel-head">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z"/>
+        </svg>
+        <h2>Produk Terlaris</h2>
+        <span class="an-panel-lbl">Top 10 · 30 hari</span>
+      </div>
+      <div class="an-panel-body" style="padding-top:8px;padding-bottom:8px">
+        {terlaris.length === 0 ? (
+          <div class="an-empty">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 9 4-4 4 4 4-5 6 7"/>
+            </svg>
+            Belum ada data
+          </div>
+        ) : (
+          <div class="terlaris-list">
+            {terlaris.map((p, i) => {
+              const barW = Math.round((p.qty / maxQty) * 100);
+              const rc   = i===0 ? 'gold' : i===1 ? 'silver' : i===2 ? 'bronze' : '';
+              return (
+                <div class="terlaris-row">
+                  <div class={`t-rank ${rc}`}>{i+1}</div>
+                  <div class="t-name-wrap">
+                    <div class="t-fill" style={`width:${barW}%`}></div>
+                    <div class="t-name">{p.nama}</div>
+                  </div>
+                  <div class="t-qty">{p.qty}×</div>
+                  <div class="t-omset">{rp(p.omset)}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+
+    <div class="an-panel">
+      <div class="an-panel-head">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+          <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+        </svg>
+        <h2>Metode Bayar</h2>
+        <span class="an-panel-lbl">30 hari</span>
+      </div>
+      <div class="an-panel-body">
+        {tot2 === 0 ? (
+          <div class="an-empty">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+            </svg>
+            Belum ada data
+          </div>
+        ) : (
+          <div class="metode-wrap">
+            <svg width="88" height="88" viewBox="0 0 88 88" aria-hidden="true" style="flex-shrink:0">
+              <circle cx={CX} cy={CY} r={R} fill="none" stroke="#e5e7eb" stroke-width="13"/>
+              {cashPct > 0 && (
+                <circle cx={CX} cy={CY} r={R} fill="none" stroke="#bfdbfe"
+                  stroke-width="13"
+                  stroke-dasharray={`${cashDash} ${qrisDash}`}
+                  stroke-dashoffset={String(-qrisDash)}
+                  transform={`rotate(-90 ${CX} ${CY})`}
+                />
+              )}
+              {qrisPct > 0 && (
+                <circle cx={CX} cy={CY} r={R} fill="none" stroke="#2563eb"
+                  stroke-width="13"
+                  stroke-dasharray={`${qrisDash} ${cashDash}`}
+                  transform={`rotate(-90 ${CX} ${CY})`}
+                />
+              )}
+              <text x={CX} y={CY-4}  text-anchor="middle" font-size="13" font-weight="800" fill="#1a1d23">{tot2}</text>
+              <text x={CX} y={CY+10} text-anchor="middle" font-size="7"  fill="#6b7280">transaksi</text>
+            </svg>
+            <div class="metode-legend">
+              <div class="m-item">
+                <div class="m-dot" style="background:#2563eb"></div>
+                <div class="m-info">
+                  <div class="m-label">QRIS</div>
+                  <div class="m-sub">{qrisCount} transaksi</div>
+                </div>
+                <div class="m-pct" style="color:#2563eb">{qrisPct}%</div>
+              </div>
+              <div class="m-item">
+                <div class="m-dot" style="background:#bfdbfe"></div>
+                <div class="m-info">
+                  <div class="m-label">Cash / Manual</div>
+                  <div class="m-sub">{cashCount} transaksi</div>
+                </div>
+                <div class="m-pct" style="color:#3b82f6">{cashPct}%</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+
+  <!-- Laba harian -->
+  <div class="an-panel">
+    <div class="an-panel-head">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+        <polyline points="17 6 23 6 23 12"/>
+      </svg>
+      <h2>Laba Harian</h2>
+      <span class="an-panel-lbl">30 hari</span>
+    </div>
+    <div class="an-panel-body">
+      <div class="chart-outer">
+        <div class="chart-wrap">
+          {dayList.map((d, i) => {
+            const pct     = maxLaba > 0 ? (d.laba / maxLaba) * 100 : 0;
+            const isToday = d.date === todayKey;
+            const showLbl = showLabelIdx.has(i);
+            const color   = isToday ? '#16a34a' : '#bbf7d0';
+            return (
+              <div
+                class={`chart-col${isToday ? ' is-today' : ''}`}
+                data-lbl={showLbl ? d.label : undefined}
+                style={isToday ? 'outline:none' : ''}
+              >
+                <div class="chart-tip">{rp(d.laba)}</div>
+                <div
+                  class="chart-bar"
+                  style={`height:${pct > 0 ? Math.max(pct, 1.5) : 0}%;background:${color}${isToday ? ';outline:2px solid #16a34a;outline-offset:1px' : ''}`}
+                ></div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</Layout>

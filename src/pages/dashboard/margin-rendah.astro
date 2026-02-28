@@ -1,0 +1,390 @@
+---
+export const prerender = false;
+import Layout from "../../layouts/Layout.astro";
+import "../../styles/global.css";
+import "../../styles/margin.css";
+import { createServiceClient } from "../../lib/supabase";
+
+const accessToken = Astro.cookies.get("sb-access-token");
+if (!accessToken?.value) return Astro.redirect("/");
+
+Astro.response.headers.set('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+
+const nonce = (Astro.locals as App.Locals).nonce ?? "";
+const sb    = createServiceClient();
+
+const { data: raw } = await sb.from("produk").select("*").order("nama_produk");
+const all = raw ?? [];
+
+const produk = all.filter(
+  p => p.harga_beli > 0 && (p.harga_jual - p.harga_beli) / p.harga_beli < 0.1
+);
+
+function rp(n: number) {
+  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
+}
+function margin(beli: number, jual: number) {
+  if (!beli) return 0;
+  return Math.round(((jual - beli) / beli) * 100);
+}
+---
+
+<Layout title="Margin Rendah" active="margin-rendah" nonce={nonce}>
+
+<a href="#main-content" class="skip-link">Lewati navigasi</a>
+
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<div class="bg-white border-b border-black/[0.07] px-4 sm:px-6 lg:px-8 py-4
+            flex items-center justify-between sticky top-0 z-20">
+
+  <div class="flex items-center gap-3">
+
+    <!-- Tombol hamburger — hanya mobile, memanggil window.openSidebar() dari Sidebar.astro -->
+    <button
+      onclick="window.openSidebar && window.openSidebar()"
+      class="lg:hidden w-8 h-8 flex items-center justify-center rounded-[4px]
+             text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+      aria-label="Buka menu navigasi"
+    >
+      <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+    </button>
+
+    <div>
+      <h1 style="font-family:'DM Serif Display',serif"
+          class="text-[1.25rem] leading-tight text-[#0f0d0b]">
+        Produk Margin Rendah
+      </h1>
+      <p class="text-[0.72rem] text-gray-400 hidden sm:block">Margin keuntungan &lt; 10%</p>
+    </div>
+  </div>
+
+  <div class="flex items-center gap-2.5">
+    {produk.length > 0 && (
+      <span class="px-2.5 py-1.5 bg-red-50 text-red-700 text-[0.73rem] font-semibold rounded-[4px] border border-red-200 hide-mobile">
+        {produk.length} perlu perhatian
+      </span>
+    )}
+    <a
+      href="/dashboard/produk"
+      class="flex items-center gap-1.5 px-3.5 py-2 border border-black/15 bg-white text-[#0f0d0b] text-[0.78rem] font-medium rounded-[4px] hover:bg-[#f7f3ee] transition-colors"
+    >
+      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+      </svg>
+      <span class="hidden sm:inline">Semua Produk</span>
+    </a>
+  </div>
+</div>
+
+<!-- ── Konten ─────────────────────────────────────────────────────────────── -->
+<main id="main-content" class="page-pad p-6 lg:p-8 max-w-[1200px] mx-auto fade-up delay-1">
+
+  {produk.length === 0 ? (
+    <div class="bg-white border border-black/[0.07] rounded-[6px] shadow-sm px-8 py-20 text-center">
+      <div class="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4" aria-hidden="true">
+        <svg class="w-7 h-7 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+      <h2 class="font-semibold text-[#0f0d0b] text-[1rem] mb-1">Semua produk margin sehat!</h2>
+      <p class="text-gray-500 text-[0.82rem]">Tidak ada produk dengan margin di bawah 10%.</p>
+    </div>
+  ) : (
+    <div class="space-y-4">
+
+      <!-- Info box -->
+      <div class="px-4 py-3 bg-amber-50 border border-amber-200 rounded-[5px] flex items-start gap-3" role="note">
+        <svg class="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <p class="text-[0.78rem] text-amber-800">
+          Produk berikut memiliki margin keuntungan di bawah 10%. Pertimbangkan untuk menaikkan harga jual atau mencari supplier dengan harga lebih baik.
+        </p>
+      </div>
+
+      <!-- Tabel -->
+      <div class="bg-white border border-black/[0.07] rounded-[6px] shadow-sm overflow-hidden fade-up delay-2">
+
+        <!-- Search bar -->
+        <div class="px-4 py-3 border-b border-black/[0.06] flex items-center gap-3">
+          <svg class="w-4 h-4 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <label for="searchInput" class="sr-only">Cari produk</label>
+          <input
+            id="searchInput" type="search"
+            placeholder="Cari nama produk…" autocomplete="off"
+            class="flex-1 text-[0.875rem] text-[#0f0d0b] bg-transparent outline-none placeholder:text-gray-400"
+          />
+          <span id="count-label" class="text-[0.73rem] text-gray-400 flex-shrink-0" aria-live="polite" aria-atomic="true">
+            {produk.length} produk
+          </span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="data-table">
+            <caption class="sr-only">Produk dengan margin rendah. {produk.length} produk.</caption>
+            <thead>
+              <tr>
+                <th style="padding-left:1.375rem">Nama Produk</th>
+                <th class="hide-mobile">Kategori</th>
+                <th class="text-right">Harga Beli</th>
+                <th class="text-right">Harga Jual</th>
+                <th class="text-right hide-mobile">Untung</th>
+                <th class="text-right">Margin</th>
+                <th style="padding-right:1.375rem"><span class="sr-only">Aksi</span></th>
+              </tr>
+            </thead>
+            <tbody id="tbody">
+              {produk.map(p => {
+                const m      = margin(p.harga_beli, p.harga_jual);
+                const untung = p.harga_jual - p.harga_beli;
+                return (
+                  <tr
+                    class="data-row"
+                    data-id={p.id}
+                    data-nama={p.nama_produk.toLowerCase()}
+                  >
+                    <td style="padding-left:1.375rem;font-weight:500;color:#0f0d0b">{p.nama_produk}</td>
+                    <td class="hide-mobile">
+                      <span class="badge-gray inline-block px-2 py-0.5 rounded text-[0.63rem] font-semibold">{p.kategori}</span>
+                    </td>
+                    <td style="text-align:right;color:#4b5563;font-family:monospace;font-size:0.78rem">{rp(p.harga_beli)}</td>
+                    <td style="text-align:right;font-weight:600;color:#0f0d0b;font-family:monospace;font-size:0.78rem">{rp(p.harga_jual)}</td>
+                    <td class="hide-mobile" style="text-align:right;color:#4b5563;font-family:monospace;font-size:0.78rem">{rp(untung)}</td>
+                    <td style="text-align:right">
+                      <span class="badge-red inline-block px-2 py-0.5 rounded text-[0.65rem] font-bold">{m}%</span>
+                    </td>
+                    <td style="padding-right:1.375rem">
+                      <button
+                        type="button"
+                        class="edit-btn flex items-center gap-1 px-3 py-1.5 text-[0.72rem] font-medium text-[#c84b1f] border border-[#c84b1f]/30 hover:bg-[#fff5f2] rounded-[4px] transition-colors whitespace-nowrap"
+                        data-id={p.id}
+                        data-nama={p.nama_produk}
+                        data-beli={p.harga_beli}
+                        data-jual={p.harga_jual}
+                        data-kat={p.kategori}
+                        aria-label={`Edit harga ${p.nama_produk}`}
+                        aria-haspopup="dialog"
+                      >
+                        <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                        Edit
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div id="no-results" class="hidden px-6 py-12 text-center text-gray-500 text-[0.82rem]"
+               role="status" aria-live="polite">
+            Tidak ada produk yang cocok.
+          </div>
+        </div>
+      </div>
+    </div>
+  )}
+</main>
+
+<!-- ── Modal Edit Harga ────────────────────────────────────────────────────── -->
+<div id="modal-edit" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-edit-title">
+  <div class="modal-box">
+    <div class="px-6 py-5 border-b border-black/[0.07] flex items-center justify-between">
+      <h2 class="font-semibold text-[0.95rem] text-[#0f0d0b]" id="modal-edit-title">Edit Harga Produk</h2>
+      <button type="button" class="btn-close text-gray-400 hover:text-gray-700 p-1 rounded cursor-pointer transition-colors" aria-label="Tutup">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="px-6 py-5 space-y-4">
+      <input type="hidden" id="edit-id" />
+      <div class="px-3 py-2 bg-amber-50 border border-amber-200 rounded-[4px] text-[0.78rem] text-amber-800" role="note">
+        Mengedit: <strong id="edit-nama-display"></strong>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label for="f-beli" class="block text-[0.72rem] font-semibold text-[#3d3530] uppercase tracking-wider mb-1.5">Harga Beli (Rp)</label>
+          <input id="f-beli" type="number" placeholder="0" min="0"
+            class="w-full px-3 py-2.5 bg-[#f7f3ee] border-[1.5px] border-black/15 rounded-[4px] text-[0.875rem] text-[#0f0d0b] outline-none focus:border-[#c84b1f] focus:bg-white transition-all font-mono" />
+        </div>
+        <div>
+          <label for="f-jual" class="block text-[0.72rem] font-semibold text-[#3d3530] uppercase tracking-wider mb-1.5">
+            Harga Jual (Rp) <span class="text-red-500" aria-label="wajib">*</span>
+          </label>
+          <input id="f-jual" type="number" placeholder="0" min="1" required
+            class="w-full px-3 py-2.5 bg-[#f7f3ee] border-[1.5px] border-black/15 rounded-[4px] text-[0.875rem] text-[#0f0d0b] outline-none focus:border-[#c84b1f] focus:bg-white transition-all font-mono" />
+        </div>
+      </div>
+      <div id="margin-preview" class="hidden px-3 py-2 bg-[#f7f3ee] rounded-[4px] text-[0.78rem] font-mono"
+           aria-live="polite" aria-atomic="true"></div>
+    </div>
+    <div class="px-6 py-4 border-t border-black/[0.06] flex items-center justify-end gap-2">
+      <button type="button" class="btn-close px-4 py-2 text-[0.8rem] text-gray-600 hover:text-gray-800 cursor-pointer rounded transition-colors">Batal</button>
+      <button type="button" id="btn-simpan"
+        class="px-5 py-2 bg-[#0f0d0b] hover:bg-[#c84b1f] text-white text-[0.8rem] font-semibold rounded-[4px] transition-colors cursor-pointer">
+        Simpan
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ──────────────────────────────────────────────────────────────── -->
+<div id="toast"
+     class="px-4 py-3 bg-[#0f0d0b] text-white text-[0.8rem] font-medium shadow-lg items-center gap-2"
+     role="status" aria-live="polite" aria-atomic="true">
+  <svg id="toast-icon" class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+    <polyline points="20 6 9 17 4 12"/>
+  </svg>
+  <span id="toast-msg"></span>
+</div>
+
+<script is:inline>
+'use strict';
+
+// ── Search ────────────────────────────────────────────────────────────────────
+var _rows = null;
+function rows() { return _rows || (_rows = Array.from(document.querySelectorAll('#tbody tr.data-row'))); }
+var activeQ = '';
+function applyFilter() {
+  var q = activeQ.toLowerCase(), vis = 0;
+  rows().forEach(function(r) {
+    var show = !q || r.dataset.nama.indexOf(q) !== -1;
+    r.classList.toggle('hidden-row', !show);
+    if (show) vis++;
+  });
+  var lbl = document.getElementById('count-label');
+  if (lbl) lbl.textContent = vis + ' produk';
+  var noRes = document.getElementById('no-results');
+  if (noRes) noRes.classList.toggle('hidden', vis > 0 || rows().length === 0);
+}
+var si = document.getElementById('searchInput');
+if (si) si.addEventListener('input', function() { activeQ = this.value; applyFilter(); });
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+var prevFocus = null;
+var FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select,[tabindex]:not([tabindex="-1"])';
+function trapFocus(el) {
+  var els = Array.from(el.querySelectorAll(FOCUSABLE));
+  if (!els.length) return;
+  el._trap = function(e) {
+    if (e.key !== 'Tab') return;
+    var f = els[0], l = els[els.length - 1];
+    if (e.shiftKey) { if (document.activeElement === f) { e.preventDefault(); l.focus(); } }
+    else            { if (document.activeElement === l) { e.preventDefault(); f.focus(); } }
+  };
+  el.addEventListener('keydown', el._trap);
+  setTimeout(function() { els[0].focus(); }, 40);
+}
+function openModal() {
+  prevFocus = document.activeElement;
+  var m = document.getElementById('modal-edit');
+  m.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  trapFocus(m);
+}
+function closeModal() {
+  var m = document.getElementById('modal-edit');
+  m.classList.remove('open');
+  document.body.style.overflow = '';
+  if (m._trap) { m.removeEventListener('keydown', m._trap); m._trap = null; }
+  if (prevFocus) { prevFocus.focus(); prevFocus = null; }
+}
+document.querySelectorAll('.btn-close').forEach(function(b) { b.addEventListener('click', closeModal); });
+document.getElementById('modal-edit').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') { var m = document.getElementById('modal-edit'); if (m && m.classList.contains('open')) closeModal(); }
+});
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+var toastTimer;
+function toast(msg, ok) {
+  var t = document.getElementById('toast'), icon = document.getElementById('toast-icon');
+  document.getElementById('toast-msg').textContent = msg;
+  icon.style.color = ok === false ? '#f87171' : '#4ade80';
+  icon.innerHTML   = ok === false
+    ? '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
+    : '<polyline points="20 6 9 17 4 12"/>';
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function() { t.classList.remove('show'); }, 3500);
+}
+
+// ── API helper ────────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  var r = await fetch(path, {
+    method: method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    credentials: 'same-origin'
+  });
+  var d = await r.json().catch(function() { return {}; });
+  if (!r.ok) throw new Error(d.error || r.statusText);
+  return d;
+}
+
+// ── Preview margin ────────────────────────────────────────────────────────────
+var fBeli  = document.getElementById('f-beli');
+var fJual  = document.getElementById('f-jual');
+var mPrev  = document.getElementById('margin-preview');
+function updMargin() {
+  var b = parseInt(fBeli.value) || 0, j = parseInt(fJual.value) || 0;
+  if (b > 0 && j > 0) {
+    var pct = Math.round(((j - b) / b) * 100);
+    mPrev.textContent = 'Untung: Rp ' + (j - b).toLocaleString('id-ID') + ' (' + pct + '%)';
+    mPrev.style.color = pct < 10 ? '#7f1d1d' : pct < 20 ? '#713f12' : '#14532d';
+    mPrev.classList.remove('hidden');
+  } else {
+    mPrev.classList.add('hidden');
+  }
+}
+fBeli.addEventListener('input', updMargin);
+fJual.addEventListener('input', updMargin);
+
+// ── Edit ──────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.edit-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.getElementById('edit-id').value = this.dataset.id;
+    document.getElementById('edit-nama-display').textContent = this.dataset.nama;
+    fBeli.value = this.dataset.beli;
+    fJual.value = this.dataset.jual;
+    updMargin();
+    openModal();
+  });
+});
+
+document.getElementById('btn-simpan').addEventListener('click', async function() {
+  var id   = document.getElementById('edit-id').value;
+  var beli = parseInt(fBeli.value) || 0;
+  var jual = parseInt(fJual.value) || 0;
+  if (jual <= 0) { toast('Harga jual harus > 0', false); fJual.focus(); return; }
+  this.disabled = true;
+  this.setAttribute('aria-busy', 'true');
+  this.textContent = 'Menyimpan…';
+  try {
+    await api('PATCH', '/api/produk/produk?id=' + encodeURIComponent(id), { harga_beli: beli, harga_jual: jual });
+    toast('Harga berhasil diupdate');
+    closeModal();
+    _rows = null;
+    setTimeout(function() { location.reload(); }, 500);
+  } catch (e) {
+    toast('Error: ' + e.message, false);
+    this.disabled = false;
+    this.removeAttribute('aria-busy');
+    this.textContent = 'Simpan';
+  }
+});
+
+fJual.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-simpan').click(); }
+});
+</script>
+
+</Layout>

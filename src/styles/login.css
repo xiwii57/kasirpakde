@@ -1,0 +1,324 @@
+    /* ── Variabel warna ─────────────────────────────────── */
+    :root {
+        --brand:        #c84b1f;
+        --brand-dark:   #a33a14;
+        --brand-light:  rgba(200,75,31,0.12);
+        --ink:          #1a1410;
+        --ink-soft:     #4a3f35;
+        --paper:        #f5f0e8;
+        --card:         #faf8f4;
+        --border:       rgba(26,20,16,0.14);
+        --border-focus: #c84b1f;
+        --muted:        #9a8f84;
+        --success:      #2a7a4b;
+    }
+
+    /* ── Latar belakang ─────────────────────────────────── */
+    .auth-bg {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+        background-color: var(--paper);
+        background-image:
+        radial-gradient(ellipse 70% 60% at 50% 40%, rgba(200,146,42,0.09) 0%, transparent 70%),
+        radial-gradient(circle, rgba(26,20,16,0.055) 1px, transparent 1px);
+        background-size: 100% 100%, 24px 24px;
+    }
+
+    /* ── Ornamen sudut ──────────────────────────────────── */
+    .corner {
+        position: fixed;
+        width: 5rem; height: 5rem;
+        pointer-events: none; z-index: 0;
+        opacity: 0.22;
+    }
+    .corner-tl { top: 0; left: 0; border-top: 2px solid var(--brand); border-left: 2px solid var(--brand); }
+    .corner-br { bottom: 0; right: 0; border-bottom: 2px solid var(--brand); border-right: 2px solid var(--brand); }
+
+    /* ── Animasi masuk kartu ────────────────────────────── */
+    .card-enter {
+        animation: cardEnter 0.55s cubic-bezier(0.16,1,0.3,1) both;
+    }
+    @keyframes cardEnter {
+        from { opacity:0; transform: translateY(28px) scale(0.96); }
+        to   { opacity:1; transform: translateY(0)    scale(1); }
+    }
+
+    /* ── Kartu ──────────────────────────────────────────── */
+    .card {
+        position: relative; z-index: 10;
+        width: 100%; max-width: 420px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        overflow: hidden;
+        box-shadow:
+        0 0 0 1px rgba(255,255,255,0.55) inset,
+        0 2px 0 rgba(200,75,31,0.45),
+        0 12px 40px rgba(26,20,16,0.1),
+        0 40px 100px rgba(26,20,16,0.06);
+    }
+
+    /* ── Stripe dekoratif ───────────────────────────────── */
+    .stripe {
+        height: 3.5px;
+        background: repeating-linear-gradient(
+            90deg,
+            var(--brand)      0px,  var(--brand)      16px,
+                                              #c8922a           16px, #c8922a            20px,
+                                              var(--brand)      20px
+        );
+    }
+
+    /* ── Body kartu ─────────────────────────────────────── */
+    .card-body { padding: 2rem 2rem 1.75rem; }
+
+    /* ── Brand header ───────────────────────────────────── */
+    .brand-header {
+        display: flex; align-items: center; gap: 0.875rem;
+        padding-bottom: 1.5rem;
+        margin-bottom: 1.75rem;
+        border-bottom: 1px dashed var(--border);
+        position: relative;
+    }
+    .brand-logo {
+        width: 2.75rem; height: 2.75rem;
+        background: var(--ink);
+        border-radius: 5px;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+        box-shadow: 0 2px 8px rgba(26,20,16,0.25);
+    }
+    .brand-name {
+        font-family: 'DM Serif Display', serif;
+        font-size: 1.3rem;
+        color: var(--ink);
+        line-height: 1.2;
+        letter-spacing: -0.01em;
+    }
+    .brand-sub {
+        font-size: 0.6rem;
+        font-weight: 700;
+        color: var(--muted);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin-top: 0.2rem;
+    }
+    .brand-date {
+        position: absolute; right: 0; top: 0;
+        font-size: 0.62rem;
+        color: var(--muted);
+        letter-spacing: 0.04em;
+    }
+
+    /* ── Alert error ─────────────────────────────────────── */
+    .error-alert {
+        display: flex; align-items: flex-start; gap: 0.625rem;
+        background: #fff5f2;
+        border: 1px solid rgba(200,75,31,0.15);
+        border-left: 3px solid var(--brand);
+        border-radius: 4px;
+        padding: 0.75rem 0.875rem;
+        margin-bottom: 1.25rem;
+        font-size: 0.8rem;
+        color: var(--brand-dark);
+        font-weight: 500;
+        animation: shake 0.38s ease;
+    }
+    @keyframes shake {
+        0%,100% { transform: translateX(0); }
+        20%      { transform: translateX(-5px); }
+        40%      { transform: translateX(5px); }
+        60%      { transform: translateX(-3px); }
+        80%      { transform: translateX(3px); }
+    }
+
+    /* ── Label field ────────────────────────────────────── */
+    .field-label {
+        display: block;
+        font-size: 0.69rem;
+        font-weight: 700;
+        color: var(--ink-soft);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        margin-bottom: 0.4rem;
+    }
+
+    /* ── Input wrapper ──────────────────────────────────── */
+    .input-wrap { position: relative; }
+
+    .field-input {
+        width: 100%;
+        padding: 0.7rem 0.875rem 0.7rem 2.375rem;
+        background: rgba(245,240,232,0.7);
+        border: 1.5px solid var(--border);
+        border-radius: 4px;
+        font-size: 0.875rem;
+        color: var(--ink);
+        font-family: inherit;
+        outline: none;
+        transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+        appearance: none;
+        -webkit-appearance: none;
+    }
+    .field-input::placeholder { color: #bfb5aa; }
+    .field-input:focus {
+        border-color: var(--border-focus);
+        background: white;
+        box-shadow: 0 0 0 3.5px var(--brand-light);
+    }
+    /* State invalid setelah submit */
+    .field-input.is-invalid {
+        border-color: var(--brand);
+        background: #fff8f6;
+    }
+
+    /* Icon dalam input */
+    .input-icon {
+        position: absolute;
+        left: 0.75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 14px; height: 14px;
+        color: #c5bbb4;
+        pointer-events: none;
+        transition: color 0.15s;
+    }
+    .field-input:focus + .input-icon,
+.field-input:focus ~ .input-icon { color: var(--brand); }
+
+/* Toggle password */
+.pw-toggle {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none; border: none; padding: 0;
+    color: #c5bbb4;
+    cursor: pointer;
+    transition: color 0.15s;
+    display: flex; align-items: center;
+    line-height: 1;
+}
+.pw-toggle:hover,
+.pw-toggle:focus-visible { color: var(--brand); outline: none; }
+
+/* Teks error per field */
+.field-error {
+    display: none;
+    font-size: 0.7rem;
+    color: var(--brand);
+    margin-top: 0.3rem;
+    font-weight: 500;
+}
+.field-error.show { display: block; }
+
+/* ── Turnstile wrapper ──────────────────────────────── */
+.turnstile-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 0.25rem 0 0.1rem;
+}
+
+/* ── Tombol submit ──────────────────────────────────── */
+.submit-btn {
+    position: relative;
+    width: 100%;
+    padding: 0.8rem 1rem;
+    background: var(--ink);
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 600;
+    font-family: inherit;
+    letter-spacing: 0.03em;
+    border: 1.5px solid var(--ink);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.08s;
+    overflow: hidden;
+}
+.submit-btn:hover:not(:disabled) {
+    background: var(--brand);
+    border-color: var(--brand-dark);
+    box-shadow: 0 4px 18px rgba(200,75,31,0.38);
+}
+.submit-btn:active:not(:disabled) { transform: translateY(1px); }
+.submit-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+.submit-btn:focus-visible {
+    outline: 2.5px solid var(--brand);
+    outline-offset: 2px;
+}
+
+.btn-inner {
+    display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    transition: opacity 0.15s;
+}
+.btn-loading .btn-inner { opacity: 0; }
+
+/* Spinner */
+.spinner {
+    display: none;
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 18px; height: 18px;
+    border: 2.5px solid rgba(255,255,255,0.25);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.65s linear infinite;
+}
+@keyframes spin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+.btn-loading .spinner { display: block; }
+
+/* ── Footer kartu ───────────────────────────────────── */
+.card-footer {
+    padding: 0.75rem 2rem;
+    background: rgba(245,240,232,0.6);
+    border-top: 1px solid rgba(26,20,16,0.07);
+    display: flex; align-items: center; justify-content: center;
+    gap: 0.625rem;
+}
+.dot-pulse {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--brand);
+    animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+    0%,100% { opacity:1; transform: scale(1); }
+    50%      { opacity:0.35; transform: scale(0.7); }
+}
+.badge-admin {
+    display: flex; align-items: center; gap: 0.35rem;
+    background: rgba(26,20,16,0.06);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.25rem 0.5rem;
+}
+.badge-text {
+    font-size: 0.58rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+.footer-text {
+    font-size: 0.66rem;
+    color: var(--muted);
+    font-weight: 500;
+    letter-spacing: 0.03em;
+}
+
+/* ── Aksesibilitas: focus ring global ────────────────── */
+*:focus-visible {
+    outline: 2.5px solid var(--brand);
+    outline-offset: 2px;
+}
+
+/* ── Form spacing ────────────────────────────────────── */
+.form-fields { display: flex; flex-direction: column; gap: 1rem; }

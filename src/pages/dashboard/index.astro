@@ -1,0 +1,748 @@
+---
+export const prerender = false;
+import Layout from "../../layouts/Layout.astro";
+import { createServiceClient } from "../../lib/supabase";
+
+// Auth guard
+const accessToken = Astro.cookies.get("sb-access-token");
+if (!accessToken?.value) return Astro.redirect("/");
+
+const nonce = (Astro.locals as App.Locals).nonce ?? "";
+const sb    = createServiceClient();
+
+// ── Time helpers ───────────────────────────────────────────────────────────
+function toWIB(iso: string) {
+  return new Date(new Date(iso).getTime() + 7 * 60 * 60 * 1000);
+}
+function pad2(n: number) { return String(n).padStart(2, "0"); }
+
+const nowWIB = toWIB(new Date().toISOString());
+
+// Awal hari ini WIB → UTC
+const todayStart = new Date(nowWIB);
+todayStart.setHours(0, 0, 0, 0);
+const todayStartUTC = new Date(todayStart.getTime() - 7 * 60 * 60 * 1000);
+
+// 7 & 30 hari lalu
+const week7UTC   = new Date(todayStartUTC.getTime() - 6  * 24 * 60 * 60 * 1000);
+const month30UTC = new Date(todayStartUTC.getTime() - 29 * 24 * 60 * 60 * 1000);
+
+// ── Data fetching paralel ──────────────────────────────────────────────────
+const [
+  { data: produkList },
+  { data: logList },
+  { data: trxHariIni },
+  { data: trx7Raw },
+  { data: trx30Raw },
+  { data: topItems },
+] = await Promise.all([
+  sb.from("produk").select("*").order("nama_produk"),
+  sb.from("harga_log").select("*").order("changed_at", { ascending: false }).limit(10),
+  sb.from("transaksi")
+    .select("id, total, metode_bayar, created_at, transaksi_item(qty)")
+    .eq("status", "paid")
+    .gte("created_at", todayStartUTC.toISOString())
+    .order("created_at", { ascending: false }),
+  sb.from("transaksi")
+    .select("id, total, metode_bayar, created_at")
+    .eq("status", "paid")
+    .gte("created_at", week7UTC.toISOString())
+    .order("created_at", { ascending: true }),
+  sb.from("transaksi")
+    .select("id, total, metode_bayar, created_at")
+    .eq("status", "paid")
+    .gte("created_at", month30UTC.toISOString()),
+  sb.from("transaksi_item")
+    .select("produk_id, nama_produk, qty")
+    .limit(300),
+]);
+
+const produk  = produkList  ?? [];
+const logs    = logList     ?? [];
+const hari    = trxHariIni  ?? [];
+const trx7    = trx7Raw     ?? [];
+const trx30   = trx30Raw    ?? [];
+
+// ── Statistik produk ───────────────────────────────────────────────────────
+const totalProduk    = produk.length;
+const avgMargin      = produk.length
+  ? Math.round(produk.reduce((s, p) => s + ((p.harga_jual - p.harga_beli) / (p.harga_beli || 1)) * 100, 0) / produk.length)
+  : 0;
+const lowMargin      = produk.filter(p => p.harga_beli > 0 && ((p.harga_jual - p.harga_beli) / p.harga_beli) < 0.10).length;
+const quickCashCount = produk.filter(p => p.quick_cash).length;
+
+// ── Statistik hari ini ────────────────────────────────────────────────────
+const omsetHari  = hari.reduce((s, t) => s + t.total, 0);
+const cashHari   = hari.filter(t => t.metode_bayar !== "qris").reduce((s, t) => s + t.total, 0);
+const qrisHari   = hari.filter(t => t.metode_bayar === "qris").reduce((s, t) => s + t.total, 0);
+const itemHari   = hari.reduce((s, t) => s + (t.transaksi_item ?? []).reduce((q: number, i: any) => q + i.qty, 0), 0);
+
+// ── Statistik 30 hari ─────────────────────────────────────────────────────
+const omset30    = trx30.reduce((s, t) => s + t.total, 0);
+const cash30     = trx30.filter(t => t.metode_bayar !== "qris").reduce((s, t) => s + t.total, 0);
+const qris30     = trx30.filter(t => t.metode_bayar === "qris").reduce((s, t) => s + t.total, 0);
+const cashCnt30  = trx30.filter(t => t.metode_bayar !== "qris").length;
+const qrisCnt30  = trx30.filter(t => t.metode_bayar === "qris").length;
+
+// ── Grafik 7 hari ─────────────────────────────────────────────────────────
+type Day7 = { label: string; date: string; omset: number; trx: number };
+const days7: Day7[] = [];
+for (let i = 6; i >= 0; i--) {
+  const d   = new Date(todayStart); d.setDate(d.getDate() - i);
+  const wib = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+  days7.push({
+    label: `${pad2(wib.getDate())}/${pad2(wib.getMonth() + 1)}`,
+    date:  `${wib.getFullYear()}-${pad2(wib.getMonth() + 1)}-${pad2(wib.getDate())}`,
+    omset: 0,
+    trx:   0,
+  });
+}
+for (const t of trx7) {
+  const w   = toWIB(t.created_at);
+  const key = `${w.getFullYear()}-${pad2(w.getMonth() + 1)}-${pad2(w.getDate())}`;
+  const day = days7.find(d => d.date === key);
+  if (day) { day.omset += t.total; day.trx++; }
+}
+const maxOmset7  = Math.max(...days7.map(d => d.omset), 1);
+const omsetWeek  = days7.reduce((s, d) => s + d.omset, 0);
+const todayKey   = `${nowWIB.getFullYear()}-${pad2(nowWIB.getMonth() + 1)}-${pad2(nowWIB.getDate())}`;
+
+// Kemarin untuk perbandingan
+const kemarinKey = (() => {
+  const k = new Date(todayStart); k.setDate(k.getDate() - 1);
+  const w = new Date(k.getTime() + 7 * 60 * 60 * 1000);
+  return `${w.getFullYear()}-${pad2(w.getMonth() + 1)}-${pad2(w.getDate())}`;
+})();
+const omsetKemarin = days7.find(d => d.date === kemarinKey)?.omset ?? 0;
+const vsKemarin    = omsetKemarin > 0
+  ? Math.round(((omsetHari - omsetKemarin) / omsetKemarin) * 100)
+  : null;
+
+// ── Top Seller ────────────────────────────────────────────────────────────
+const topMap = new Map<string, { nama: string; total: number }>();
+(topItems ?? []).forEach(i => {
+  const cur = topMap.get(i.produk_id ?? i.nama_produk) ?? { nama: i.nama_produk, total: 0 };
+  cur.total += i.qty;
+  topMap.set(i.produk_id ?? i.nama_produk, cur);
+});
+const topSellers = [...topMap.values()].sort((a, b) => b.total - a.total).slice(0, 5);
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function rp(n: number) {
+  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
+}
+function margin(beli: number, jual: number) {
+  if (!beli) return 0;
+  return Math.round(((jual - beli) / beli) * 100);
+}
+function timeStr(iso: string) {
+  return toWIB(iso).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+}
+
+const katColors: Record<string, string> = {
+  Minuman: "kat-blue", Snack: "kat-yellow", Rokok: "kat-red",
+  Sembako: "kat-green", Lainnya: "kat-gray",
+};
+const katBreakdown = ["Minuman","Snack","Rokok","Sembako","Lainnya"].map(kat => {
+  const items = produk.filter((p: any) => p.kategori === kat);
+  const avgM  = items.length
+    ? Math.round(items.reduce((s: number, p: any) => s + margin(p.harga_beli, p.harga_jual), 0) / items.length)
+    : 0;
+  return { kat, count: items.length, avgM, colorKey: katColors[kat] ?? "kat-gray" };
+});
+
+const userEmail = (Astro.locals as App.Locals).user?.email ?? "admin";
+const hour  = new Date().getHours();
+const salam = hour < 11 ? "Selamat pagi" : hour < 15 ? "Selamat siang" : hour < 18 ? "Selamat sore" : "Selamat malam";
+const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+---
+
+<Layout title="Dashboard" active="dashboard" nonce={nonce}>
+
+<style is:inline>
+  @keyframes fadeUp {
+    from { opacity:0; transform:translateY(12px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+  .fade-up { animation:fadeUp .38s ease both; }
+  .d1{animation-delay:.04s} .d2{animation-delay:.08s} .d3{animation-delay:.12s}
+  .d4{animation-delay:.16s} .d5{animation-delay:.20s} .d6{animation-delay:.24s}
+  .d7{animation-delay:.28s} .d8{animation-delay:.32s}
+
+  /* ── Cards ─────────────────────────────────────────────────────────────── */
+  .stat-card {
+    background:#fff; border:1px solid rgba(15,13,11,.07);
+    border-radius:7px; padding:1.2rem 1.375rem;
+    transition:transform .18s ease,box-shadow .18s ease;
+  }
+  .stat-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(15,13,11,.08); }
+  .stat-icon {
+    width:2.25rem; height:2.25rem; border-radius:6px;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+
+  /* Today cards */
+  .today-card {
+    border-radius:7px; padding:1.1rem 1.25rem;
+    border:1px solid rgba(15,13,11,.07);
+    transition:transform .18s ease,box-shadow .18s ease;
+  }
+  .today-card:hover { transform:translateY(-2px); box-shadow:0 8px 22px rgba(15,13,11,.08); }
+  .today-card.dark  { background:#0f0d0b; color:#fff; }
+  .today-card.green { background:#f0fdf4; border-color:#bbf7d0; }
+  .today-card.blue  { background:#eff6ff; border-color:#bfdbfe; }
+  .today-card.amber { background:#fffbeb; border-color:#fde68a; }
+
+  /* ── Section wrapper ──────────────────────────────────────────────────── */
+  .section-card {
+    background:#fff; border:1px solid rgba(15,13,11,.07);
+    border-radius:7px; overflow:hidden;
+    box-shadow:0 1px 4px rgba(15,13,11,.04);
+  }
+  .section-head {
+    padding:.9rem 1.375rem;
+    border-bottom:1px solid rgba(15,13,11,.06);
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+  }
+  .section-head h2 { font-size:.875rem; font-weight:600; color:#0f0d0b; }
+  .section-head p  { font-size:.68rem; color:#9ca3af; margin-top:1px; }
+
+  /* ── Mini bar chart (server-side rendered) ────────────────────────────── */
+  .mini-chart {
+    display:flex; align-items:flex-end; gap:3px;
+    height:64px; padding-bottom:22px;
+    position:relative; overflow:visible;
+  }
+  .mini-chart::after {
+    content:''; position:absolute; bottom:22px; left:0; right:0;
+    height:1px; background:rgba(15,13,11,.06);
+  }
+  .mc-col {
+    flex:1; height:100%; display:flex; flex-direction:column;
+    justify-content:flex-end; align-items:stretch; position:relative;
+  }
+  .mc-bar  { border-radius:3px 3px 0 0; width:100%; }
+  .mc-col:hover .mc-bar { filter:brightness(.78); }
+  .mc-col .mc-tip {
+    position:absolute; bottom:calc(100% + 5px); left:50%;
+    transform:translateX(-50%);
+    background:#1a1d23; color:#fff; font-size:.58rem; line-height:1.5;
+    padding:4px 7px; border-radius:4px; white-space:nowrap;
+    pointer-events:none; z-index:30; opacity:0;
+    transition:opacity .12s; text-align:center;
+  }
+  .mc-tip::after {
+    content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%);
+    border:3px solid transparent; border-top-color:#1a1d23;
+  }
+  .mc-col:hover .mc-tip { opacity:1; }
+  .mc-col[data-lbl]::after {
+    content:attr(data-lbl); position:absolute; bottom:-19px; left:50%;
+    transform:translateX(-50%); font-size:.52rem; color:#9ca3af;
+    white-space:nowrap; pointer-events:none;
+  }
+  .mc-col.today[data-lbl]::after { color:#c84b1f; font-weight:700; }
+  .mc-col.today .mc-bar { outline:2px solid #c84b1f; outline-offset:1px; }
+
+  /* ── Metode bayar bar ─────────────────────────────────────────────────── */
+  .pay-bar-bg { flex:1; height:5px; background:#f3f4f6; border-radius:999px; }
+  .pay-bar    { height:5px; border-radius:999px; }
+
+  /* ── Transaksi row ────────────────────────────────────────────────────── */
+  .trx-row {
+    display:grid; grid-template-columns:1fr auto auto;
+    align-items:center; gap:10px;
+    padding:.6rem 1.375rem;
+    border-bottom:1px solid rgba(15,13,11,.04);
+    transition:background .1s;
+  }
+  .trx-row:last-child { border-bottom:none; }
+  .trx-row:hover { background:#fdf9f6; }
+  .trx-badge {
+    font-size:.58rem; font-weight:700; padding:2px 7px;
+    border-radius:99px; white-space:nowrap;
+  }
+  .badge-cash { background:#dcfce7; color:#15803d; }
+  .badge-qris { background:#dbeafe; color:#1d4ed8; }
+
+  /* ── Produk table ─────────────────────────────────────────────────────── */
+  .m-good { background:#dcfce7; color:#166534; }
+  .m-mid  { background:#fef9c3; color:#854d0e; }
+  .m-low  { background:#fee2e2; color:#991b1b; }
+  .kat-blue   { background:#dbeafe; color:#1d4ed8; }
+  .kat-yellow { background:#fef9c3; color:#a16207; }
+  .kat-red    { background:#fee2e2; color:#b91c1c; }
+  .kat-green  { background:#dcfce7; color:#15803d; }
+  .kat-gray   { background:#f3f4f6; color:#4b5563; }
+
+  .data-table { width:100%; border-collapse:collapse; font-size:.8rem; }
+  .data-table thead th {
+    text-align:left; padding:.6rem 1rem;
+    font-size:.67rem; font-weight:600; color:#9ca3af;
+    text-transform:uppercase; letter-spacing:.06em;
+    border-bottom:1px solid rgba(15,13,11,.06); white-space:nowrap;
+  }
+  .data-table thead th:last-child { text-align:right; }
+  .data-table tbody tr { border-bottom:1px solid rgba(15,13,11,.04); transition:background .12s; }
+  .data-table tbody tr:last-child { border-bottom:none; }
+  .data-table tbody tr:hover td { background:#fdf9f6; }
+  .data-table td { padding:.65rem 1rem; }
+  .data-table td:last-child { text-align:right; }
+
+  .ts-bar-bg { height:4px; background:#f3f4f6; border-radius:9999px; margin-top:4px; }
+  .ts-bar    { height:4px; background:#c84b1f; border-radius:9999px; }
+
+  .log-item { padding:.6rem 1.375rem; }
+  .log-item:not(:last-child) { border-bottom:1px solid rgba(15,13,11,.04); }
+
+  /* ── Layout helpers ───────────────────────────────────────────────────── */
+  @media(max-width:1023px){
+    .grid-main { grid-template-columns:1fr !important; }
+    .col-right  { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  }
+  @media(max-width:767px){
+    .stats-grid { grid-template-columns:repeat(2,1fr) !important; }
+    .today-grid { grid-template-columns:repeat(2,1fr) !important; }
+    .kat-grid   { grid-template-columns:repeat(2,1fr) !important; }
+    .pay-grid   { grid-template-columns:1fr !important; }
+    .col-right  { grid-template-columns:1fr !important; }
+    .page-pad   { padding:1rem !important; }
+    .trx-chart-grid { grid-template-columns:1fr !important; }
+  }
+  @media(max-width:479px){
+    .stats-grid { grid-template-columns:1fr 1fr !important; }
+    .today-grid { grid-template-columns:1fr 1fr !important; }
+    .kat-grid   { grid-template-columns:1fr 1fr !important; }
+    .hide-xs    { display:none !important; }
+  }
+</style>
+
+<!-- ── Sticky Header ────────────────────────────────────────────────────────── -->
+<div class="bg-white border-b border-black/[0.07] px-4 sm:px-6 lg:px-8 py-4
+            flex items-center justify-between sticky top-0 z-20 fade-up">
+  <div class="flex items-center gap-3">
+    <button onclick="window.openSidebar&&window.openSidebar()"
+      class="lg:hidden w-8 h-8 flex items-center justify-center rounded text-gray-500
+             hover:text-gray-800 hover:bg-gray-100 transition-colors"
+      aria-label="Buka menu">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+    </button>
+    <div>
+      <h1 style="font-family:'DM Serif Display',serif" class="text-[1.2rem] leading-tight text-[#0f0d0b]">Dashboard</h1>
+      <p class="text-[.7rem] text-gray-400 hidden sm:block">
+        {salam}, <span class="font-medium text-gray-600">{userEmail.split("@")[0]}</span>
+        <span class="text-gray-300 mx-1">·</span>
+        <span>{tanggalStr}</span>
+      </p>
+    </div>
+  </div>
+  <a href="/dashboard/produk?modal=tambah"
+    class="flex items-center gap-1.5 px-3.5 py-2 bg-[#0f0d0b] hover:bg-[#c84b1f]
+           text-white text-[.78rem] font-semibold rounded transition-colors">
+    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+    <span class="hidden sm:inline">Tambah Produk</span>
+    <span class="sm:hidden">Tambah</span>
+  </a>
+</div>
+
+<!-- ── Konten ────────────────────────────────────────────────────────────────── -->
+<div class="page-pad p-5 lg:p-7 space-y-5 max-w-[1400px] mx-auto">
+
+  <!-- ①  HARI INI — 4 highlight cards ──────────────────────────────────────── -->
+  <div class="fade-up d1">
+    <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Hari Ini</p>
+    <div class="today-grid grid grid-cols-4 gap-3">
+
+      <!-- Omset hari ini -->
+      <div class="today-card dark">
+        <p style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;opacity:.45;margin-bottom:5px">Omset</p>
+        <p style="font-size:1.45rem;font-weight:800;line-height:1.1">{rp(omsetHari)}</p>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:5px">
+          <span style="font-size:.65rem;opacity:.55">{hari.length} transaksi · {itemHari} item</span>
+          {vsKemarin !== null && (
+            <span style={`font-size:.6rem;font-weight:700;padding:1px 5px;border-radius:99px;${vsKemarin >= 0 ? 'background:rgba(34,197,94,.2);color:#4ade80' : 'background:rgba(248,113,113,.2);color:#f87171'}`}>
+              {vsKemarin >= 0 ? "+" : ""}{vsKemarin}%
+            </span>
+          )}
+        </div>
+      </div>
+
+      <!-- Cash -->
+      <div class="today-card green">
+        <p style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#15803d;margin-bottom:5px">Cash / Manual</p>
+        <p style="font-size:1.35rem;font-weight:800;color:#14532d;line-height:1.1">{rp(cashHari)}</p>
+        <p style="font-size:.65rem;color:#16a34a;margin-top:5px">{hari.filter(t=>t.metode_bayar!=="qris").length} transaksi</p>
+      </div>
+
+      <!-- QRIS -->
+      <div class="today-card blue">
+        <p style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#1d4ed8;margin-bottom:5px">QRIS · Duitku</p>
+        <p style="font-size:1.35rem;font-weight:800;color:#1e3a8a;line-height:1.1">{rp(qrisHari)}</p>
+        <p style="font-size:.65rem;color:#2563eb;margin-top:5px">{hari.filter(t=>t.metode_bayar==="qris").length} transaksi</p>
+      </div>
+
+      <!-- Item terjual -->
+      <div class="today-card amber">
+        <p style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#b45309;margin-bottom:5px">Item Terjual</p>
+        <p style="font-size:1.35rem;font-weight:800;color:#78350f;line-height:1.1">{itemHari}</p>
+        <p style="font-size:.65rem;color:#d97706;margin-top:5px">
+          {hari.length > 0 ? `~${(itemHari / hari.length).toFixed(1)} item/trx` : "belum ada transaksi"}
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ② TREN 7 HARI + TRANSAKSI TERBARU ────────────────────────────────────── -->
+  <div class="trx-chart-grid grid grid-cols-5 gap-4 fade-up d2">
+
+    <!-- Grafik 7 hari -->
+    <div class="col-span-3 section-card">
+      <div class="section-head">
+        <div>
+          <h2>Tren Omset 7 Hari</h2>
+          <p>Total minggu ini: <strong style="color:#0f0d0b">{rp(omsetWeek)}</strong></p>
+        </div>
+        <a href="/dashboard/analisis"
+          class="text-[.72rem] font-semibold text-[#c84b1f] hover:underline whitespace-nowrap flex-shrink-0">
+          Analisis lengkap →
+        </a>
+      </div>
+      <div style="padding:1.125rem 1.375rem .875rem">
+        <div class="mini-chart">
+          {days7.map(d => {
+            const pct     = (d.omset / maxOmset7) * 100;
+            const isToday = d.date === todayKey;
+            return (
+              <div class={`mc-col${isToday ? " today" : ""}`} data-lbl={d.label}>
+                <div class="mc-tip">
+                  {rp(d.omset)}<br/>{d.trx} trx
+                </div>
+                <div class="mc-bar"
+                  style={`height:${pct > 0 ? Math.max(pct, 4) : 0}%;background:${isToday ? "#c84b1f" : "#f3d5cc"}`}>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+
+    <!-- Transaksi terbaru hari ini -->
+    <div class="col-span-2 section-card" style="display:flex;flex-direction:column">
+      <div class="section-head">
+        <div>
+          <h2>Transaksi Terbaru</h2>
+          <p>Hari ini · {hari.length} total</p>
+        </div>
+        {hari.length > 8 && (
+          <span style="font-size:.62rem;color:#9ca3af;flex-shrink:0">+{hari.length - 8} lainnya</span>
+        )}
+      </div>
+      {hari.length === 0
+        ? <p style="font-size:.75rem;color:#9ca3af;text-align:center;padding:2rem 1rem">Belum ada transaksi hari ini</p>
+        : hari.slice(0, 8).map(t => (
+          <div class="trx-row">
+            <div>
+              <p style="font-size:.77rem;font-weight:600;color:#0f0d0b">{rp(t.total)}</p>
+              <p style="font-size:.62rem;color:#9ca3af">{timeStr(t.created_at)}</p>
+            </div>
+            <span class={`trx-badge ${t.metode_bayar === "qris" ? "badge-qris" : "badge-cash"}`}>
+              {t.metode_bayar === "qris" ? "QRIS" : "Cash"}
+            </span>
+          </div>
+        ))
+      }
+    </div>
+
+  </div>
+
+  <!-- ③  RINGKASAN PEMBAYARAN 30 HARI ──────────────────────────────────────── -->
+  <div class="fade-up d3">
+    <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Ringkasan Pembayaran · 30 Hari Terakhir</p>
+    <div class="pay-grid grid grid-cols-2 gap-4">
+
+      <!-- Per metode -->
+      <div class="section-card">
+        <div class="section-head">
+          <div><h2>Total per Metode Bayar</h2></div>
+          <span style="font-size:.67rem;color:#9ca3af">{trx30.length} transaksi</span>
+        </div>
+
+        <!-- Cash row -->
+        <div style="display:flex;align-items:center;gap:12px;padding:.85rem 1.375rem;border-bottom:1px solid rgba(15,13,11,.05)">
+          <div style="width:30px;height:30px;border-radius:6px;background:#dcfce7;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5" aria-hidden="true">
+              <rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/>
+            </svg>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+              <span style="font-size:.77rem;font-weight:600;color:#0f0d0b">Cash / Manual</span>
+              <span style="font-size:.77rem;font-weight:700;color:#15803d">{rp(cash30)}</span>
+            </div>
+            <div class="pay-bar-bg">
+              <div class="pay-bar" style={`width:${omset30 > 0 ? (cash30/omset30)*100 : 0}%;background:#22c55e`}></div>
+            </div>
+            <p style="font-size:.62rem;color:#9ca3af;margin-top:3px">{cashCnt30} transaksi · {omset30 > 0 ? Math.round((cash30/omset30)*100) : 0}%</p>
+          </div>
+        </div>
+
+        <!-- QRIS row -->
+        <div style="display:flex;align-items:center;gap:12px;padding:.85rem 1.375rem;border-bottom:1px solid rgba(15,13,11,.05)">
+          <div style="width:30px;height:30px;border-radius:6px;background:#dbeafe;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2.5" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+              <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+            </svg>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+              <span style="font-size:.77rem;font-weight:600;color:#0f0d0b">QRIS · Duitku</span>
+              <span style="font-size:.77rem;font-weight:700;color:#1d4ed8">{rp(qris30)}</span>
+            </div>
+            <div class="pay-bar-bg">
+              <div class="pay-bar" style={`width:${omset30 > 0 ? (qris30/omset30)*100 : 0}%;background:#3b82f6`}></div>
+            </div>
+            <p style="font-size:.62rem;color:#9ca3af;margin-top:3px">{qrisCnt30} transaksi · {omset30 > 0 ? Math.round((qris30/omset30)*100) : 0}%</p>
+          </div>
+        </div>
+
+        <!-- Total footer -->
+        <div style="padding:.8rem 1.375rem;background:#fdf9f6;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:.72rem;color:#6b7280;font-weight:500">Total Omset 30 Hari</span>
+          <span style="font-size:.95rem;font-weight:800;color:#0f0d0b">{rp(omset30)}</span>
+        </div>
+      </div>
+
+      <!-- 4 mini stats -->
+      <div class="section-card" style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr">
+        {[
+          { lbl:"Total Transaksi",  val: String(trx30.length),                            sub:"30 hari",            color:"#0f0d0b" },
+          { lbl:"Omset / Hari",     val: rp(Math.round(omset30 / 30)),                    sub:"rata-rata harian",   color:"#c84b1f" },
+          { lbl:"Nilai / Transaksi",val: trx30.length > 0 ? rp(Math.round(omset30/trx30.length)) : "Rp 0",
+                                                                                           sub:"rata-rata per trx",  color:"#0f0d0b" },
+          { lbl:"Metode Dominan",   val: cashCnt30 >= qrisCnt30 ? "Cash" : "QRIS",        sub: cashCnt30 >= qrisCnt30 ? `${cashCnt30} dari ${trx30.length} trx` : `${qrisCnt30} dari ${trx30.length} trx`,
+                                                                                                                       color: cashCnt30 >= qrisCnt30 ? "#15803d" : "#1d4ed8" },
+        ].map((s, i) => (
+          <div style={[
+            "padding:1.1rem 1.375rem",
+            i < 2 ? "border-bottom:1px solid rgba(15,13,11,.06)" : "",
+            i % 2 === 0 ? "border-right:1px solid rgba(15,13,11,.06)" : "",
+          ].filter(Boolean).join(";")}>
+            <p style="font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;margin-bottom:5px">{s.lbl}</p>
+            <p style={`font-size:1.15rem;font-weight:800;color:${s.color};line-height:1.15`}>{s.val}</p>
+            <p style="font-size:.62rem;color:#9ca3af;margin-top:2px">{s.sub}</p>
+          </div>
+        ))}
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ④  STAT CARDS PRODUK ────────────────────────────────────────────────── -->
+  <div class="stats-grid grid grid-cols-4 gap-3 fade-up d4">
+    <div class="stat-card">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-wider">Total Produk</p>
+          <p class="text-[1.9rem] font-bold text-[#0f0d0b] leading-none mt-2">{totalProduk}</p>
+          <p class="text-[.68rem] text-gray-400 mt-1.5">item terdaftar</p>
+        </div>
+        <div class="stat-icon bg-[#fdf6f3]">
+          <svg class="w-4 h-4 text-[#c84b1f]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-wider">Rata-rata Margin</p>
+          <p class="text-[1.9rem] font-bold text-[#0f0d0b] leading-none mt-2">{avgMargin}%</p>
+          <p class="text-[.68rem] text-gray-400 mt-1.5">dari semua produk</p>
+        </div>
+        <div class="stat-icon bg-[#fdf6f3]">
+          <svg class="w-4 h-4 text-[#c84b1f]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-wider">Margin Rendah</p>
+          <p class={`text-[1.9rem] font-bold leading-none mt-2 ${lowMargin > 0 ? "text-red-500" : "text-[#0f0d0b]"}`}>{lowMargin}</p>
+          <p class="text-[.68rem] text-gray-400 mt-1.5">
+            {lowMargin > 0
+              ? <a href="/dashboard/produk?filter=low_margin" class="text-red-500 hover:underline font-medium">perlu ditinjau →</a>
+              : "semua aman"}
+          </p>
+        </div>
+        <div class={`stat-icon ${lowMargin > 0 ? "bg-red-50" : "bg-[#fdf6f3]"}`}>
+          <svg class={`w-4 h-4 ${lowMargin > 0 ? "text-red-500" : "text-[#c84b1f]"}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-wider">Quick Cash</p>
+          <p class="text-[1.9rem] font-bold text-[#0f0d0b] leading-none mt-2">{quickCashCount}</p>
+          <p class="text-[.68rem] text-gray-400 mt-1.5">tombol cepat aktif</p>
+        </div>
+        <div class="stat-icon bg-[#fdf6f3]">
+          <svg class="w-4 h-4 text-[#c84b1f]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑤  TABEL PRODUK + KOLOM KANAN ────────────────────────────────────────── -->
+  <div class="grid-main grid grid-cols-3 gap-5 fade-up d5">
+
+    <div class="col-span-2 section-card">
+      <div class="section-head">
+        <div><h2>Daftar Produk</h2></div>
+        <a href="/dashboard/produk" class="text-[.72rem] text-[#c84b1f] font-semibold hover:underline whitespace-nowrap">Lihat semua →</a>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="padding-left:1.375rem">Nama Produk</th>
+              <th class="hide-xs">Kategori</th>
+              <th>Harga Jual</th>
+              <th style="padding-right:1.375rem">Margin</th>
+            </tr>
+          </thead>
+          <tbody>
+            {produk.slice(0, 8).map(p => {
+              const m  = margin(p.harga_beli, p.harga_jual);
+              const mc = m >= 20 ? "m-good" : m >= 10 ? "m-mid" : "m-low";
+              return (
+                <tr>
+                  <td style="padding-left:1.375rem">
+                    <div style="display:flex;align-items:center;gap:.5rem">
+                      {p.quick_cash && (
+                        <span title="Quick Cash" style="width:5px;height:5px;border-radius:50%;background:#c84b1f;flex-shrink:0;display:inline-block"></span>
+                      )}
+                      <span style="font-weight:500;color:#0f0d0b">{p.nama_produk}</span>
+                    </div>
+                  </td>
+                  <td class="hide-xs">
+                    <span class={`${katColors[p.kategori] ?? "kat-gray"} inline-block px-2 py-0.5 rounded text-[.62rem] font-semibold`}>
+                      {p.kategori}
+                    </span>
+                  </td>
+                  <td style="font-weight:500;color:#0f0d0b">{rp(p.harga_jual)}</td>
+                  <td style="padding-right:1.375rem">
+                    <span class={`${mc} inline-block px-2 py-0.5 rounded text-[.63rem] font-bold`}>{m}%</span>
+                  </td>
+                </tr>
+              );
+            })}
+            {produk.length === 0 && (
+              <tr>
+                <td colspan="4" style="padding:2.5rem 1.375rem;text-align:center;color:#9ca3af;font-size:.8rem">
+                  Belum ada produk.{" "}
+                  <a href="/dashboard/produk?modal=tambah" style="color:#c84b1f;font-weight:600">Tambah sekarang →</a>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Kolom kanan -->
+    <div class="col-right space-y-4">
+      <!-- Top Seller -->
+      <div class="section-card">
+        <div class="section-head" style="flex-direction:column;align-items:flex-start;gap:1px">
+          <h2>Top Seller</h2>
+          <p>Berdasarkan total qty terjual</p>
+        </div>
+        <div style="padding:.875rem 1.375rem;display:flex;flex-direction:column;gap:.7rem">
+          {topSellers.length === 0
+            ? <p style="font-size:.75rem;color:#9ca3af;text-align:center;padding:.75rem 0">Belum ada data</p>
+            : topSellers.map((t, i) => (
+              <div style="display:flex;align-items:center;gap:.6rem">
+                <span style="font-size:.65rem;font-weight:700;color:#d1d5db;width:1rem;text-align:right;flex-shrink:0">{i+1}</span>
+                <div style="flex:1;min-width:0">
+                  <p style="font-size:.77rem;font-weight:500;color:#0f0d0b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{t.nama}</p>
+                  <div class="ts-bar-bg">
+                    <div class="ts-bar" style={`width:${Math.min(100,(t.total/(topSellers[0]?.total||1))*100)}%`}></div>
+                  </div>
+                </div>
+                <span style="font-size:.7rem;font-weight:600;color:#6b7280;flex-shrink:0">{t.total}×</span>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+
+      <!-- Log Perubahan Harga -->
+      <div class="section-card">
+        <div class="section-head" style="flex-direction:column;align-items:flex-start;gap:1px">
+          <h2>Log Perubahan Harga</h2>
+          <p>Riwayat terbaru</p>
+        </div>
+        {logs.length === 0
+          ? <p style="font-size:.75rem;color:#9ca3af;text-align:center;padding:1.25rem">Belum ada perubahan harga</p>
+          : logs.slice(0, 5).map(l => (
+            <div class="log-item">
+              <p style="font-size:.77rem;font-weight:500;color:#0f0d0b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{l.nama_produk}</p>
+              <div style="display:flex;align-items:center;gap:.5rem;margin-top:2px">
+                <span style="font-size:.65rem;color:#9ca3af;text-decoration:line-through">{rp(l.harga_jual_lama ?? 0)}</span>
+                <svg style="width:9px;height:9px;color:#d1d5db;flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                </svg>
+                <span style="font-size:.65rem;font-weight:700;color:#c84b1f">{rp(l.harga_jual_baru ?? 0)}</span>
+                <span style="font-size:.6rem;color:#d1d5db;margin-left:auto;flex-shrink:0">
+                  {new Date(l.changed_at).toLocaleDateString("id-ID",{day:"2-digit",month:"short"})}
+                </span>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑥  BREAKDOWN KATEGORI ──────────────────────────────────────────────── -->
+  <div class="section-card fade-up d6">
+    <div class="section-head">
+      <div><h2>Breakdown per Kategori</h2></div>
+    </div>
+    <div style="padding:1.125rem 1.375rem">
+      <div class="kat-grid grid grid-cols-5 gap-3">
+        {katBreakdown.map(({ kat, count, avgM, colorKey }) => (
+          <div
+            style="text-align:center;padding:1rem;border:1px solid rgba(15,13,11,.07);border-radius:6px;transition:box-shadow .15s,transform .15s"
+            onmouseenter="this.style.boxShadow='0 4px 14px rgba(15,13,11,.08)';this.style.transform='translateY(-2px)'"
+            onmouseleave="this.style.boxShadow='none';this.style.transform='none'"
+          >
+            <span class={`${colorKey} inline-block px-2.5 py-1 rounded text-[.6rem] font-bold uppercase tracking-wide`}>{kat}</span>
+            <p style="font-size:1.7rem;font-weight:700;color:#0f0d0b;margin:.5rem 0 0">{count}</p>
+            <p style="font-size:.65rem;color:#9ca3af;margin:1px 0 .375rem">produk</p>
+            <p style="font-size:.68rem;font-weight:600;color:#c84b1f">{avgM}% margin</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+
+</div>
+</Layout>

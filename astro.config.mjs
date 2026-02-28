@@ -1,5 +1,22 @@
+// astro.config.mjs
 // @ts-check
 import { defineConfig } from 'astro/config';
+import tailwindcss from '@tailwindcss/vite';
+import vercel from '@astrojs/vercel';
 
-// https://astro.build/config
-export default defineConfig({});
+export default defineConfig({
+  output: 'server',
+  adapter: vercel({
+    edgeMiddleware: true,
+  }),
+  prefetch: {
+    prefetchAll: true,
+    defaultStrategy: 'viewport',
+  },
+  devToolbar: {
+    enabled: false
+  },
+  vite: {
+    plugins: [tailwindcss()],
+  },
+});

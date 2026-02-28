@@ -1,0 +1,1376 @@
+---
+export const prerender = false;
+
+import Layout from "../../layouts/Layout.astro";
+import "../../styles/produk.css";
+import { createServiceClient, KATEGORI_LIST } from "../../lib/supabase";
+
+const accessToken = Astro.cookies.get("sb-access-token");
+if (!accessToken?.value) return Astro.redirect("/");
+
+
+
+const nonce = (Astro.locals as App.Locals).nonce ?? "";
+const sb    = createServiceClient();
+
+const { data: produkRaw } = await sb
+  .from("produk")
+  .select("id, nama_produk, harga_beli, harga_jual, kategori, quick_cash, created_at, updated_at")
+  .order("nama_produk");
+const produk = produkRaw ?? [];
+
+const PUBLIC_SUPABASE_URL = import.meta.env.PUBLIC_SUPABASE_URL;
+const STORAGE_BUCKET = "produk-foto";
+
+function rp(n: number) {
+  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
+}
+function margin(beli: number, jual: number) {
+  if (!beli) return null;
+  return Math.round(((jual - beli) / beli) * 100);
+}
+function fmtDate(s: string) {
+  if (!s) return "—";
+  return new Date(s).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+}
+---
+
+<Layout title="Daftar Produk" active="produk" nonce={nonce}>
+
+  <a href="#main" class="skip">Lewati navigasi</a>
+
+  <!-- ── TOP BAR ── -->
+  <div class="topbar">
+    <div class="topbar-title">
+
+      <!-- Hamburger — hanya mobile, tidak fixed, tidak menimpa apapun -->
+      <button
+        type="button"
+        onclick="window.openSidebar && window.openSidebar()"
+        class="lg:hidden flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-[4px] text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
+        aria-label="Buka menu navigasi"
+      >
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+      </button>
+
+      <div>
+        <h1 style="font-family:'DM Serif Display',serif">Daftar Produk</h1>
+        <p><span id="count-lbl" aria-live="polite">{produk.length} produk</span></p>
+      </div>
+    </div>
+
+    <div class="topbar-actions">
+      <a href="/api/produk/template-excel" download="template_import_produk.xlsx"
+        class="btn btn-excel btn-sm" id="btn-dl-excel" title="Download Template Excel">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span class="btn-label">Template Excel</span>
+      </a>
+      <button type="button" id="btn-import" class="btn btn-ghost btn-sm" aria-haspopup="dialog">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span class="btn-label">Import</span>
+      </button>
+      <button type="button" id="btn-mass" class="btn btn-ghost btn-sm" aria-haspopup="dialog">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        <span class="btn-label">Sesuaikan Harga</span>
+      </button>
+      <!-- ★ TOMBOL HAPUS MASSAL ★ -->
+      <button type="button" id="btn-hapus-massal" class="btn btn-ghost btn-sm" aria-haspopup="dialog"
+        style="color:#dc2626;border-color:#fecaca">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6"/><path d="M14 11v6"/>
+          <path d="M9 6V4h6v2"/>
+        </svg>
+        <span class="btn-label">Hapus Massal</span>
+      </button>
+      <button type="button" id="btn-tambah" class="btn btn-dark" aria-haspopup="dialog">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Tambah
+      </button>
+    </div>
+  </div>
+
+  <!-- ── SEARCH + FILTER ── -->
+  <div class="searchbar">
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="q" type="search" placeholder="Cari nama produk…" autocomplete="off" aria-label="Cari produk" />
+    </div>
+    <div class="kat-pills" role="group" aria-label="Filter kategori" id="kat-pills">
+      <button type="button" class="kat-pill active" data-kat="">Semua</button>
+      {KATEGORI_LIST.map(k => (
+        <button type="button" class="kat-pill" data-kat={k}>{k}</button>
+      ))}
+    </div>
+    <div style="margin-left:auto" class="view-toggle" role="group" aria-label="Tampilan">
+      <button type="button" class="view-btn active" id="btn-table" aria-label="Tampilan tabel" aria-pressed="true">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      </button>
+      <button type="button" class="view-btn" id="btn-card" aria-label="Tampilan kartu" aria-pressed="false">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="9" x2="9" y2="21"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── TABLE VIEW ── -->
+  <div id="view-table">
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">{produk.length} produk tersedia</caption>
+        <thead>
+          <tr>
+            <th style="width:44px"></th>
+            <th>Nama Produk</th>
+            <th>Kategori</th>
+            <th class="r">Harga Beli</th>
+            <th class="r">Harga Jual</th>
+            <th class="r">Untung</th>
+            <th class="r">Margin</th>
+            <th class="c">Quick&nbsp;Cash</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          {produk.length === 0 ? (
+            <tr>
+              <td colspan="9">
+                <div class="empty">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                  <h3>Belum ada produk</h3>
+                  <p>Klik <strong>Tambah</strong> atau <strong>Import CSV</strong> untuk mulai.</p>
+                </div>
+              </td>
+            </tr>
+          ) : produk.map(p => {
+            const m = margin(p.harga_beli, p.harga_jual);
+            const u = p.harga_jual - p.harga_beli;
+            const bCls = m === null ? 'badge-k' : m >= 20 ? 'badge-g' : m >= 10 ? 'badge-y' : 'badge-r';
+            const imgUrl = `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${p.id}.webp`;
+            return (
+              <tr class="data-row"
+                  data-id={p.id}
+                  data-nama={p.nama_produk.toLowerCase()}
+                  data-kat={p.kategori}
+                  data-nama-asli={p.nama_produk}
+                  data-beli={p.harga_beli}
+                  data-jual={p.harga_jual}
+                  data-quick={p.quick_cash}
+                  data-created={p.created_at}
+                  data-updated={p.updated_at}
+                  data-img={imgUrl}>
+                <td style="padding:.5rem .75rem .5rem 1rem">
+                  <div class="thumb-wrap" data-id={p.id} title="Klik untuk ganti foto" tabindex="0" role="button" aria-label={`Ganti foto ${p.nama_produk}`}>
+                    <img
+                      class="prod-thumb"
+                      src={imgUrl}
+                      alt={p.nama_produk}
+                      loading="lazy"
+                      decoding="async"
+                      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+                    />
+                    <div class="prod-thumb-placeholder" style="display:none">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 9 4-4 4 4 4-5 6 7"/></svg>
+                    </div>
+                    <div class="thumb-overlay" aria-hidden="true">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    </div>
+                  </div>
+                </td>
+                <td class="name name-clickable" tabindex="0" role="button" aria-label={`Lihat detail ${p.nama_produk}`} title="Klik untuk detail">
+                  <span>{p.nama_produk}</span>
+                  {p.quick_cash && <span class="badge badge-qc" style="margin-left:.4rem;font-size:.58rem">QC</span>}
+                </td>
+                <td><span class="badge badge-k">{p.kategori}</span></td>
+                <td class="r" style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:.77rem">{rp(p.harga_beli)}</td>
+                <td class="r" style="font-variant-numeric:tabular-nums;font-weight:700;font-size:.82rem">{rp(p.harga_jual)}</td>
+                <td class="r" style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:.77rem">{rp(u)}</td>
+                <td class="r">
+                  <span class={`badge ${bCls}`}>{m !== null ? `${m}%` : '—'}</span>
+                </td>
+                <td class="c">
+                  <button type="button"
+                    class={`toggle ${p.quick_cash ? 'bg-rust' : ''}`}
+                    style={`background:${p.quick_cash ? '#c84b1f' : '#d1d5db'}`}
+                    data-id={p.id}
+                    role="switch"
+                    aria-checked={p.quick_cash ? "true" : "false"}
+                    aria-label={`Quick Cash ${p.nama_produk}`}>
+                    <span class="thumb"></span>
+                  </button>
+                </td>
+                <td style="padding:.5rem 1rem .5rem .5rem">
+                  <div style="display:flex;gap:.2rem;justify-content:flex-end">
+                    <button type="button" class="icon-btn edit"
+                      data-id={p.id} data-nama={p.nama_produk}
+                      data-beli={p.harga_beli} data-jual={p.harga_jual}
+                      data-kat={p.kategori} data-quick={p.quick_cash}
+                      aria-label={`Edit ${p.nama_produk}`}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                    <button type="button" class="icon-btn del"
+                      data-id={p.id} data-nama={p.nama_produk}
+                      aria-label={`Hapus ${p.nama_produk}`}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div id="no-results" class="empty" style="display:none" role="status" aria-live="polite">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <h3>Tidak ditemukan</h3>
+        <p>Coba kata kunci atau kategori lain.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CARD VIEW ── -->
+  <div id="view-card" style="display:none">
+    <div class="card-grid" id="card-grid">
+      {produk.map(p => {
+        const m = margin(p.harga_beli, p.harga_jual);
+        const u = p.harga_jual - p.harga_beli;
+        const bCls = m === null ? 'badge-k' : m >= 20 ? 'badge-g' : m >= 10 ? 'badge-y' : 'badge-r';
+        const imgUrl = `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${p.id}.webp`;
+        return (
+          <div class="prod-card"
+               data-id={p.id}
+               data-nama={p.nama_produk.toLowerCase()}
+               data-kat={p.kategori}
+               data-nama-asli={p.nama_produk}
+               data-beli={p.harga_beli}
+               data-jual={p.harga_jual}
+               data-quick={p.quick_cash}
+               data-created={p.created_at}
+               data-updated={p.updated_at}
+               data-img={imgUrl}>
+            <div class="card-img-wrap thumb-wrap" data-id={p.id}
+                 title="Klik untuk ganti foto" tabindex="0" role="button"
+                 aria-label={`Ganti foto ${p.nama_produk}`}>
+              <img
+                  class="card-prod-img"
+                  src={imgUrl}
+                  alt={p.nama_produk}
+                  loading="lazy"
+                  decoding="async"
+                  onload="this.classList.add('loaded')"
+                  onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+                />
+              <div class="card-img-placeholder" style="display:none;align-items:center;justify-content:center;width:100%;height:100%;position:absolute;inset:0;background:var(--cream)">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="color:#d1c9be"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 9 4-4 4 4 4-5 6 7"/></svg>
+              </div>
+              <div class="thumb-overlay thumb-overlay-card" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span style="font-size:.65rem;font-weight:600;margin-top:.25rem">Ganti Foto</span>
+              </div>
+            </div>
+            <div class="card-body card-body-clickable" role="button" tabindex="0" aria-label={`Lihat detail ${p.nama_produk}`} title="Klik untuk detail">
+              <div class="card-name">{p.nama_produk}</div>
+              <div class="card-price">{rp(p.harga_jual)}</div>
+              <div class="card-meta">
+                <span class="badge badge-k">{p.kategori}</span>
+                <span class={`badge ${bCls}`}>{m !== null ? `${m}%` : '—'}</span>
+                {p.quick_cash && <span class="badge badge-qc">QC</span>}
+              </div>
+            </div>
+            <div class="card-footer">
+              <span style="font-size:.68rem;color:var(--muted)">Beli: {rp(p.harga_beli)}</span>
+              <div style="display:flex;gap:.2rem">
+                <button type="button" class="icon-btn edit btn-sm"
+                  data-id={p.id} data-nama={p.nama_produk}
+                  data-beli={p.harga_beli} data-jual={p.harga_jual}
+                  data-kat={p.kategori} data-quick={p.quick_cash}
+                  aria-label={`Edit ${p.nama_produk}`}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button type="button" class="icon-btn del btn-sm"
+                  data-id={p.id} data-nama={p.nama_produk}
+                  aria-label={`Hapus ${p.nama_produk}`}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+    <div id="no-results-card" class="empty" style="display:none" role="status" aria-live="polite">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <h3>Tidak ditemukan</h3>
+      <p>Coba kata kunci atau kategori lain.</p>
+    </div>
+  </div>
+
+  <!-- ══ MODAL DETAIL PRODUK ══ -->
+  <div id="m-detail" class="overlay" role="dialog" aria-modal="true" aria-labelledby="m-detail-title">
+    <div class="modal modal-detail">
+      <button type="button" class="icon-btn close-modal detail-close-btn" data-m="detail" aria-label="Tutup">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <div class="detail-img-section">
+        <img id="d-img" src="" alt="" class="detail-img" onerror="this.style.display='none';document.getElementById('d-img-placeholder').style.display='flex'" />
+        <div id="d-img-placeholder" class="detail-img-placeholder" style="display:none">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 9 4-4 4 4 4-5 6 7"/></svg>
+        </div>
+      </div>
+      <div class="detail-body">
+        <div class="detail-header">
+          <div>
+            <h2 id="m-detail-title" class="detail-title"></h2>
+            <div class="detail-badges" id="d-badges"></div>
+          </div>
+        </div>
+        <div class="detail-price-grid">
+          <div class="detail-price-card">
+            <span class="detail-price-label">Harga Jual</span>
+            <span class="detail-price-value" id="d-jual"></span>
+          </div>
+          <div class="detail-price-card">
+            <span class="detail-price-label">Harga Beli</span>
+            <span class="detail-price-value detail-price-muted" id="d-beli"></span>
+          </div>
+          <div class="detail-price-card">
+            <span class="detail-price-label">Keuntungan</span>
+            <span class="detail-price-value" id="d-untung"></span>
+          </div>
+          <div class="detail-price-card">
+            <span class="detail-price-label">Margin</span>
+            <span class="detail-price-value" id="d-margin-val"></span>
+          </div>
+        </div>
+        <div class="detail-meta-row">
+          <div class="detail-meta-item">
+            <span class="detail-meta-label">Dibuat</span>
+            <span class="detail-meta-value" id="d-created"></span>
+          </div>
+          <div class="detail-meta-item">
+            <span class="detail-meta-label">Diperbarui</span>
+            <span class="detail-meta-value" id="d-updated"></span>
+          </div>
+          <div class="detail-meta-item">
+            <span class="detail-meta-label">Quick Cash</span>
+            <span class="detail-meta-value" id="d-qc"></span>
+          </div>
+        </div>
+      </div>
+      <div class="detail-footer">
+        <button type="button" class="btn btn-ghost close-modal" data-m="detail">Tutup</button>
+        <div style="display:flex;gap:.5rem">
+          <button type="button" id="d-btn-edit" class="btn btn-dark">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Edit
+          </button>
+          <button type="button" id="d-btn-hapus" class="btn" style="background:#fee2e2;color:#dc2626;border:1px solid #fecaca">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+            Hapus
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL TAMBAH / EDIT ══ -->
+  <div id="m-tambah" class="overlay" role="dialog" aria-modal="true" aria-labelledby="m-tambah-title">
+    <div class="modal">
+      <div class="modal-hd">
+        <h2 id="m-tambah-title">Tambah Produk</h2>
+        <button type="button" class="icon-btn close-modal" data-m="tambah" aria-label="Tutup">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-bd">
+        <input type="hidden" id="edit-id" />
+        <div style="margin-bottom:1rem">
+          <label class="label">Foto Produk</label>
+          <div style="display:flex;gap:1rem;align-items:flex-start">
+            <div id="foto-preview-box" style="width:96px;height:96px;border:1.5px dashed var(--border);border-radius:8px;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--cream)">
+              <img id="foto-current" src="" alt="Foto produk" style="display:none;width:100%;height:100%;object-fit:cover" />
+              <div id="foto-placeholder" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.35rem;color:var(--muted)">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 9 4-4 4 4 4-5 6 7"/><circle cx="8.5" cy="8.5" r="1.5"/></svg>
+                <span style="font-size:.72rem">Belum ada foto</span>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:.4rem">
+              <button type="button" id="btn-pilih-foto" class="btn btn-ghost btn-sm">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                Pilih Foto
+              </button>
+              <button type="button" id="btn-hapus-foto" class="btn btn-ghost btn-sm" style="display:none;color:#dc2626">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                Hapus Foto
+              </button>
+              <input id="f-foto" type="file" accept="image/*" style="display:none" aria-label="Pilih foto produk" />
+              <p style="font-size:.67rem;color:var(--muted);margin-top:.25rem">Max 5 MB · JPG, PNG, WebP</p>
+            </div>
+          </div>
+          <canvas id="resize-canvas" style="display:none" aria-hidden="true"></canvas>
+        </div>
+        <div class="field">
+          <label for="f-nama" class="label">Nama Produk<span>*</span></label>
+          <input id="f-nama" class="input" type="text" placeholder="cth: Aqua 600ml" maxlength="100" autocomplete="off" required />
+        </div>
+        <div class="field">
+          <div class="grid-2">
+            <div>
+              <label for="f-beli" class="label">Harga Beli (Rp)</label>
+              <input id="f-beli" class="input" type="number" placeholder="0" min="0" />
+            </div>
+            <div>
+              <label for="f-jual" class="label">Harga Jual (Rp)<span>*</span></label>
+              <input id="f-jual" class="input" type="number" placeholder="0" min="1" required />
+            </div>
+          </div>
+          <div id="margin-hint" class="margin-hint"></div>
+        </div>
+        <div class="field">
+          <label for="f-kat" class="label">Kategori</label>
+          <select id="f-kat" class="input">
+            {KATEGORI_LIST.map(k => <option value={k}>{k}</option>)}
+          </select>
+        </div>
+        <div class="field" style="display:flex;align-items:center;gap:.5rem">
+          <input id="f-quick" type="checkbox" style="width:16px;height:16px;accent-color:var(--rust);cursor:pointer" />
+          <label for="f-quick" style="font-size:.8rem;cursor:pointer">Tampilkan sebagai tombol Quick Cash di kasir</label>
+        </div>
+      </div>
+      <div class="modal-ft">
+        <button type="button" class="btn btn-ghost close-modal" data-m="tambah">Batal</button>
+        <button type="button" id="btn-simpan" class="btn btn-dark">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL GANTI FOTO CEPAT ══ -->
+  <div id="m-foto" class="overlay" role="dialog" aria-modal="true" aria-labelledby="m-foto-title">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-hd">
+        <h2 id="m-foto-title">Ganti Foto Produk</h2>
+        <button type="button" class="icon-btn close-modal" data-m="foto" aria-label="Tutup">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-bd">
+        <input type="hidden" id="foto-target-id" />
+        <div id="foto-drop" class="dropzone" role="button" tabindex="0" aria-label="Klik atau drop gambar">
+          <div id="foto-drop-preview" style="display:none;position:relative">
+            <img id="foto-drop-img" src="" alt="Preview" style="max-width:100%;max-height:200px;border-radius:6px;display:block;margin:0 auto" />
+            <button type="button" id="btn-foto-clear" style="position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:#dc2626;color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.7rem" aria-label="Hapus pilihan">✕</button>
+          </div>
+          <div id="foto-drop-empty">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--muted);margin:0 auto"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            <p style="margin:.5rem 0 0;font-size:.8rem">Klik atau drop gambar di sini</p>
+            <p style="font-size:.7rem;color:var(--muted)">Max 5 MB · JPG, PNG, WebP</p>
+          </div>
+          <input id="f-foto-quick" type="file" accept="image/*" style="display:none" />
+        </div>
+        <canvas id="resize-canvas-quick" style="display:none" aria-hidden="true"></canvas>
+      </div>
+      <div class="modal-ft">
+        <button type="button" class="btn btn-ghost close-modal" data-m="foto">Batal</button>
+        <button type="button" id="btn-upload-foto" class="btn btn-dark" disabled>Upload</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL IMPORT CSV ══ -->
+  <div id="m-import" class="overlay" role="dialog" aria-modal="true" aria-labelledby="m-import-title">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-hd">
+        <h2 id="m-import-title">Import CSV / Excel</h2>
+        <button type="button" class="icon-btn close-modal" data-m="import" aria-label="Tutup">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-bd">
+        <div style="padding:.6rem .85rem;background:#eff6ff;border:1px solid #bfdbfe;border-radius:4px;font-size:.75rem;color:#1e40af;margin-bottom:.9rem">
+          Kolom wajib: <strong>nama_produk, harga_beli, harga_jual, kategori</strong>
+          · Opsional: <strong>quick_cash</strong>
+          <div style="display:flex;gap:.5rem;margin-top:.5rem">
+            <a href="/api/produk/template-excel" download="template_import_produk.xlsx"
+              style="display:inline-flex;align-items:center;gap:.3rem;color:#1e40af;font-weight:600;text-decoration:underline">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Template Excel (.xlsx)
+            </a>
+            <span style="color:#93c5fd">·</span>
+            <a href="/api/produk/template-csv" download="template_import_produk.csv"
+              style="display:inline-flex;align-items:center;gap:.3rem;color:#1e40af;font-weight:600;text-decoration:underline">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Template CSV (.csv)
+            </a>
+          </div>
+        </div>
+        <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Klik atau drop file CSV atau XLSX">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--muted);margin:0 auto"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <p>Klik atau drop file <strong>.csv</strong> atau <strong>.xlsx</strong> di sini</p>
+          <label for="f-csv" class="sr-only">Pilih file EXCEL</label>
+          <input id="f-csv" type="file" accept=".csv,.xlsx,.xls" style="display:none" />
+        </div>
+        <div id="csv-preview" style="display:none;margin-top:.75rem" aria-live="polite">
+          <p id="csv-count" style="font-size:.75rem;font-weight:600;color:var(--muted);margin-bottom:.4rem"></p>
+          <div style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:4px">
+            <table style="width:100%;font-size:.72rem;border-collapse:collapse">
+              <thead style="background:var(--cream);position:sticky;top:0;z-index:1">
+                <tr>
+                  <th style="padding:.4rem .5rem;text-align:center;font-weight:600;color:var(--muted);width:32px">#</th>
+                  <th style="padding:.4rem .65rem;text-align:left;font-weight:600;color:var(--muted)">Nama Produk</th>
+                  <th style="padding:.4rem .65rem;text-align:right;font-weight:600;color:var(--muted)">Harga Beli</th>
+                  <th style="padding:.4rem .65rem;text-align:right;font-weight:600;color:var(--muted)">Harga Jual</th>
+                  <th style="padding:.4rem .65rem;text-align:center;font-weight:600;color:var(--muted)">Margin</th>
+                  <th style="padding:.4rem .65rem;text-align:left;font-weight:600;color:var(--muted)">Kategori / QC</th>
+                </tr>
+              </thead>
+              <tbody id="csv-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-ft">
+        <button type="button" class="btn btn-ghost close-modal" data-m="import">Batal</button>
+        <button type="button" id="btn-do-import" class="btn btn-dark" disabled>Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL MASS PRICE ══ -->
+  <div id="m-mass" class="overlay" role="dialog" aria-modal="true" aria-labelledby="m-mass-title">
+    <div class="modal">
+      <div class="modal-hd">
+        <h2 id="m-mass-title">Sesuaikan Harga Massal</h2>
+        <button type="button" class="icon-btn close-modal" data-m="mass" aria-label="Tutup">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-bd">
+        <div class="field">
+          <label for="mp-kat" class="label">Kategori Target</label>
+          <select id="mp-kat" class="input">
+            <option value="">Semua Kategori</option>
+            {KATEGORI_LIST.map(k => <option value={k}>{k}</option>)}
+          </select>
+        </div>
+        <div class="field">
+          <div class="grid-2">
+            <div>
+              <label for="mp-field" class="label">Kolom</label>
+              <select id="mp-field" class="input">
+                <option value="harga_jual">Harga Jual</option>
+                <option value="harga_beli">Harga Beli</option>
+                <option value="both">Keduanya</option>
+              </select>
+            </div>
+            <div>
+              <label for="mp-type" class="label">Tipe</label>
+              <select id="mp-type" class="input">
+                <option value="add">Tambah (Rp)</option>
+                <option value="sub">Kurangi (Rp)</option>
+                <option value="pct">Persentase (%)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="mp-val" class="label">Nilai</label>
+          <input id="mp-val" class="input" type="number" placeholder="cth: 500" min="0" />
+        </div>
+        <div id="mp-hint" style="display:none;padding:.5rem .75rem;border-radius:4px;font-size:.75rem;background:var(--cream);margin-top:.5rem" aria-live="polite"></div>
+      </div>
+      <div class="modal-ft">
+        <button type="button" class="btn btn-ghost close-modal" data-m="mass">Batal</button>
+        <button type="button" id="btn-mass-ok" class="btn btn-dark">Terapkan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL HAPUS (satu produk) ══ -->
+  <div id="m-hapus" class="overlay" role="alertdialog" aria-modal="true" aria-labelledby="m-hapus-title">
+    <div class="modal modal-sm">
+      <div class="modal-bd" style="padding-top:1.5rem">
+        <div style="width:44px;height:44px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:1rem">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        </div>
+        <h2 id="m-hapus-title" style="font-size:.92rem;font-weight:700;margin-bottom:.35rem">Hapus Produk?</h2>
+        <p style="font-size:.8rem;color:var(--muted)">Produk <strong id="hapus-nama" style="color:var(--ink)"></strong> akan dihapus permanen.</p>
+      </div>
+      <div class="modal-ft">
+        <button type="button" class="btn btn-ghost close-modal" data-m="hapus">Batal</button>
+        <button type="button" id="btn-hapus-ok" class="btn" style="background:#dc2626;color:#fff">Hapus</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MODAL HAPUS MASSAL ══ -->
+  <div id="m-hapus-massal" class="overlay" role="alertdialog" aria-modal="true" aria-labelledby="m-hapus-massal-title">
+    <div class="modal" style="max-width:440px">
+      <div class="modal-hd">
+        <h2 id="m-hapus-massal-title" style="color:#dc2626">Hapus Produk Massal</h2>
+        <button type="button" class="icon-btn close-modal" data-m="hapus-massal" aria-label="Tutup">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-bd">
+        <!-- Warning banner -->
+        <div style="display:flex;gap:.6rem;align-items:flex-start;padding:.65rem .85rem;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;margin-bottom:1rem">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" style="flex-shrink:0;margin-top:.05rem">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <p style="font-size:.75rem;color:#991b1b;margin:0">Aksi ini <strong>tidak dapat dibatalkan</strong>. Semua produk yang dihapus akan hilang permanen.</p>
+        </div>
+
+        <!-- Opsi mode -->
+        <div class="field">
+          <label for="hm-mode" class="label">Target Penghapusan</label>
+          <select id="hm-mode" class="input">
+            <option value="all">Semua Produk</option>
+            <option value="kategori">Per Kategori</option>
+          </select>
+        </div>
+
+        <!-- Pilih kategori (toggle berdasarkan mode) -->
+        <div id="hm-kat-wrap" class="field" style="display:none">
+          <label for="hm-kat" class="label">Kategori yang Dihapus</label>
+          <select id="hm-kat" class="input">
+            {KATEGORI_LIST.map(k => <option value={k}>{k}</option>)}
+          </select>
+        </div>
+
+        <!-- Info jumlah produk -->
+        <div id="hm-info" style="padding:.5rem .75rem;background:var(--cream);border-radius:4px;font-size:.75rem;color:var(--muted);margin-bottom:.5rem" aria-live="polite"></div>
+
+        <!-- Konfirmasi ketik -->
+        <div class="field">
+          <label for="hm-confirm" class="label">
+            Ketik <strong style="color:#dc2626;font-family:monospace;letter-spacing:.04em">HAPUS</strong> untuk konfirmasi
+          </label>
+          <input id="hm-confirm" class="input" type="text" placeholder="HAPUS" autocomplete="off" />
+        </div>
+      </div>
+      <div class="modal-ft">
+        <button type="button" class="btn btn-ghost close-modal" data-m="hapus-massal">Batal</button>
+        <button type="button" id="btn-hapus-massal-ok" class="btn" disabled
+          style="background:#dc2626;color:#fff;opacity:.5;cursor:not-allowed">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          </svg>
+          Hapus Sekarang
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" role="status" aria-live="polite" aria-atomic="true">
+    <svg id="t-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+    <span id="t-msg"></span>
+  </div>
+
+</Layout>
+
+<script define:vars={{ nonce, KATEGORI_LIST }}>
+'use strict';
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function rp(n){ return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtDate(s){
+  if(!s)return '—';
+  try{ return new Date(s).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}); }
+  catch{ return '—'; }
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+var _tt;
+function toast(msg, ok){
+  var t=document.getElementById('toast'), ic=document.getElementById('t-icon');
+  document.getElementById('t-msg').textContent=msg;
+  ic.style.color = ok===false?'#f87171':'#4ade80';
+  ic.innerHTML   = ok===false ? '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' : '<polyline points="20 6 9 17 4 12"/>';
+  t.classList.add('show'); clearTimeout(_tt);
+  _tt=setTimeout(function(){ t.classList.remove('show'); },3200);
+}
+
+// ─── API JSON ─────────────────────────────────────────────────────────────────
+async function api(method,path,body){
+  // Selalu kirim Content-Type: application/json agar middleware tidak reject dengan 415
+  // DELETE tanpa payload tetap kirim body kosong '{}'
+  var opts={
+    method:method,
+    credentials:'same-origin',
+    headers:{'Content-Type':'application/json'},
+    body: body!==undefined ? JSON.stringify(body) : '{}'
+  };
+  var r=await fetch(path,opts);
+  var d=await r.json().catch(function(){return{};});
+  if(!r.ok) throw new Error(d.error||r.statusText);
+  return d;
+}
+
+// ─── MODAL ────────────────────────────────────────────────────────────────────
+var _pf=null;
+var FOCUSABLE='button:not([disabled]),[href],input:not([disabled]),select,[tabindex]:not([tabindex="-1"])';
+var ALL_MODALS=['detail','tambah','import','mass','hapus','hapus-massal','foto'];
+
+function openM(id){
+  _pf=document.activeElement;
+  var m=document.getElementById('m-'+id);
+  if(!m)return;
+  m.classList.add('open'); document.body.style.overflow='hidden';
+  var els=Array.from(m.querySelectorAll(FOCUSABLE));
+  if(els.length) setTimeout(function(){els[0].focus();},40);
+  m._kt=function(e){
+    if(e.key!=='Tab'||!els.length)return;
+    var f=els[0],l=els[els.length-1];
+    if(e.shiftKey){if(document.activeElement===f){e.preventDefault();l.focus();}}
+    else{if(document.activeElement===l){e.preventDefault();f.focus();}}
+  };
+  m.addEventListener('keydown',m._kt);
+}
+function closeM(id){
+  var m=document.getElementById('m-'+id);
+  if(!m)return;
+  m.classList.remove('open'); document.body.style.overflow='';
+  if(m._kt){m.removeEventListener('keydown',m._kt);m._kt=null;}
+  if(_pf){_pf.focus();_pf=null;}
+  if(id==='tambah') resetForm();
+  if(id==='foto')   resetFotoModal();
+  if(id==='hapus-massal') resetHapusMassal();
+}
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Escape')return;
+  for(var i=0;i<ALL_MODALS.length;i++){
+    var m=document.getElementById('m-'+ALL_MODALS[i]);
+    if(m&&m.classList.contains('open')){ closeM(ALL_MODALS[i]); return; }
+  }
+});
+ALL_MODALS.forEach(function(id){
+  var m=document.getElementById('m-'+id);
+  if(!m)return;
+  m.addEventListener('click',function(e){ if(e.target===this) closeM(id); });
+});
+document.querySelectorAll('.close-modal').forEach(function(b){
+  b.addEventListener('click',function(){ closeM(this.dataset.m); });
+});
+
+// ─── OPEN MODAL BUTTONS ───────────────────────────────────────────────────────
+document.getElementById('btn-tambah').onclick=function(){openM('tambah');};
+document.getElementById('btn-import').onclick=function(){openM('import');};
+document.getElementById('btn-mass').onclick=function(){openM('mass');};
+document.getElementById('btn-hapus-massal').onclick=function(){
+  resetHapusMassal();
+  updateHmInfo();
+  openM('hapus-massal');
+};
+
+// ─── MODAL DETAIL ─────────────────────────────────────────────────────────────
+var _detailId='', _detailData={};
+
+function openDetail(data){
+  _detailId  = data.id;
+  _detailData = data;
+  var dImg = document.getElementById('d-img');
+  var dPh  = document.getElementById('d-img-placeholder');
+  if(data.img){
+    dImg.src = data.img; dImg.alt = data.nama; dImg.style.display = ''; dPh.style.display = 'none';
+  } else { dImg.style.display = 'none'; dPh.style.display = 'flex'; }
+  document.getElementById('m-detail-title').textContent = data.nama;
+  var m     = data.beli > 0 ? Math.round(((data.jual - data.beli) / data.beli) * 100) : null;
+  var bdg   = document.getElementById('d-badges');
+  bdg.innerHTML = '<span class="badge badge-k">'+esc(data.kat)+'</span>'
+    + (data.qc ? '<span class="badge badge-qc">Quick Cash</span>' : '');
+  var untung = data.jual - data.beli;
+  document.getElementById('d-jual').textContent  = rp(data.jual);
+  document.getElementById('d-beli').textContent  = rp(data.beli);
+  document.getElementById('d-untung').textContent = rp(untung);
+  document.getElementById('d-untung').style.color = untung > 0 ? '#15803d' : 'var(--muted)';
+  var mEl = document.getElementById('d-margin-val');
+  if(m !== null){
+    mEl.textContent = m + '%';
+    mEl.style.color = m >= 20 ? '#15803d' : m >= 10 ? '#92400e' : '#991b1b';
+  } else { mEl.textContent = '—'; mEl.style.color = 'var(--muted)'; }
+  document.getElementById('d-created').textContent = fmtDate(data.created);
+  document.getElementById('d-updated').textContent = fmtDate(data.updated);
+  document.getElementById('d-qc').textContent = data.qc ? 'Aktif ✓' : 'Tidak aktif';
+  document.getElementById('d-qc').style.color = data.qc ? '#15803d' : 'var(--muted)';
+  openM('detail');
+}
+
+document.getElementById('d-btn-edit').addEventListener('click',function(){
+  closeM('detail');
+  var editBtn = document.querySelector('.icon-btn.edit[data-id="'+_detailId+'"]');
+  if(editBtn){ editBtn.click(); }
+});
+document.getElementById('d-btn-hapus').addEventListener('click',function(){
+  closeM('detail');
+  var delBtn = document.querySelector('.icon-btn.del[data-id="'+_detailId+'"]');
+  if(delBtn){ delBtn.click(); }
+});
+
+document.addEventListener('click',function(e){
+  var cell = e.target.closest('.name-clickable'); if(!cell) return;
+  var row = cell.closest('tr.data-row'); if(!row) return;
+  openDetail({ id:row.dataset.id, nama:row.dataset.namaAsli, kat:row.dataset.kat,
+    beli:parseInt(row.dataset.beli)||0, jual:parseInt(row.dataset.jual)||0,
+    qc:row.dataset.quick==='true', created:row.dataset.created, updated:row.dataset.updated, img:row.dataset.img });
+});
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Enter'&&e.key!==' ')return;
+  var cell = e.target.closest('.name-clickable'); if(!cell)return;
+  var row = cell.closest('tr.data-row'); if(!row)return;
+  e.preventDefault();
+  openDetail({ id:row.dataset.id, nama:row.dataset.namaAsli, kat:row.dataset.kat,
+    beli:parseInt(row.dataset.beli)||0, jual:parseInt(row.dataset.jual)||0,
+    qc:row.dataset.quick==='true', created:row.dataset.created, updated:row.dataset.updated, img:row.dataset.img });
+});
+document.addEventListener('click',function(e){
+  var body = e.target.closest('.card-body-clickable'); if(!body)return;
+  var card = body.closest('.prod-card'); if(!card)return;
+  openDetail({ id:card.dataset.id, nama:card.dataset.namaAsli, kat:card.dataset.kat,
+    beli:parseInt(card.dataset.beli)||0, jual:parseInt(card.dataset.jual)||0,
+    qc:card.dataset.quick==='true', created:card.dataset.created, updated:card.dataset.updated, img:card.dataset.img });
+});
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Enter'&&e.key!==' ')return;
+  var body = e.target.closest('.card-body-clickable'); if(!body)return;
+  var card = body.closest('.prod-card'); if(!card)return;
+  e.preventDefault();
+  openDetail({ id:card.dataset.id, nama:card.dataset.namaAsli, kat:card.dataset.kat,
+    beli:parseInt(card.dataset.beli)||0, jual:parseInt(card.dataset.jual)||0,
+    qc:card.dataset.quick==='true', created:card.dataset.created, updated:card.dataset.updated, img:card.dataset.img });
+});
+
+// ─── FILTER ───────────────────────────────────────────────────────────────────
+var _q='', _kat='';
+function applyFilter(){
+  var q=_q.trim().toLowerCase(), kat=_kat, vis=0;
+  document.querySelectorAll('#tbody tr.data-row').forEach(function(r){
+    var show=(!q||r.dataset.nama.indexOf(q)!==-1)&&(!kat||r.dataset.kat===kat);
+    r.classList.toggle('tr-hidden',!show);
+    if(show) vis++;
+  });
+  document.querySelectorAll('#card-grid .prod-card').forEach(function(c){
+    var show=(!q||c.dataset.nama.indexOf(q)!==-1)&&(!kat||c.dataset.kat===kat);
+    c.classList.toggle('card-hidden',!show);
+  });
+  var lbl=document.getElementById('count-lbl');
+  if(lbl) lbl.textContent=vis+' produk';
+  var nr=document.getElementById('no-results'), nrc=document.getElementById('no-results-card');
+  if(nr)  nr.style.display=vis===0?'':'none';
+  if(nrc) nrc.style.display=vis===0?'':'none';
+}
+document.getElementById('q').addEventListener('input',function(){ _q=this.value; applyFilter(); });
+document.getElementById('kat-pills').addEventListener('click',function(e){
+  var btn=e.target.closest('.kat-pill'); if(!btn)return;
+  _kat=btn.dataset.kat||'';
+  document.querySelectorAll('.kat-pill').forEach(function(b){ b.classList.toggle('active',b.dataset.kat===_kat); });
+  applyFilter();
+});
+
+// ─── VIEW TOGGLE ─────────────────────────────────────────────────────────────
+document.getElementById('btn-table').addEventListener('click',function(){
+  document.getElementById('view-table').style.display='';
+  document.getElementById('view-card').style.display='none';
+  this.classList.add('active'); document.getElementById('btn-card').classList.remove('active');
+  this.setAttribute('aria-pressed','true'); document.getElementById('btn-card').setAttribute('aria-pressed','false');
+  localStorage.setItem('kw-view','table');
+});
+document.getElementById('btn-card').addEventListener('click',function(){
+  document.getElementById('view-card').style.display='';
+  document.getElementById('view-table').style.display='none';
+  this.classList.add('active'); document.getElementById('btn-table').classList.remove('active');
+  this.setAttribute('aria-pressed','true'); document.getElementById('btn-table').setAttribute('aria-pressed','false');
+  localStorage.setItem('kw-view','card');
+});
+(function(){
+  if(localStorage.getItem('kw-view')==='card') document.getElementById('btn-card').click();
+})();
+
+// ─── MARGIN PREVIEW ───────────────────────────────────────────────────────────
+function updMargin(){
+  var b=parseInt(document.getElementById('f-beli').value)||0;
+  var j=parseInt(document.getElementById('f-jual').value)||0;
+  var h=document.getElementById('margin-hint');
+  if(b>0&&j>0){
+    var pct=Math.round(((j-b)/b)*100);
+    h.textContent='Untung: Rp '+(j-b).toLocaleString('id-ID')+' ('+pct+'%)';
+    h.style.color=pct<10?'#7f1d1d':pct<20?'#713f12':'#14532d';
+    h.style.display='block';
+  } else { h.style.display='none'; }
+}
+document.getElementById('f-beli').addEventListener('input',updMargin);
+document.getElementById('f-jual').addEventListener('input',updMargin);
+
+// ─── STATE FOTO (modal tambah/edit) ──────────────────────────────────────────
+var _pendingFotoBlob=null, _fotoHapus=false;
+var MAX_W=480, MAX_H=480, WEBP_Q=0.72;
+var _resizeImg=null;
+
+function resizeToWebP(file, canvasId){
+  return new Promise(function(resolve,reject){
+    if(!file){reject(new Error('File kosong'));return;}
+    var reader=new FileReader();
+    reader.onerror=function(){reject(new Error('Gagal membaca file'));};
+    reader.onload=function(ev){
+      _resizeImg=new Image();
+      var img=_resizeImg;
+      img.onerror=function(){ _resizeImg=null; reject(new Error('Format gambar tidak didukung')); };
+      img.onload=function(){
+        var ratio=Math.min(1,MAX_W/img.naturalWidth,MAX_H/img.naturalHeight);
+        var tw=Math.round(img.naturalWidth*ratio), th=Math.round(img.naturalHeight*ratio);
+        var cv=document.getElementById(canvasId);
+        cv.width=tw; cv.height=th;
+        cv.getContext('2d').drawImage(img,0,0,tw,th);
+        cv.toBlob(function(b){
+          _resizeImg=null;
+          if(b&&b.size>0){resolve(b);return;}
+          cv.toBlob(function(b2){ b2?resolve(b2):reject(new Error('Konversi canvas gagal')); },'image/jpeg',0.85);
+        },'image/webp',WEBP_Q);
+      };
+      img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function setFotoPreview(blob){
+  var img=document.getElementById('foto-current');
+  img.src=URL.createObjectURL(blob); img.style.display='block';
+  document.getElementById('foto-placeholder').style.display='none';
+  document.getElementById('btn-hapus-foto').style.display='';
+}
+function clearFotoPreview(){
+  var img=document.getElementById('foto-current');
+  img.src=''; img.style.display='none';
+  document.getElementById('foto-placeholder').style.display='flex';
+  document.getElementById('btn-hapus-foto').style.display='none';
+}
+function loadFotoForEdit(id){
+  var thumb=document.querySelector('tr.data-row[data-id="'+id+'"] .prod-thumb')||
+            document.querySelector('.prod-card[data-id="'+id+'"] .card-prod-img');
+  var img=document.getElementById('foto-current');
+  if(thumb&&thumb.naturalWidth>0&&!thumb.dataset.error){
+    img.src=thumb.src; img.style.display='block';
+    document.getElementById('foto-placeholder').style.display='none';
+    document.getElementById('btn-hapus-foto').style.display='';
+  } else { clearFotoPreview(); }
+}
+
+function resetForm(){
+  document.getElementById('edit-id').value='';
+  document.getElementById('f-nama').value='';
+  document.getElementById('f-beli').value='';
+  document.getElementById('f-jual').value='';
+  document.getElementById('f-kat').selectedIndex=0;
+  document.getElementById('f-quick').checked=false;
+  document.getElementById('m-tambah-title').textContent='Tambah Produk';
+  document.getElementById('margin-hint').style.display='none';
+  clearFotoPreview();
+  _pendingFotoBlob=null; _fotoHapus=false;
+}
+
+document.getElementById('btn-pilih-foto').addEventListener('click',function(){ document.getElementById('f-foto').click(); });
+document.getElementById('f-foto').addEventListener('change',async function(){
+  var file=this.files&&this.files[0]; if(!file) return;
+  if(!file.type.startsWith('image/')){toast('File bukan gambar',false);return;}
+  if(file.size>5*1024*1024){toast('Ukuran file maks 5 MB',false);return;}
+  try{
+    _pendingFotoBlob=await resizeToWebP(file,'resize-canvas');
+    _fotoHapus=false; setFotoPreview(_pendingFotoBlob);
+  }catch(e){ toast('Gagal memproses gambar: '+e.message,false); }
+  this.value='';
+});
+document.getElementById('btn-hapus-foto').addEventListener('click',function(){ _pendingFotoBlob=null; _fotoHapus=true; clearFotoPreview(); });
+
+// ─── EDIT BTN ─────────────────────────────────────────────────────────────────
+document.addEventListener('click',function(e){
+  var btn=e.target.closest('.icon-btn.edit'); if(!btn)return;
+  var id=btn.dataset.id;
+  document.getElementById('edit-id').value=id;
+  document.getElementById('f-nama').value=btn.dataset.nama;
+  document.getElementById('f-beli').value=btn.dataset.beli;
+  document.getElementById('f-jual').value=btn.dataset.jual;
+  document.getElementById('f-kat').value=btn.dataset.kat;
+  document.getElementById('f-quick').checked=btn.dataset.quick==='true';
+  document.getElementById('m-tambah-title').textContent='Edit Produk';
+  _pendingFotoBlob=null; _fotoHapus=false;
+  loadFotoForEdit(id); updMargin(); openM('tambah');
+});
+
+// ─── SIMPAN ───────────────────────────────────────────────────────────────────
+document.getElementById('btn-simpan').addEventListener('click',async function(){
+  var id=document.getElementById('edit-id').value.trim();
+  var nama=document.getElementById('f-nama').value.trim();
+  var beli=parseInt(document.getElementById('f-beli').value)||0;
+  var jual=parseInt(document.getElementById('f-jual').value)||0;
+  var kat=document.getElementById('f-kat').value;
+  var qc=document.getElementById('f-quick').checked;
+  if(!nama){toast('Nama produk wajib diisi',false);document.getElementById('f-nama').focus();return;}
+  if(jual<=0){toast('Harga jual harus > 0',false);document.getElementById('f-jual').focus();return;}
+  this.disabled=true; this.textContent='Menyimpan…';
+  try{
+    var payload={nama_produk:nama,harga_beli:beli,harga_jual:jual,kategori:kat,quick_cash:qc};
+    var savedId=id;
+    if(id){ await api('PATCH','/api/produk/produk?id='+encodeURIComponent(id),payload); }
+    else { var res=await api('POST','/api/produk/produk',payload); savedId=String(res.id); }
+    var uploadedUrl=null;
+    if(_pendingFotoBlob&&savedId){
+      this.textContent='Mengupload foto…';
+      var fd=new FormData();
+      fd.append('id',savedId);
+      fd.append('file',new File([_pendingFotoBlob],'foto.webp',{type:'image/webp'}));
+      var fr=await fetch('/api/produk/foto',{method:'POST',body:fd,credentials:'same-origin'});
+      var frd=await fr.json().catch(function(){return{};});
+      if(!fr.ok) throw new Error(frd.error||'Upload foto gagal');
+      uploadedUrl = String(frd.url);
+    }
+    if(_fotoHapus&&id){
+      fetch('/api/produk/foto?id='+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin'}).catch(function(){});
+      uploadedUrl='';
+    }
+    if(uploadedUrl!==null&&savedId){
+      var selectors=['tr.data-row[data-id="'+savedId+'"] .prod-thumb','.prod-card[data-id="'+savedId+'"] .card-prod-img'];
+      selectors.forEach(function(sel){
+        var el=document.querySelector(sel); if(!el)return;
+        if(uploadedUrl){ el.src=uploadedUrl; el.style.display=''; var ph=el.parentElement&&el.parentElement.querySelector('.prod-thumb-placeholder,.card-img-placeholder'); if(ph) ph.style.display='none'; }
+        else { el.style.display='none'; var ph2=el.parentElement&&el.parentElement.querySelector('.prod-thumb-placeholder,.card-img-placeholder'); if(ph2){ ph2.style.display='flex'; } }
+      });
+      var row=document.querySelector('tr.data-row[data-id="'+savedId+'"]'); if(row) row.dataset.img=uploadedUrl||'';
+      var card=document.querySelector('.prod-card[data-id="'+savedId+'"]'); if(card) card.dataset.img=uploadedUrl||'';
+    }
+    toast(id?'Produk diupdate':'Produk ditambahkan');
+    closeM('tambah');
+    setTimeout(function(){location.reload();},600);
+  }catch(e){ toast('Error: '+e.message,false); }
+  finally{ this.disabled=false; this.textContent='Simpan'; }
+});
+document.getElementById('f-jual').addEventListener('keydown',function(e){
+  if(e.key==='Enter'){e.preventDefault();document.getElementById('btn-simpan').click();}
+});
+
+// ─── QUICK CASH TOGGLE ────────────────────────────────────────────────────────
+document.addEventListener('click',async function(e){
+  var btn=e.target.closest('.toggle'); if(!btn)return;
+  var id=btn.dataset.id, cur=btn.getAttribute('aria-checked')==='true', next=!cur;
+  btn.setAttribute('aria-checked',String(next));
+  btn.style.background=next?'#c84b1f':'#d1d5db';
+  try{
+    await api('PATCH','/api/produk/produk?id='+encodeURIComponent(id),{quick_cash:next});
+    toast(next?'Quick Cash diaktifkan':'Quick Cash dinonaktifkan');
+  }catch(e2){
+    btn.setAttribute('aria-checked',String(cur)); btn.style.background=cur?'#c84b1f':'#d1d5db';
+    toast('Gagal: '+e2.message,false);
+  }
+});
+
+// ─── HAPUS (satu produk) ──────────────────────────────────────────────────────
+var _hapusId='';
+document.addEventListener('click',function(e){
+  var btn=e.target.closest('.icon-btn.del'); if(!btn)return;
+  _hapusId=btn.dataset.id;
+  document.getElementById('hapus-nama').textContent=btn.dataset.nama;
+  openM('hapus');
+});
+document.getElementById('btn-hapus-ok').addEventListener('click',async function(){
+  if(!_hapusId)return;
+  this.disabled=true; this.textContent='Menghapus…';
+  try{
+    await api('DELETE','/api/produk/produk?id='+encodeURIComponent(_hapusId));
+    fetch('/api/produk/foto?id='+encodeURIComponent(_hapusId),{method:'DELETE',credentials:'same-origin'}).catch(function(){});
+    toast('Produk dihapus'); closeM('hapus');
+    var r=document.querySelector('tr.data-row[data-id="'+_hapusId+'"]');
+    if(r){r.style.transition='opacity .18s';r.style.opacity='0';setTimeout(function(){r.remove();applyFilter();},200);}
+    var c=document.querySelector('.prod-card[data-id="'+_hapusId+'"]');
+    if(c){c.style.transition='opacity .18s,transform .18s';c.style.opacity='0';c.style.transform='scale(.92)';setTimeout(function(){c.remove();applyFilter();},200);}
+    _hapusId='';
+  }catch(e){ toast('Gagal: '+e.message,false); }
+  finally{ this.disabled=false; this.textContent='Hapus'; }
+});
+
+// ─── HAPUS MASSAL ─────────────────────────────────────────────────────────────
+function countProdukByMode(mode, kat){
+  var rows = Array.from(document.querySelectorAll('#tbody tr.data-row'));
+  if(mode === 'all') return rows.length;
+  return rows.filter(function(r){ return r.dataset.kat === kat; }).length;
+}
+
+function updateHmInfo(){
+  var mode = document.getElementById('hm-mode').value;
+  var kat  = document.getElementById('hm-kat').value;
+  var infoEl = document.getElementById('hm-info');
+  var katWrap = document.getElementById('hm-kat-wrap');
+  katWrap.style.display = mode === 'kategori' ? '' : 'none';
+  var count = countProdukByMode(mode, kat);
+  if(count === 0){
+    infoEl.textContent = mode === 'all'
+      ? 'Tidak ada produk untuk dihapus.'
+      : 'Tidak ada produk dalam kategori "' + kat + '".';
+    infoEl.style.color = 'var(--muted)';
+  } else {
+    infoEl.innerHTML = '⚠️ Akan menghapus <strong style="color:#dc2626">' + count + ' produk</strong>'
+      + (mode === 'kategori' ? ' dalam kategori <strong>' + esc(kat) + '</strong>' : ' dari semua kategori') + '.';
+    infoEl.style.color = '#92400e';
+  }
+}
+
+function resetHapusMassal(){
+  document.getElementById('hm-mode').value = 'all';
+  document.getElementById('hm-kat-wrap').style.display = 'none';
+  document.getElementById('hm-confirm').value = '';
+  document.getElementById('hm-info').textContent = '';
+  var okBtn = document.getElementById('btn-hapus-massal-ok');
+  okBtn.disabled = true; okBtn.style.opacity = '.5'; okBtn.style.cursor = 'not-allowed';
+}
+
+document.getElementById('hm-mode').addEventListener('change', function(){
+  updateHmInfo();
+  document.getElementById('hm-confirm').value = '';
+  var okBtn = document.getElementById('btn-hapus-massal-ok');
+  okBtn.disabled = true; okBtn.style.opacity = '.5'; okBtn.style.cursor = 'not-allowed';
+});
+document.getElementById('hm-kat').addEventListener('change', function(){
+  updateHmInfo();
+  document.getElementById('hm-confirm').value = '';
+  var okBtn = document.getElementById('btn-hapus-massal-ok');
+  okBtn.disabled = true; okBtn.style.opacity = '.5'; okBtn.style.cursor = 'not-allowed';
+});
+document.getElementById('hm-confirm').addEventListener('input', function(){
+  var ok = this.value.trim().toUpperCase() === 'HAPUS';
+  var okBtn = document.getElementById('btn-hapus-massal-ok');
+  okBtn.disabled = !ok;
+  okBtn.style.opacity = ok ? '1' : '.5';
+  okBtn.style.cursor  = ok ? 'pointer' : 'not-allowed';
+});
+
+document.getElementById('btn-hapus-massal-ok').addEventListener('click', async function(){
+  if(this.disabled) return;
+  var mode = document.getElementById('hm-mode').value;
+  var kat  = document.getElementById('hm-kat').value;
+  this.disabled = true; this.textContent = 'Menghapus…'; this.style.opacity = '.7';
+  try{
+    var url = '/api/produk/produk?bulk=' + mode;
+    if(mode === 'kategori') url += '&kategori=' + encodeURIComponent(kat);
+    var res = await api('DELETE', url);
+    var del = res.deleted || 0;
+    toast(del + ' produk berhasil dihapus');
+    closeM('hapus-massal');
+    setTimeout(function(){ location.reload(); }, 600);
+  }catch(e){ toast('Gagal: '+e.message, false); this.disabled=false; this.textContent='Hapus Sekarang'; this.style.opacity='1'; }
+});
+
+// ─── MODAL FOTO CEPAT (klik thumbnail) ───────────────────────────────────────
+var _fotoQuickBlob=null;
+
+function resetFotoModal(){
+  _fotoQuickBlob=null;
+  document.getElementById('foto-target-id').value='';
+  document.getElementById('foto-drop-preview').style.display='none';
+  document.getElementById('foto-drop-empty').style.display='';
+  document.getElementById('btn-upload-foto').disabled=true;
+  document.getElementById('f-foto-quick').value='';
+}
+
+document.addEventListener('click',function(e){
+  var wrap=e.target.closest('.thumb-wrap'); if(!wrap)return;
+  if(e.target.closest('.icon-btn'))return;
+  if(e.target.closest('.name-clickable'))return;
+  if(e.target.closest('.card-body-clickable'))return;
+  var id=wrap.dataset.id; if(!id)return;
+  document.getElementById('foto-target-id').value=id;
+  openM('foto');
+});
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Enter'&&e.key!==' ')return;
+  var wrap=e.target.closest('.thumb-wrap'); if(!wrap)return;
+  if(e.target.closest('.name-clickable'))return;
+  if(e.target.closest('.card-body-clickable'))return;
+  e.preventDefault();
+  var id=wrap.dataset.id; if(!id)return;
+  document.getElementById('foto-target-id').value=id;
+  openM('foto');
+});
+
+var fotoDrop=document.getElementById('foto-drop');
+fotoDrop.addEventListener('click',function(e){ if(!e.target.closest('#btn-foto-clear')) document.getElementById('f-foto-quick').click(); });
+fotoDrop.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();document.getElementById('f-foto-quick').click();} });
+fotoDrop.addEventListener('dragover',function(e){e.preventDefault();this.classList.add('over');});
+fotoDrop.addEventListener('dragleave',function(){this.classList.remove('over');});
+fotoDrop.addEventListener('drop',function(e){ e.preventDefault(); this.classList.remove('over'); var f=e.dataTransfer&&e.dataTransfer.files[0]; if(f) processQuickFoto(f); });
+document.getElementById('f-foto-quick').addEventListener('change',function(){ var f=this.files&&this.files[0]; if(f) processQuickFoto(f); this.value=''; });
+document.getElementById('btn-foto-clear').addEventListener('click',function(e){
+  e.stopPropagation(); _fotoQuickBlob=null;
+  document.getElementById('foto-drop-preview').style.display='none';
+  document.getElementById('foto-drop-empty').style.display='';
+  document.getElementById('btn-upload-foto').disabled=true;
+});
+
+async function processQuickFoto(file){
+  if(!file.type.startsWith('image/')){toast('File bukan gambar',false);return;}
+  if(file.size>5*1024*1024){toast('Ukuran file maks 5 MB',false);return;}
+  try{
+    _fotoQuickBlob=await resizeToWebP(file,'resize-canvas-quick');
+    document.getElementById('foto-drop-img').src=URL.createObjectURL(_fotoQuickBlob);
+    document.getElementById('foto-drop-preview').style.display='block';
+    document.getElementById('foto-drop-empty').style.display='none';
+    document.getElementById('btn-upload-foto').disabled=false;
+  }catch(e){ toast('Gagal memproses: '+e.message,false); }
+}
+
+document.getElementById('btn-upload-foto').addEventListener('click',async function(){
+  var id=document.getElementById('foto-target-id').value;
+  if(!id||!_fotoQuickBlob)return;
+  this.disabled=true; this.textContent='Mengupload…';
+  try{
+    var fd=new FormData();
+    fd.append('id',id);
+    fd.append('file',new File([_fotoQuickBlob],'foto.webp',{type:'image/webp'}));
+    var r=await fetch('/api/produk/foto',{method:'POST',body:fd,credentials:'same-origin'});
+    var rd=await r.json().catch(function(){return{};});
+    if(!r.ok) throw new Error(rd.error||'Upload gagal');
+    var newSrc=String(rd.url);
+    var tThumb=document.querySelector('tr.data-row[data-id="'+id+'"] .prod-thumb');
+    if(tThumb){ tThumb.src=newSrc; tThumb.style.display=''; var tPh=tThumb.parentElement&&tThumb.parentElement.querySelector('.prod-thumb-placeholder'); if(tPh) tPh.style.display='none'; }
+    var cThumb=document.querySelector('.prod-card[data-id="'+id+'"] .card-prod-img');
+    if(cThumb){ cThumb.src=newSrc; cThumb.style.display='block'; var cPh=document.querySelector('.prod-card[data-id="'+id+'"] .card-img-placeholder'); if(cPh) cPh.style.display='none'; }
+    var row2=document.querySelector('tr.data-row[data-id="'+id+'"]'); if(row2) row2.dataset.img=newSrc;
+    var card2=document.querySelector('.prod-card[data-id="'+id+'"]'); if(card2) card2.dataset.img=newSrc;
+    var dImg=document.getElementById('d-img');
+    if(_detailId===id){ dImg.src=newSrc; dImg.style.display=''; document.getElementById('d-img-placeholder').style.display='none'; }
+    toast('Foto berhasil diperbarui'); closeM('foto');
+  }catch(e){ toast('Gagal: '+e.message,false); }
+  finally{ this.disabled=false; this.textContent='Upload'; }
+});
+
+// ─── IMPORT CSV / XLSX ────────────────────────────────────────────────────────
+// Parsing dilakukan server-side di /api/produk/parse-xlsx
+// agar tidak perlu load library SheetJS dari CDN eksternal (konflik CSP).
+var _csvData = [];
+var dz = document.getElementById('dropzone');
+
+dz.addEventListener('click', function () { document.getElementById('f-csv').click(); });
+dz.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById('f-csv').click(); } });
+dz.addEventListener('dragover',  function (e) { e.preventDefault(); this.classList.add('over'); });
+dz.addEventListener('dragleave', function ()  { this.classList.remove('over'); });
+dz.addEventListener('drop', function (e) {
+  e.preventDefault(); this.classList.remove('over');
+  var f = e.dataTransfer && e.dataTransfer.files[0]; if (f) parseFile(f);
+});
+document.getElementById('f-csv').addEventListener('change', function () {
+  if (this.files && this.files[0]) parseFile(this.files[0]);
+});
+
+// Kirim file ke server untuk di-parse — tidak ada library di browser
+async function parseFile(file) {
+  var name = file.name.toLowerCase();
+  var validExt = name.endsWith('.csv') || name.endsWith('.xlsx') || name.endsWith('.xls');
+  if (!validExt) { toast('Hanya .csv atau .xlsx yang didukung', false); return; }
+  if (file.size === 0) { toast('File kosong', false); return; }
+  if (file.size > 2 * 1024 * 1024) { toast('Ukuran file maks 2 MB', false); return; }
+
+  // Tampilkan loading state
+  var dz = document.getElementById('dropzone');
+  var origHtml = dz.innerHTML;
+  dz.innerHTML = '<p style="font-size:.8rem;color:var(--muted)">Memproses file…</p>';
+  dz.style.pointerEvents = 'none';
+
+  try {
+    var fd = new FormData();
+    fd.append('file', file);
+    var r  = await fetch('/api/produk/parse-xlsx', {
+      method: 'POST',
+      body:   fd,
+      credentials: 'same-origin'
+      // Tidak set Content-Type — browser isi boundary multipart otomatis
+    });
+    var d  = await r.json().catch(function(){ return {}; });
+    if (!r.ok) { toast(d.error || 'Gagal membaca file', false); return; }
+
+    renderParsed(d.produk || [], d.duplicates || 0, d.skipped || 0);
+  } catch (e) {
+    toast('Gagal mengirim file: ' + e.message, false);
+  } finally {
+    dz.innerHTML = origHtml;
+    dz.style.pointerEvents = '';
+    // Re-attach event listener pada input karena innerHTML diganti
+    var inp = dz.querySelector('#f-csv');
+    if (inp) inp.addEventListener('change', function () { if (this.files && this.files[0]) parseFile(this.files[0]); });
+  }
+}
+
+// Terima array produk yang sudah dinormalisasi dari server
+function renderParsed(produk, dupCount, skipped) {
+  _csvData = produk;
+
+  var countEl = document.getElementById('csv-count');
+  var info = produk.length + ' produk siap diimport';
+  if (dupCount > 0)  info += ' · <span style="color:#92400e">⚠ ' + dupCount + ' duplikat dihapus</span>';
+  if (skipped > 0)   info += ' · <span style="color:#dc2626">✕ ' + skipped + ' baris tidak valid dilewati</span>';
+  countEl.innerHTML = info;
+
+  var tb = document.getElementById('csv-tbody');
+
+  // Header summary
+  var headerInfo = '<tr style="background:#f0fdf4;border-bottom:2px solid #86efac">'
+    + '<td colspan="6" style="padding:.4rem .65rem;font-size:.72rem;color:#15803d;font-weight:600">'
+    + '✓ Preview ' + Math.min(produk.length, 20) + ' dari ' + produk.length + ' produk'
+    + (produk.length > 20 ? ' (scroll untuk lihat semua)' : '')
+    + '</td></tr>';
+
+  tb.innerHTML = headerInfo + produk.slice(0, 50).map(function(r, i) {
+    var margin = r.harga_beli > 0
+      ? Math.round(((r.harga_jual - r.harga_beli) / r.harga_beli) * 100)
+      : null;
+    var mColor = margin === null ? '#9ca3af'
+      : margin >= 20 ? '#15803d'
+      : margin >= 10 ? '#92400e'
+      : '#dc2626';
+    var isAlt = i % 2 === 1;
+    return '<tr style="border-bottom:1px solid var(--border);' + (isAlt ? 'background:#fafaf9' : '') + '">'
+      + '<td style="padding:.35rem .5rem;text-align:center;color:#9ca3af;font-size:.68rem">' + (i+1) + '</td>'
+      + '<td style="padding:.35rem .65rem;font-weight:500">'  + esc(r.nama_produk) + '</td>'
+      + '<td style="padding:.35rem .65rem;text-align:right;color:var(--muted);font-size:.75rem">' + (r.harga_beli > 0 ? r.harga_beli.toLocaleString('id-ID') : '—') + '</td>'
+      + '<td style="padding:.35rem .65rem;text-align:right;font-weight:600">' + r.harga_jual.toLocaleString('id-ID') + '</td>'
+      + '<td style="padding:.35rem .65rem;text-align:center">'
+        + (margin !== null
+          ? '<span style="font-size:.68rem;font-weight:600;color:' + mColor + '">' + margin + '%</span>'
+          : '<span style="color:#9ca3af;font-size:.68rem">—</span>')
+      + '</td>'
+      + '<td style="padding:.35rem .65rem">'
+        + '<span style="font-size:.65rem;padding:.1rem .4rem;border-radius:3px;background:#f3f4f6;color:#374151">' + esc(r.kategori) + '</span>'
+        + (r.quick_cash ? ' <span style="font-size:.62rem;padding:.1rem .35rem;border-radius:3px;background:#c84b1f;color:#fff">QC</span>' : '')
+      + '</td>'
+      + '</tr>';
+  }).join('');
+
+  if (produk.length > 50) {
+    tb.innerHTML += '<tr><td colspan="6" style="padding:.5rem;text-align:center;color:var(--muted);font-size:.7rem;font-style:italic">'
+      + '…dan ' + (produk.length - 50) + ' produk lainnya tidak ditampilkan</td></tr>';
+  }
+
+  document.getElementById('csv-preview').style.display = '';
+  document.getElementById('btn-do-import').disabled = produk.length === 0;
+}
+
+document.getElementById('btn-do-import').addEventListener('click', async function () {
+  if (!_csvData.length) return;
+  this.disabled = true; this.textContent = 'Mengimport…';
+  try {
+    for (var i = 0; i < _csvData.length; i += 50) {
+      await api('POST', '/api/produk/produk', _csvData.slice(i, i + 50));
+    }
+    toast(_csvData.length + ' produk diimport');
+    closeM('import');
+    setTimeout(function () { location.reload(); }, 600);
+  } catch (e) { toast('Import gagal: ' + e.message, false); this.disabled = false; this.textContent = 'Import'; }
+});
+
+</script>

@@ -1,0 +1,247 @@
+---
+// src/components/Sidebar.astro
+
+interface Props {
+  active: "dashboard" | "produk" | "margin-rendah" | "analisis" | "kasir";
+}
+
+const { active } = Astro.props;
+const userEmail = ((Astro.locals as any).user?.email ?? "") as string;
+const shortName = userEmail ? userEmail.split("@")[0] : "";
+
+const navItems = [
+  {
+    key: "dashboard",
+    href: "/dashboard",
+    label: "Dashboard",
+    icon: `<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>`,
+  },
+  {
+    key: "produk",
+    href: "/dashboard/produk",
+    label: "Produk",
+    icon: `<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>`,
+  },
+  {
+    key: "margin-rendah",
+    href: "/dashboard/margin-rendah",
+    label: "Margin Rendah",
+    icon: `<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>`,
+  },
+  {
+    key: "analisis",
+    href: "/dashboard/analisis",
+    label: "Analisis",
+    icon: `<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>`,
+  },
+] as const;
+---
+
+<!-- ── Overlay ─────────────────────────────────────────────────────────────── -->
+<div
+  id="sidebar-overlay"
+  class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden"
+  aria-hidden="true"
+  style="opacity:0; transition: opacity 220ms ease; backdrop-filter: blur(2px);"
+></div>
+
+<!-- ── Sidebar ─────────────────────────────────────────────────────────────── -->
+<aside
+  id="sidebar"
+  class="w-56 bg-[#0f0d0b] flex flex-col flex-shrink-0 h-[100dvh] overflow-y-auto
+         fixed lg:sticky top-0 left-0 z-50
+         lg:translate-x-0
+         shadow-2xl lg:shadow-none"
+  style="transform: translateX(-100%); transition: transform 240ms cubic-bezier(0.4,0,0.2,1);"
+  aria-label="Navigasi utama"
+>
+
+  <!-- Logo + tombol tutup -->
+  <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between flex-shrink-0">
+    <a href="/dashboard" class="flex items-center gap-2.5 min-w-0" aria-label="Kasir Warung — Beranda">
+      <div class="w-7 h-7 bg-[#c84b1f] rounded-[4px] flex items-center justify-center flex-shrink-0" aria-hidden="true">
+        <svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <path d="M16 10a4 4 0 0 1-8 0"/>
+        </svg>
+      </div>
+      <div class="min-w-0">
+        <div class="text-white text-[0.9rem] leading-none truncate" style="font-family:'DM Serif Display',Georgia,serif">Kasir</div>
+        <div class="text-[0.58rem] text-white/35 uppercase tracking-[0.15em] mt-0.5">Warung</div>
+      </div>
+    </a>
+
+    <!-- Tombol tutup — hanya mobile -->
+    <button
+      id="close-sidebar"
+      class="lg:hidden w-7 h-7 flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/[0.07] rounded-[3px] transition-colors flex-shrink-0"
+      aria-label="Tutup menu"
+    >
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Nav -->
+  <nav class="flex-1 px-2.5 py-3 space-y-0.5 overflow-y-auto" aria-label="Menu halaman">
+
+    <p class="px-2.5 pt-1 pb-2 text-[0.58rem] font-semibold text-white/25 uppercase tracking-[0.14em]">Menu</p>
+
+    {navItems.map(item => (
+      <a
+        href={item.href}
+        class:list={[
+          "nav-link group flex items-center gap-2.5 px-2.5 py-2 rounded-[4px] text-[0.8rem] font-medium transition-all",
+          active === item.key
+            ? "is-active text-white"
+            : "text-white/45 hover:text-white/80 hover:bg-white/[0.05]",
+        ]}
+        aria-current={active === item.key ? "page" : undefined}
+      >
+        <svg
+          class:list={[
+            "w-3.5 h-3.5 flex-shrink-0 transition-colors",
+            active === item.key ? "text-[#c84b1f]" : "text-white/30 group-hover:text-white/60",
+          ]}
+          viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          aria-hidden="true" set:html={item.icon}
+        />
+        <span class="truncate">{item.label}</span>
+        {active === item.key && (
+          <span class="ml-auto w-1.5 h-1.5 rounded-full bg-[#c84b1f] flex-shrink-0" aria-hidden="true"></span>
+        )}
+      </a>
+    ))}
+
+    <div class="pt-4 pb-2 px-2.5" aria-hidden="true">
+      <div class="h-px bg-white/[0.06] mb-3"></div>
+      <p class="text-[0.58rem] font-semibold text-white/25 uppercase tracking-[0.14em]">Sistem</p>
+    </div>
+
+    <a
+      href="/dashboard/kasir"
+      class:list={[
+        "nav-link group flex items-center gap-2.5 px-2.5 py-2 rounded-[4px] text-[0.8rem] font-medium transition-all",
+        active === "kasir"
+          ? "is-active text-white"
+          : "text-white/45 hover:text-white/80 hover:bg-white/[0.05]",
+      ]}
+      aria-current={active === "kasir" ? "page" : undefined}
+    >
+      <svg
+        class:list={[
+          "w-3.5 h-3.5 flex-shrink-0 transition-colors",
+          active === "kasir" ? "text-[#c84b1f]" : "text-white/30 group-hover:text-white/60",
+        ]}
+        viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <rect x="2" y="3" width="20" height="14" rx="2"/>
+        <line x1="8" y1="21" x2="16" y2="21"/>
+        <line x1="12" y1="17" x2="12" y2="21"/>
+      </svg>
+      <span class="truncate">Halaman Kasir</span>
+    </a>
+
+  </nav>
+
+  <!-- User + Logout -->
+  <div class="px-2.5 py-3 border-t border-white/[0.07] flex-shrink-0">
+    {userEmail && (
+      <div class="px-2.5 py-2 mb-1.5 rounded-[4px] bg-white/[0.04]">
+        <p class="text-[0.63rem] font-semibold text-white/55 truncate">{shortName}</p>
+        <p class="text-[0.58rem] text-white/25 truncate">{userEmail}</p>
+      </div>
+    )}
+    <form action="/api/auth/logout" method="POST">
+      <button
+        type="submit"
+        class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[4px] text-[0.78rem] text-white/35 hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer group"
+        aria-label="Keluar dari akun"
+      >
+        <svg class="w-3.5 h-3.5 flex-shrink-0 text-white/25 group-hover:text-red-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+        Keluar
+      </button>
+    </form>
+  </div>
+
+</aside>
+
+<style is:inline>
+  /* Aktif: glow inset kiri */
+  .nav-link.is-active {
+    background: rgba(200, 75, 31, 0.12);
+    box-shadow: inset 3px 0 0 #c84b1f;
+  }
+
+  @media (min-width: 1024px) {
+    #sidebar { transform: translateX(0) !important; }
+    #sidebar-overlay { display: none !important; }
+  }
+</style>
+
+<script is:inline>
+(function () {
+  function initSidebar() {
+    var sidebar  = document.getElementById('sidebar');
+    var overlay  = document.getElementById('sidebar-overlay');
+    var closeBtn = document.getElementById('close-sidebar');
+    if (!sidebar || !overlay) return;
+
+    window.openSidebar = function () {
+      sidebar.style.transform = 'translateX(0)';
+      overlay.classList.remove('hidden');
+      requestAnimationFrame(function () {
+        overlay.style.opacity = '1';
+      });
+      document.body.style.overflow = 'hidden';
+      var first = sidebar.querySelector('a[href]');
+      if (first) setTimeout(function () { first.focus(); }, 250);
+    };
+
+    window.closeSidebar = function () {
+      sidebar.style.transform = 'translateX(-100%)';
+      overlay.style.opacity = '0';
+      setTimeout(function () { overlay.classList.add('hidden'); }, 220);
+      document.body.style.overflow = '';
+    };
+
+    window.closeSidebar();
+
+    if (closeBtn) {
+      closeBtn.removeEventListener('click', window.closeSidebar);
+      closeBtn.addEventListener('click', window.closeSidebar);
+    }
+    overlay.removeEventListener('click', window.closeSidebar);
+    overlay.addEventListener('click', window.closeSidebar);
+  }
+
+  document.addEventListener('keydown', function (e) {
+    var sidebar = document.getElementById('sidebar');
+    if (e.key === 'Escape' && sidebar && sidebar.style.transform === 'translateX(0px)') {
+      window.closeSidebar && window.closeSidebar();
+    }
+  });
+
+  // Reset saat resize ke desktop
+  window.addEventListener('resize', function () {
+    if (window.innerWidth >= 1024) {
+      var overlay = document.getElementById('sidebar-overlay');
+      if (overlay) { overlay.classList.add('hidden'); overlay.style.opacity = '0'; }
+      document.body.style.overflow = '';
+    }
+  });
+
+  initSidebar();
+
+  document.addEventListener('astro:page-load', initSidebar);
+}());
+</script>

@@ -1,0 +1,956 @@
+---
+// src/pages/kasir.astro
+export const prerender = false;
+import "../../styles/global.css";
+import "../../styles/kasir.css";
+import { createServiceClient } from "../../lib/supabase";
+import Layout from "../../layouts/Layout.astro";
+
+const accessToken = Astro.cookies.get("sb-access-token");
+if (!accessToken?.value) return Astro.redirect("/");
+
+const nonce = (Astro.locals as App.Locals).nonce ?? "";
+const sb = createServiceClient();
+
+const { data: produkRaw } = await sb
+  .from("produk")
+  .select("id, nama_produk, harga_jual, harga_beli, kategori, quick_cash")
+  .order("nama_produk");
+
+const produk = produkRaw ?? [];
+const quickCashProduk = produk.filter((p) => p.quick_cash);
+
+const PUBLIC_SUPABASE_URL      = import.meta.env.PUBLIC_SUPABASE_URL;
+const PUBLIC_SUPABASE_ANON_KEY = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
+
+// URL foto QRIS statis dari Supabase Storage
+// Simpan file qris.webp / qris.png di bucket "qris" di Supabase Storage
+const QRIS_IMAGE_URL = '/qris.jpeg';
+
+function rp(n: number) {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency", currency: "IDR", minimumFractionDigits: 0,
+  }).format(n);
+}
+
+const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].sort();
+---
+
+<Layout title="Kasir" active="kasir" nonce={nonce}>
+
+<!-- ══ MAIN LAYOUT ══ -->
+<div style="display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden">
+<div class="pos-wrap">
+
+  <!-- LEFT: Products -->
+  <div class="pos-left">
+
+    <!-- Header -->
+    <div class="pos-header">
+      <button onclick="window.openSidebar&&window.openSidebar()"
+        class="lg:hidden flex-shrink-0 w-8 h-8 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 transition-colors"
+        aria-label="Menu">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+      </button>
+
+      <h1 class="pos-brand">Kasir</h1>
+
+      <div class="pos-search">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <label for="s-produk" class="sr-only">Cari produk</label>
+        <input id="s-produk" type="search" placeholder="Cari produk…" autocomplete="off"/>
+      </div>
+
+      <!-- Desktop stat -->
+      <div class="pos-stat">
+        <span class="pos-stat-lbl">Omset hari ini</span>
+        <span id="stat-today" class="pos-stat-val">—</span>
+      </div>
+
+      <!-- Mobile FAB -->
+      <button class="cart-fab" id="cart-fab" aria-label="Buka keranjang">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <path d="M16 10a4 4 0 0 1-8 0"/>
+        </svg>
+        <span id="fab-label">Keranjang</span>
+        <span class="cart-fab-badge" id="fab-badge" style="display:none">0</span>
+      </button>
+    </div>
+
+    <!-- Quick Cash -->
+    {quickCashProduk.length > 0 && (
+      <div class="qc-bar" id="qc-bar">
+        <span class="qc-tag">⚡ Quick</span>
+        <div class="qc-sep"></div>
+
+        {/* Wrapper scroll — hanya tombol yang scroll, label tetap */}
+        <div class="qc-items-scroll">
+          {quickCashProduk.map(p => (
+            <button class="qc-item" type="button"
+              data-id={p.id} data-nama={p.nama_produk}
+              data-jual={p.harga_jual} data-beli={p.harga_beli}>
+              {p.nama_produk}
+              <small>{rp(p.harga_jual)}</small>
+            </button>
+          ))}
+        </div>
+      </div>
+    )}
+    <!-- Category -->
+    <div class="kat-bar" id="kat-bar" role="tablist">
+      <button class="kat-btn on" data-kat="semua" role="tab" aria-selected="true">Semua</button>
+      {kategoriList.map(k => (
+        <button class="kat-btn" data-kat={k} role="tab" aria-selected="false">{k}</button>
+      ))}
+    </div>
+
+    <!-- Products -->
+    <div class="prod-scroll">
+      <div class="prod-grid" id="prod-grid" role="list">
+        {produk.map(p => (
+          <div
+            class="prod-card"
+            role="listitem" tabindex="0"
+            data-id={p.id}
+            data-nama={p.nama_produk.toLowerCase()}
+            data-nama-asli={p.nama_produk}
+            data-jual={p.harga_jual}
+            data-beli={p.harga_beli}
+            data-kat={p.kategori ?? ''}
+            aria-label={`${p.nama_produk} — ${rp(p.harga_jual)}`}
+          >
+            <div class="prod-thumb">
+              <svg class="prod-thumb-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <path d="m3 9 4-4 4 4 4-5 6 7"/><circle cx="8.5" cy="7.5" r="1.5"/>
+              </svg>
+              <span class="prod-qty-badge" aria-hidden="true"></span>
+            </div>
+            <div>
+              <div class="prod-name">{p.nama_produk}</div>
+              <div class="prod-price">{rp(p.harga_jual)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div id="no-hasil">Produk tidak ditemukan.</div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Cart panel — desktop -->
+  <div class="pos-right" id="cart-desktop">
+    <div class="cart-header" style="flex-shrink:0">
+      <div class="cart-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <path d="M16 10a4 4 0 0 1-8 0"/>
+        </svg>
+        Keranjang
+        <span class="cart-count" id="d-count">0</span>
+      </div>
+      <button class="btn-empty" id="d-clear">Kosongkan</button>
+    </div>
+
+    <div class="cart-items" id="d-list" aria-live="polite">
+      <div class="cart-empty-state" id="d-empty">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
+          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <path d="M16 10a4 4 0 0 1-8 0"/>
+        </svg>
+        <p>Keranjang kosong</p>
+        <small>Ketuk produk untuk menambah</small>
+      </div>
+    </div>
+
+    <div class="cart-footer">
+      <div class="cart-total-row">
+        <div>
+          <span class="ct-lbl">Total</span>
+          <div class="ct-val" id="d-total">Rp 0</div>
+        </div>
+        <div class="ct-items"><span id="d-items">0</span> item</div>
+      </div>
+      <div class="cart-pay-btns">
+        <button class="pay-btn pay-qris" id="d-qris" disabled>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+          </svg>
+          Bayar via QRIS
+        </button>
+        <button class="pay-btn pay-cash" id="d-cash" disabled>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="6" width="20" height="12" rx="2"/>
+            <circle cx="12" cy="12" r="2"/>
+            <path d="M6 12h.01M18 12h.01"/>
+          </svg>
+          Cash / Manual
+        </button>
+      </div>
+
+      <button class="hist-toggle" id="hist-btn" aria-expanded="false">
+        <span style="display:flex;align-items:center;gap:5px">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          Histori Hari Ini
+        </span>
+        <svg id="hist-chev" class="hist-chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <polyline points="18 15 12 9 6 15"/>
+        </svg>
+      </button>
+      <div id="hist-body" class="hist-body">
+        <div id="hist-list">
+          <div style="padding:1.5rem;text-align:center;font-size:.69rem;color:#bbb">Memuat…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ══ MOBILE/TABLET: Sheet backdrop ══ -->
+<div id="sheet-backdrop" aria-hidden="true"></div>
+
+<!-- ══ MOBILE/TABLET: Cart bottom sheet ══ -->
+<div id="cart-sheet" role="dialog" aria-modal="true" aria-label="Keranjang belanja">
+  <div class="sheet-handle"></div>
+
+  <div class="cart-header" style="flex-shrink:0">
+    <div class="cart-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <path d="M16 10a4 4 0 0 1-8 0"/>
+      </svg>
+      Keranjang
+      <span class="cart-count" id="m-count">0</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="btn-empty" id="m-clear">Kosongkan</button>
+      <button id="sheet-close" style="background:none;border:none;cursor:pointer;color:var(--muted);padding:4px;border-radius:5px;display:flex;align-items:center;transition:background .1s" aria-label="Tutup keranjang">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="sheet-items" id="m-list" aria-live="polite">
+    <div class="cart-empty-state" id="m-empty" style="min-height:120px">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
+        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <path d="M16 10a4 4 0 0 1-8 0"/>
+      </svg>
+      <p>Keranjang kosong</p>
+    </div>
+  </div>
+
+  <div class="cart-footer" style="border-top:1px solid var(--border)">
+    <div class="cart-total-row">
+      <div>
+        <span class="ct-lbl">Total</span>
+        <div class="ct-val" id="m-total">Rp 0</div>
+      </div>
+      <div class="ct-items"><span id="m-items">0</span> item</div>
+    </div>
+    <div class="cart-pay-btns" style="flex-direction:row">
+      <button class="pay-btn pay-qris" id="m-qris" disabled style="flex:1;padding:12px 8px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+          <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+        </svg>
+        QRIS
+      </button>
+      <button class="pay-btn pay-cash" id="m-cash" disabled style="flex:1;padding:12px 8px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="2" y="6" width="20" height="12" rx="2"/>
+          <circle cx="12" cy="12" r="2"/>
+          <path d="M6 12h.01M18 12h.01"/>
+        </svg>
+        Cash
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: QRIS Statis ══ -->
+<div id="modal-qris" class="modal-wrap" role="dialog" aria-modal="true" aria-labelledby="mq-h">
+  <div class="modal-box" style="max-width:400px">
+    <div class="modal-head">
+      <h2 id="mq-h">Pembayaran QRIS</h2>
+      <button id="close-qris" class="modal-close-btn" aria-label="Tutup">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 20px">
+      <!-- Total tagihan -->
+      <div style="width:100%;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;text-align:center">
+        <div style="font-size:.7rem;color:#16a34a;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Total Tagihan</div>
+        <div id="qris-total-disp" style="font-size:1.4rem;font-weight:700;color:#15803d"></div>
+      </div>
+
+      <!-- QR Code statis -->
+      <img
+          id="qris-img"
+          src={QRIS_IMAGE_URL}
+          alt="QR Code QRIS"
+          style="width:100%;max-width:280px;border-radius:10px;border:1px solid #e5e7eb;object-fit:contain;cursor:zoom-in;"
+          onclick="document.getElementById('qris-lightbox').classList.add('open')"
+          onerror="this.style.display='none';document.getElementById('qris-no-img').style.display=''"
+        />
+      <!-- Fallback jika gambar tidak ditemukan -->
+      <div id="qris-no-img" style="display:none;padding:24px;text-align:center;color:#9ca3af;font-size:.8rem;border:1px dashed #d1d5db;border-radius:10px;width:100%;max-width:280px">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin:0 auto 8px;display:block" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+          <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+        </svg>
+        <p style="margin:0 0 4px;font-weight:600;color:#6b7280">Foto QRIS belum tersedia</p>
+        <p style="margin:0;font-size:.72rem">Upload foto QRIS ke Supabase Storage<br/>bucket <code>qris</code> dengan nama <code>qris.png</code></p>
+      </div>
+
+      <p style="font-size:.73rem;color:#6b7280;text-align:center;margin:0">
+        Scan QR di atas dengan aplikasi e-wallet atau m-banking.<br/>
+        Konfirmasi setelah pembayaran diterima.
+      </p>
+    </div>
+
+    <div style="padding:0 16px 16px;display:flex;gap:8px">
+      <button id="qris-confirm-btn"
+        style="flex:1; padding:11px; background:#000000; color:#ffffff; border:1px solid #000000; border-radius:7px; font-size:.85rem; font-weight:600; cursor:pointer; transition: 0.2s;">
+        ✓ Konfirmasi Sudah Bayar
+      </button>
+      <button id="close-qris-bottom"
+        style="flex:1;padding:11px;background:#f3f4f6;color:#374151;border:none;border-radius:7px;font-size:.85rem;font-weight:600;cursor:pointer">
+        Batal
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Sukses ══ -->
+<div id="modal-sukses" class="modal-wrap" role="alertdialog" aria-modal="true" aria-labelledby="ms-h">
+  <div class="modal-box" style="max-width:320px">
+    <div class="success-wrap">
+      <div class="success-ring">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+      <div class="success-h" id="ms-h">Transaksi Berhasil!</div>
+      <p class="success-total">Total: <strong id="sukses-total"></strong></p>
+      <p class="success-meta" id="sukses-metode"></p>
+      <button class="btn-new-trx" id="close-sukses">Transaksi Baru</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Cash ══ -->
+<div id="modal-cash" class="modal-wrap" role="alertdialog" aria-modal="true" aria-labelledby="mc-h">
+  <div class="modal-box" style="max-width:360px">
+    <div class="modal-head">
+      <h2 id="mc-h">Konfirmasi Pembayaran Cash</h2>
+    </div>
+    <div class="cash-body">
+      <p class="cash-notice">Pastikan pembayaran sudah diterima sebelum konfirmasi.</p>
+      <div class="cash-amt-box">
+        <span class="cash-amt-lbl">Total Tagihan</span>
+        <div class="cash-amt-val" id="cash-disp"></div>
+      </div>
+    </div>
+    <div class="cash-footer">
+      <button class="btn-batal" id="cash-cancel">Batal</button>
+      <button class="btn-lunas" id="cash-confirm">Konfirmasi Lunas</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ LIGHTBOX: QRIS Fullscreen ══ -->
+<div id="qris-lightbox"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;align-items:center;justify-content:center;cursor:zoom-out;"
+  onclick="document.getElementById('qris-lightbox').classList.remove('open')">
+
+  <img
+    src={QRIS_IMAGE_URL}
+    alt="QR Code QRIS fullscreen"
+    style="max-width:92vw;max-height:92vh;border-radius:12px;object-fit:contain;pointer-events:none;box-shadow:0 8px 40px rgba(0,0,0,.5);"
+  />
+
+  <button
+    style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.2);border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;transition:background .15s;"
+    onclick="event.stopPropagation();document.getElementById('qris-lightbox').classList.remove('open')"
+    onmouseover="this.style.background='rgba(255,255,255,.25)'"
+    onmouseout="this.style.background='rgba(255,255,255,.15)'"
+    aria-label="Tutup">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+    </svg>
+  </button>
+</div>
+
+<!-- Toast -->
+<div id="toast" role="status" aria-live="polite" aria-atomic="true">
+  <svg id="toast-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0" aria-hidden="true">
+    <polyline points="20 6 9 17 4 12"/>
+  </svg>
+  <span id="toast-msg"></span>
+</div>
+
+<script is:inline>
+window.__playSuccess = function() {
+  try {
+    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // E5, G#5, B5 — chord E mayor, lebih cerah dari C mayor
+    [659.25, 830.61, 987.77].forEach(function(f, i) {
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = f;
+      o.type = 'triangle'; // triangle lebih hangat dari sine, tidak terlalu elektronik
+      var t = ctx.currentTime + i * 0.13;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.35, t + 0.02); // volume dari 0.13 → 0.35
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.4); // sustain lebih panjang
+      o.start(t); o.stop(t + 0.42);
+    });
+  } catch(e) {}
+};
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    document.getElementById('qris-lightbox').classList.remove('open');
+  }
+});
+
+</script>
+
+<script is:inline define:vars={{ produk, PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY }}>
+'use strict';
+
+var SUPABASE_URL  = PUBLIC_SUPABASE_URL;
+var SUPABASE_ANON = PUBLIC_SUPABASE_ANON_KEY;
+var BUCKET        = 'produk-foto';
+
+/* ── STATE ─────────────────────────────────────────────────────────────── */
+var cart      = [];
+var activeKat = 'semua';
+var searchQ   = '';
+var sheetOpen = false;
+
+/* total QRIS yang sedang menunggu konfirmasi */
+var _qrisTotal = 0;
+
+/* ── FORMAT ─────────────────────────────────────────────────────────────── */
+function rp(n) {
+  return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n);
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function timeStr(iso) {
+  return new Date(iso).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+}
+
+/* ── TOAST ─────────────────────────────────────────────────────────────── */
+var _tt;
+function toast(msg, ok) {
+  var t  = document.getElementById('toast');
+  var ic = document.getElementById('toast-ico');
+  document.getElementById('toast-msg').textContent = msg;
+  ic.style.color = ok === false ? '#f87171' : '#4ade80';
+  ic.innerHTML   = ok === false
+    ? '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
+    : '<polyline points="20 6 9 17 4 12"/>';
+  t.classList.add('show');
+  clearTimeout(_tt);
+  _tt = setTimeout(function(){ t.classList.remove('show'); }, 3000);
+}
+
+/* ── API ───────────────────────────────────────────────────────────────── */
+async function api(method, path, body) {
+  var r = await fetch(path, {
+    method: method,
+    headers: {'Content-Type':'application/json'},
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    credentials: 'same-origin'
+  });
+  var d = await r.json().catch(function(){ return {}; });
+  if (!r.ok) throw new Error(d.error || r.statusText);
+  return d;
+}
+
+/* ── LAZY IMAGES ────────────────────────────────────────────────────────── */
+var _imgLoaded = new Set();
+
+function loadImages() {
+  document.querySelectorAll('.prod-card:not(.card-hidden)').forEach(function(card) {
+    var id = card.dataset.id;
+    if (_imgLoaded.has(id)) return; // sudah di-load, skip
+
+    var thumb = card.querySelector('.prod-thumb');
+    if (!thumb) return;
+
+    // Cek apakah img sudah ada di DOM — jangan buat duplikat
+    if (thumb.querySelector('img')) return;
+
+    _imgLoaded.add(id); // tandai SEBELUM fetch, bukan setelah
+
+    var img = document.createElement('img');
+    img.alt     = card.dataset.namaAsli || '';
+    img.loading = 'lazy';
+    img.decoding = 'async'; // tambah ini — non-blocking
+    img.onload  = function() {
+      img.classList.add('loaded');
+      var ph = thumb.querySelector('.prod-thumb-icon');
+      if (ph) ph.style.display = 'none';
+    };
+    img.onerror = function() {
+      _imgLoaded.delete(id); // boleh retry kalau gagal beneran
+    };
+    img.src = SUPABASE_URL + '/storage/v1/object/public/' + BUCKET + '/' + id + '.webp';
+    thumb.insertBefore(img, thumb.querySelector('.prod-qty-badge'));
+  });
+}
+
+/* ── FILTER ─────────────────────────────────────────────────────────────── */
+function applyFilter() {
+  var q   = searchQ.toLowerCase().trim();
+  var vis = 0;
+  document.querySelectorAll('.prod-card').forEach(function(card) {
+    var ok = (activeKat === 'semua' || card.dataset.kat === activeKat)
+          && (!q || card.dataset.nama.includes(q));
+    card.classList.toggle('card-hidden', !ok);
+    if (ok) vis++;
+  });
+  var el = document.getElementById('no-hasil');
+  if (el) el.classList.toggle('show', vis === 0);
+  setTimeout(loadImages, 40);
+}
+
+document.getElementById('s-produk').addEventListener('input', function() {
+  searchQ = this.value; applyFilter();
+});
+
+document.getElementById('kat-bar').addEventListener('click', function(e) {
+  var btn = e.target.closest('.kat-btn');
+  if (!btn) return;
+  document.querySelectorAll('.kat-btn').forEach(function(b) {
+    b.classList.remove('on'); b.setAttribute('aria-selected','false');
+  });
+  btn.classList.add('on'); btn.setAttribute('aria-selected','true');
+  activeKat = btn.dataset.kat;
+  applyFilter();
+});
+
+/* ── SYNC PRODUCT CARD BADGES ───────────────────────────────────────────── */
+function syncCards() {
+  document.querySelectorAll('.prod-card').forEach(function(card) {
+    var item   = cart.find(function(i){ return i.id === card.dataset.id; });
+    var badge  = card.querySelector('.prod-qty-badge');
+    var inCart = !!item;
+    card.classList.toggle('in-cart', inCart);
+    if (badge) {
+      var prev = badge.textContent;
+      badge.textContent = item ? String(item.qty) : '';
+      if (item && prev !== String(item.qty)) {
+        badge.classList.remove('pop');
+        void badge.offsetWidth;
+        badge.classList.add('pop');
+        setTimeout(function(){ badge.classList.remove('pop'); }, 250);
+      }
+    }
+  });
+}
+
+/* ── RENDER CART LIST ───────────────────────────────────────────────────── */
+function makeCartRows() {
+  if (!cart.length) return '';
+  return cart.map(function(item, idx) {
+    return '<div class="cart-row">' +
+      '<div class="cr-info">' +
+        '<div class="cr-name">' + esc(item.nama) + '</div>' +
+        '<div class="cr-price">' + rp(item.jual) + ' / item</div>' +
+      '</div>' +
+      '<div class="cr-qty">' +
+        '<button class="qty-btn" data-a="dec" data-i="' + idx + '" aria-label="Kurangi">−</button>' +
+        '<span class="qty-n">' + item.qty + '</span>' +
+        '<button class="qty-btn" data-a="inc" data-i="' + idx + '" aria-label="Tambah">+</button>' +
+      '</div>' +
+      '<div class="cr-sub">' + rp(item.jual * item.qty) + '</div>' +
+      '<button class="cr-del" data-a="del" data-i="' + idx + '" aria-label="Hapus">' +
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">' +
+          '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' +
+        '</svg>' +
+      '</button>' +
+    '</div>';
+  }).join('');
+}
+
+function bindCartActions(container) {
+  container.querySelectorAll('[data-a]').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var idx = parseInt(this.dataset.i);
+      var act = this.dataset.a;
+      if (act === 'inc') { cart[idx].qty++; }
+      else if (act === 'dec') { cart[idx].qty--; if (cart[idx].qty <= 0) cart.splice(idx, 1); }
+      else if (act === 'del') { cart.splice(idx, 1); }
+      renderAll();
+    });
+  });
+}
+
+/* ── RENDER ALL VIEWS ───────────────────────────────────────────────────── */
+function renderAll() {
+  syncCards();
+
+  var total = cart.reduce(function(s,i){ return s + i.jual * i.qty; }, 0);
+  var count = cart.length;
+  var items = cart.reduce(function(s,i){ return s + i.qty; }, 0);
+  var html  = makeCartRows();
+
+  /* Desktop */
+  var dList  = document.getElementById('d-list');
+  var dEmpty = document.getElementById('d-empty');
+  var dCount = document.getElementById('d-count');
+  var dTotal = document.getElementById('d-total');
+  var dItems = document.getElementById('d-items');
+  var dQris  = document.getElementById('d-qris');
+  var dCash  = document.getElementById('d-cash');
+
+  if (dCount) { dCount.textContent = count; dCount.classList.toggle('live', count > 0); }
+  if (dTotal) dTotal.textContent = rp(total);
+  if (dItems) dItems.textContent = items;
+  if (dQris)  dQris.disabled  = count === 0;
+  if (dCash)  dCash.disabled  = count === 0;
+
+  if (dList) {
+    if (count === 0) {
+      dEmpty.style.display = '';
+      dList.querySelectorAll('.cart-row').forEach(function(r){ r.remove(); });
+    } else {
+      dEmpty.style.display = 'none';
+      dList.querySelectorAll('.cart-row').forEach(function(r){ r.remove(); });
+      var tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      while (tmp.firstChild) dList.appendChild(tmp.firstChild);
+      bindCartActions(dList);
+    }
+  }
+
+  /* Mobile sheet */
+  var mList  = document.getElementById('m-list');
+  var mEmpty = document.getElementById('m-empty');
+  var mCount = document.getElementById('m-count');
+  var mTotal = document.getElementById('m-total');
+  var mItems = document.getElementById('m-items');
+  var mQris  = document.getElementById('m-qris');
+  var mCash  = document.getElementById('m-cash');
+
+  if (mCount) { mCount.textContent = count; mCount.classList.toggle('live', count > 0); }
+  if (mTotal) mTotal.textContent = rp(total);
+  if (mItems) mItems.textContent = items;
+  if (mQris)  mQris.disabled  = count === 0;
+  if (mCash)  mCash.disabled  = count === 0;
+
+  if (mList) {
+    if (count === 0) {
+      mEmpty.style.display = '';
+      mList.querySelectorAll('.cart-row').forEach(function(r){ r.remove(); });
+    } else {
+      mEmpty.style.display = 'none';
+      mList.querySelectorAll('.cart-row').forEach(function(r){ r.remove(); });
+      var tmp2 = document.createElement('div');
+      tmp2.innerHTML = html;
+      while (tmp2.firstChild) mList.appendChild(tmp2.firstChild);
+      bindCartActions(mList);
+    }
+  }
+
+  /* FAB */
+  var fabLbl   = document.getElementById('fab-label');
+  var fabBadge = document.getElementById('fab-badge');
+  if (fabLbl)   fabLbl.textContent   = count > 0 ? rp(total) : 'Keranjang';
+  if (fabBadge) {
+    fabBadge.textContent   = items;
+    fabBadge.style.display = items > 0 ? '' : 'none';
+  }
+}
+
+/* ── ADD TO CART ────────────────────────────────────────────────────────── */
+function addToCart(id, nama, jual, beli) {
+  var ex = cart.find(function(i){ return i.id === id; });
+  if (ex) ex.qty++;
+  else    cart.push({ id:id, nama:nama, jual:+jual, beli:+beli, qty:1 });
+  renderAll();
+}
+
+/* ── PRODUCT GRID ───────────────────────────────────────────────────────── */
+document.getElementById('prod-grid').addEventListener('click', function(e) {
+  var card = e.target.closest('.prod-card');
+  if (!card) return;
+  addToCart(card.dataset.id, card.dataset.namaAsli, card.dataset.jual, card.dataset.beli);
+});
+document.getElementById('prod-grid').addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  var card = e.target.closest('.prod-card');
+  if (!card) return;
+  e.preventDefault();
+  addToCart(card.dataset.id, card.dataset.namaAsli, card.dataset.jual, card.dataset.beli);
+});
+
+/* ── QUICK CASH ─────────────────────────────────────────────────────────── */
+var qcBar = document.getElementById('qc-bar');
+if (qcBar) {
+  qcBar.addEventListener('click', function(e) {
+    var btn = e.target.closest('.qc-item');
+    if (!btn) return;
+    addToCart(btn.dataset.id, btn.dataset.nama, btn.dataset.jual, btn.dataset.beli);
+    toast('+ ' + btn.dataset.nama);
+  });
+}
+
+/* ── CLEAR CART ─────────────────────────────────────────────────────────── */
+function clearCart() {
+  if (!cart.length) return;
+  if (!confirm('Kosongkan keranjang?')) return;
+  cart = []; renderAll();
+}
+document.getElementById('d-clear').addEventListener('click', clearCart);
+document.getElementById('m-clear').addEventListener('click', clearCart);
+
+/* ── SHEET (mobile) ──────────────────────────────────────────────────────── */
+var sheetEl    = document.getElementById('cart-sheet');
+var backdropEl = document.getElementById('sheet-backdrop');
+
+function openSheet() {
+  sheetEl.classList.add('open');
+  backdropEl.classList.add('visible');
+  document.body.style.overflow = 'hidden';
+  sheetOpen = true;
+}
+function closeSheet() {
+  sheetEl.classList.remove('open');
+  backdropEl.classList.remove('visible');
+  document.body.style.overflow = '';
+  sheetOpen = false;
+}
+
+document.getElementById('cart-fab').addEventListener('click', openSheet);
+document.getElementById('sheet-close').addEventListener('click', closeSheet);
+backdropEl.addEventListener('click', closeSheet);
+
+(function() {
+  var startY = 0; var isDragging = false;
+  sheetEl.addEventListener('touchstart', function(e) {
+    startY = e.touches[0].clientY; isDragging = true;
+  }, { passive: true });
+  sheetEl.addEventListener('touchend', function(e) {
+    if (!isDragging) return;
+    if (e.changedTouches[0].clientY - startY > 80) closeSheet();
+    isDragging = false;
+  }, { passive: true });
+})();
+
+/* ── MODALS ─────────────────────────────────────────────────────────────── */
+function openModal(id) {
+  document.getElementById('modal-' + id).classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(id) {
+  document.getElementById('modal-' + id).classList.remove('open');
+  if (!sheetOpen) document.body.style.overflow = '';
+}
+
+/* ── CHECKOUT: QRIS Statis ──────────────────────────────────────────────── */
+function doQris() {
+  if (!cart.length) return;
+  closeSheet();
+  _qrisTotal = cart.reduce(function(s,i){ return s + i.jual * i.qty; }, 0);
+  document.getElementById('qris-total-disp').textContent = rp(_qrisTotal);
+  openModal('qris');
+}
+
+document.getElementById('d-qris').addEventListener('click', doQris);
+document.getElementById('m-qris').addEventListener('click', doQris);
+
+/* Tutup modal QRIS */
+function handleCloseQris() {
+  closeModal('qris');
+  _qrisTotal = 0;
+}
+document.getElementById('close-qris').addEventListener('click', handleCloseQris);
+document.getElementById('close-qris-bottom').addEventListener('click', handleCloseQris);
+
+/* Konfirmasi sudah bayar QRIS */
+document.getElementById('qris-confirm-btn').addEventListener('click', async function() {
+  if (!_qrisTotal) return;
+  this.disabled = true;
+  this.textContent = 'Menyimpan…';
+  try {
+    await saveTrx(_qrisTotal, 'qris', 'paid');
+    closeModal('qris');
+    showSukses(_qrisTotal, 'QRIS');
+    _qrisTotal = 0;
+  } catch(e) {
+    toast('Gagal menyimpan: ' + e.message, false);
+    this.disabled = false;
+    this.textContent = '✓ Konfirmasi Sudah Bayar';
+  }
+});
+
+/* ── CHECKOUT: CASH ─────────────────────────────────────────────────────── */
+function doCash() {
+  if (!cart.length) return;
+  closeSheet();
+  var total = cart.reduce(function(s,i){ return s + i.jual * i.qty; }, 0);
+  document.getElementById('cash-disp').textContent = rp(total);
+  openModal('cash');
+}
+
+document.getElementById('d-cash').addEventListener('click', doCash);
+document.getElementById('m-cash').addEventListener('click', doCash);
+document.getElementById('cash-cancel').addEventListener('click', function() { closeModal('cash'); });
+document.getElementById('cash-confirm').addEventListener('click', async function() {
+  var total = cart.reduce(function(s,i){ return s + i.jual * i.qty; }, 0);
+  this.disabled = true; this.textContent = 'Menyimpan…';
+  try {
+    await saveTrx(total, 'cash', 'paid');
+    closeModal('cash');
+    showSukses(total, 'Cash');
+  } catch(e) {
+    toast('Gagal: ' + e.message, false);
+  } finally {
+    this.disabled = false; this.textContent = 'Konfirmasi Lunas';
+  }
+});
+
+/* ── SAVE TRANSACTION ───────────────────────────────────────────────────── */
+async function saveTrx(total, metode, status) {
+  var items = cart.map(function(i) {
+    return { produk_id:i.id, nama_produk:i.nama, harga_jual:i.jual, harga_beli:i.beli, qty:i.qty };
+  });
+  await api('POST', '/api/kasir/transaksi', {
+    total: total,
+    metode_bayar: metode,
+    status: status,
+    items: items
+  });
+}
+
+/* ── SUCCESS ────────────────────────────────────────────────────────────── */
+function showSukses(total, metode) {
+  window.__playSuccess && window.__playSuccess();
+  document.getElementById('sukses-total').textContent  = rp(total);
+  document.getElementById('sukses-metode').textContent = 'Metode: ' + metode;
+  openModal('sukses');
+  cart = []; renderAll(); loadHistory();
+}
+document.getElementById('close-sukses').addEventListener('click', function() {
+  closeModal('sukses');
+  document.getElementById('s-produk').focus();
+});
+
+/* ── HISTORY ────────────────────────────────────────────────────────────── */
+var _histLoaded = false;
+document.getElementById('hist-btn').addEventListener('click', function() {
+  var body = document.getElementById('hist-body');
+  var chev = document.getElementById('hist-chev');
+  var open = body.classList.contains('open');
+  body.classList.toggle('open', !open);
+  this.setAttribute('aria-expanded', String(!open));
+  chev.classList.toggle('open', !open);
+  if (!open && !_histLoaded) loadHistory();
+});
+
+async function loadHistory() {
+  _histLoaded = true;
+  try {
+    var data = await api('GET', '/api/kasir/transaksi');
+    renderHistory(data);
+    updateStat(data);
+  } catch(e) {
+    document.getElementById('hist-list').innerHTML =
+      '<div style="padding:1rem;text-align:center;font-size:.69rem;color:#f87171">Gagal memuat histori</div>';
+  }
+}
+
+function renderHistory(data) {
+  var el = document.getElementById('hist-list');
+  if (!data || !data.length) {
+    el.innerHTML = '<div style="padding:1.5rem;text-align:center;font-size:.69rem;color:#bbb">Belum ada transaksi hari ini</div>';
+    return;
+  }
+  el.innerHTML = data.map(function(trx) {
+    var isQ  = trx.metode_bayar === 'qris';
+    var itms = (trx.transaksi_item || []);
+    var summ = itms.slice(0, 2).map(function(i){ return esc(i.nama_produk) + '×' + i.qty; }).join(', ');
+    if (itms.length > 2) summ += ' +' + (itms.length - 2) + ' lainnya';
+    return '<div class="hist-row-item">' +
+      '<div class="hri-top">' +
+        '<span class="hri-amt">' + rp(trx.total) + '</span>' +
+        '<div class="hri-meta">' +
+          '<span class="hri-badge ' + (isQ ? 'badge-qris' : 'badge-cash') + '">' + (isQ ? 'QRIS' : 'Cash') + '</span>' +
+          '<span class="hri-time">' + timeStr(trx.created_at) + '</span>' +
+        '</div>' +
+      '</div>' +
+      (summ ? '<div class="hri-prods">' + summ + '</div>' : '') +
+    '</div>';
+  }).join('');
+}
+
+function updateStat(data) {
+  var total = (data || []).reduce(function(s, t){ return s + t.total; }, 0);
+  var el = document.getElementById('stat-today');
+  if (el) el.textContent = rp(total);
+}
+
+/* ── REALTIME ───────────────────────────────────────────────────────────── */
+(function() {
+  if (!SUPABASE_URL || !SUPABASE_ANON) return;
+  var wsUrl = SUPABASE_URL.replace('https://','wss://') + '/realtime/v1/websocket?apikey=' + SUPABASE_ANON + '&vsn=1.0.0';
+  function connect() {
+    try {
+      var ws = new WebSocket(wsUrl);
+      ws.onopen = function() {
+        ws.send(JSON.stringify({
+          topic:'realtime:public:transaksi', event:'phx_join',
+          payload:{config:{postgres_changes:[{event:'INSERT',schema:'public',table:'transaksi'}]}}, ref:'1'
+        }));
+      };
+      ws.onmessage = function(msg) {
+        try {
+          var d = JSON.parse(msg.data);
+          if (d.event === 'phx_reply' && d.ref === 'heartbeat')
+            ws.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:'hb'}));
+          if (d.event === 'postgres_changes' || (d.payload && d.payload.type === 'INSERT'))
+            if (_histLoaded) loadHistory();
+        } catch(e) {}
+      };
+      ws.onclose = function() { setTimeout(connect, 5000); };
+      setInterval(function() {
+        if (ws.readyState === WebSocket.OPEN)
+          ws.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:'hb'}));
+      }, 30000);
+    } catch(e) { setTimeout(connect, 8000); }
+  }
+  connect();
+})();
+
+/* ── INIT ───────────────────────────────────────────────────────────────── */
+renderAll();
+setTimeout(loadImages, 100);
+</script>
+
+</Layout>
