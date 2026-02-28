@@ -49,6 +49,12 @@ const ADMIN_EMAIL_NORMALIZED = ADMIN_EMAIL.toLowerCase().trim();
 
 const PUBLIC_ROUTES = new Set(["/", "/api/auth/login", "/api/auth/logout", "/api/auth/callback"]);
 
+// ─── Route auth yang set cookie — bypass applySecurityHeaders ─────────────────
+// FIX: applySecurityHeaders menggunakan getSetCookie() yang tidak tersedia
+// di semua Vercel runtime. Daripada merusak Set-Cookie, biarkan response
+// auth melewati middleware tanpa diproses ulang headernya.
+const AUTH_COOKIE_ROUTES = new Set(["/api/auth/login", "/api/auth/callback"]);
+
 const PROTECTED_PREFIXES = [
     "/dashboard",
 "/kasir",
@@ -218,17 +224,7 @@ function safeCompare(a: string, b: string): boolean {
 }
 
 // ─── GET USER VIA REST API (NO WASM) ─────────────────────────────────────────
-//
-// ⚠️ ROOT CAUSE FIX: supabase.auth.getUser() menggunakan WebAssembly internal
-// untuk JWT verification. Vercel Serverless memblokir kompilasi WASM:
-//   "CompileError: WebAssembly.compile(): Wasm code generation disallowed by embedder"
-//
-// Solusi: panggil Supabase Auth REST API langsung via fetch().
-// - Token tetap diverifikasi SERVER-SIDE oleh Supabase (bukan client-side)
-// - Hasil identik dengan getUser() — user object dengan email, id, dll
-// - Zero WASM, zero CompileError
-// - Timeout 5 detik untuk hindari hanging request
-//
+
 interface SupabaseUser {
     id:                  string;
     email?:              string;
@@ -265,10 +261,7 @@ async function getUserFromToken(accessToken: string): Promise<{
 }
 
 // ─── REFRESH TOKEN VIA REST API (NO WASM) ────────────────────────────────────
-//
-// Sama seperti getUserFromToken — hindari WASM dengan panggil REST API langsung.
-// Digunakan saat access token expired tapi refresh token masih valid.
-//
+
 interface RefreshResult {
     accessToken:  string;
     refreshToken: string;
@@ -359,15 +352,48 @@ function buildCSP(nonce: string): string {
     ].join("; ");
 }
 
+// ─── FIX: Cookie-safe security headers ───────────────────────────────────────
+//
+// ROOT CAUSE: getSetCookie() tidak tersedia di semua Vercel Node.js runtime.
+// Ketika tidak tersedia, existingCookies = [] dan Set-Cookie terhapus tanpa
+// pernah di-append ulang → cookie login hilang → redirect loop.
+//
+// FIX: Gunakan extractSetCookies() yang kompatibel dengan berbagai runtime:
+// 1. Coba getSetCookie() (standar, tersedia di modern runtime)
+// 2. Fallback ke iterasi manual via headers.entries() untuk mengambil
+//    SEMUA nilai Set-Cookie (Node.js menyimpan multiple headers sebagai
+//    array internal yang bisa diakses via for...of pada headers)
+//
+function extractSetCookies(headers: Headers): string[] {
+    // Metode 1: getSetCookie() — standar WinterCG, tersedia di Vercel Edge & Node 18+
+    if (typeof (headers as any).getSetCookie === "function") {
+        const cookies = (headers as any).getSetCookie() as string[];
+        if (cookies.length > 0) return cookies;
+    }
+
+    // Metode 2: iterasi semua entries — beberapa runtime expose multiple
+    // Set-Cookie sebagai entri terpisah saat di-iterate
+    const cookies: string[] = [];
+    headers.forEach((value, key) => {
+        if (key.toLowerCase() === "set-cookie") {
+            // Nilai bisa berupa satu cookie atau multiple yang digabung dengan newline
+            // tergantung implementasi runtime
+            value.split("\n").forEach((v) => {
+                const trimmed = v.trim();
+                if (trimmed) cookies.push(trimmed);
+            });
+        }
+    });
+
+    return cookies;
+}
+
 function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boolean): Response {
-    // ⚠️ KRITIS: new Headers(response.headers) mendeduplikasi Set-Cookie!
-    // login.ts mengirim 2x Set-Cookie (sb-access-token + sb-refresh-token).
-    // Headers constructor menimpa cookie pertama dengan yang kedua — satu hilang.
-    // Solusi: simpan semua cookie dulu via getSetCookie(), hapus dari headers,
-    // lalu append ulang satu per satu setelah semua security headers di-set.
-    const existingCookies: string[] = (response.headers as any).getSetCookie?.() ?? [];
+    // Simpan semua Set-Cookie sebelum headers diproses ulang
+    const existingCookies = extractSetCookies(response.headers);
+
     const h = new Headers(response.headers);
-    h.delete('Set-Cookie'); // hapus yang terdeduplikasi
+    h.delete("Set-Cookie"); // hapus dari Headers object (yang mungkin terdeduplikasi)
 
     h.set("Content-Security-Policy",   buildCSP(nonce));
     h.set("X-Frame-Options",           "DENY");
@@ -405,8 +431,8 @@ function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boo
         h.set("Cross-Origin-Resource-Policy", "same-site");
     }
 
-    // Append ulang semua Set-Cookie yang sudah disimpan — preserves multiple cookies
-    existingCookies.forEach((c: string) => h.append('Set-Cookie', c));
+    // Append ulang semua cookie yang sudah diselamatkan
+    existingCookies.forEach((c: string) => h.append("Set-Cookie", c));
 
     return new Response(response.body, {
         status:     response.status,
@@ -434,6 +460,8 @@ function checkOrigin(request: Request, url: URL): boolean {
     }
 
     if (origin === "null") {
+        // Origin: null terjadi pada form HTML biasa di beberapa browser (Firefox, Chrome).
+        // Validasi lewat Host header sebagai gantinya.
         const host          = request.headers.get("host") ?? "";
         const expectedHosts = new Set([
             url.host,
@@ -500,7 +528,6 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
     const cacheKey = getSessionCacheKey(accessToken);
     const cached   = sessionCache.get(cacheKey);
 
-    // Hanya gunakan cache jika valid=true — jangan cache hasil gagal
     if (cached && Date.now() < cached.expiresAt && cached.result.valid) {
         return cached.result;
     }
@@ -514,9 +541,6 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
     };
 
     try {
-        // ✅ FIX UTAMA: gunakan REST API langsung — tidak ada WASM, tidak ada CompileError
-        // Sebelumnya: supabase.auth.getUser(accessToken) → WASM crash di Vercel
-        // Sekarang:   fetch ke /auth/v1/user dengan Authorization header → zero WASM
         const { user, error } = await getUserFromToken(accessToken);
 
         if (!error && user) {
@@ -527,7 +551,6 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
             return store({ valid: true, isAdmin, email: user.email });
         }
 
-        // Access token expired — coba refresh via REST API (juga no WASM)
         const { data: rd, error: re } = await refreshSessionFromToken(refreshToken);
 
         if (re || !rd) {
@@ -539,7 +562,6 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
                                     ADMIN_EMAIL_NORMALIZED,
         );
 
-        // Token baru — kembalikan tanpa cache agar request berikutnya cache token baru
         return {
             valid:           true,
             isAdmin,
@@ -652,6 +674,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
     // ── 9. Route publik ───────────────────────────────────────────────────────
     if (PUBLIC_ROUTES.has(pathname)) {
         const response = await next();
+
+        // ⚠️ FIX KRITIS: Auth routes yang men-set cookie (login/callback) harus
+        // di-bypass dari applySecurityHeaders karena fungsi tersebut bisa
+        // menghapus Set-Cookie jika getSetCookie() tidak tersedia di runtime.
+        // Security headers sudah di-set langsung di login.ts (SECURITY_HEADERS).
+        if (AUTH_COOKIE_ROUTES.has(pathname) && method === "POST") {
+            return response;
+        }
+
         return applySecurityHeaders(response, nonce, isApiRoute);
     }
 
