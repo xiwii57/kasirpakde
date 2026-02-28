@@ -9,6 +9,26 @@ const SUPABASE_URL          = import.meta.env.PUBLIC_SUPABASE_URL       as strin
 const SUPABASE_ANON_KEY     = import.meta.env.PUBLIC_SUPABASE_ANON_KEY  as string;
 const SUPABASE_SERVICE_ROLE = import.meta.env.SUPABASE_SERVICE_ROLE     as string;
 const IS_PROD               = import.meta.env.PROD as boolean;
+const CANONICAL_DOMAIN      = (import.meta.env.CANONICAL_DOMAIN as string)?.trim() ?? "";
+
+// ─── Domain Redirect ──────────────────────────────────────────────────────────
+
+function redirectToCanonical(request: Request, url: URL): Response | null {
+    if (!IS_PROD || !CANONICAL_DOMAIN) return null;
+
+    const host = (request.headers.get("host") ?? url.hostname).split(":")[0].toLowerCase();
+
+    if (host === CANONICAL_DOMAIN) return null;
+
+    const canonical = new URL(url.pathname + url.search, `https://${CANONICAL_DOMAIN}`);
+    return new Response(null, {
+        status: 301,
+        headers: {
+            "Location":      canonical.toString(),
+                        "Cache-Control": "public, max-age=31536000, immutable",
+        },
+    });
+}
 
 // Validasi env kritis saat startup — gagal cepat daripada error tak terduga
 for (const [key, val] of Object.entries({
@@ -518,6 +538,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
     if (isStaticAsset(pathname)) {
         return next();
     }
+
+    // ── 1b. Canonical domain redirect ─────────────────────────────────────────
+    const domainRedirect = redirectToCanonical(request, url);
+    if (domainRedirect) return domainRedirect;
 
     // ── 2. Deteksi request mencurigakan ───────────────────────────────────────
     if (isSuspiciousRequest(request, pathname)) {
