@@ -267,9 +267,22 @@ function buildCSP(nonce: string): string {
         ].join("; ");
     }
 
+    // ✅ FIX: Tambahkan 'wasm-unsafe-eval' pada script-src production.
+    //
+    // Kenapa diperlukan?
+    // Supabase JS client menggunakan WebAssembly (WASM) secara internal untuk
+    // operasi JWT verification dan crypto. Tanpa directive ini, browser memblokir
+    // kompilasi WASM dan melempar error:
+    //   "CompileError: WebAssembly.compile(): Wasm code generation disallowed by embedder"
+    //
+    // Kenapa 'wasm-unsafe-eval' aman?
+    // Directive ini HANYA mengizinkan kompilasi WebAssembly binary (.wasm),
+    // TIDAK membuka celah untuk arbitrary JavaScript eval() seperti 'unsafe-eval'.
+    // Ini adalah rekomendasi resmi W3C untuk library yang menggunakan WASM.
+    // Referensi: https://www.w3.org/TR/CSP3/#directive-script-src-attr
     return [
         "default-src 'none'",
-        `script-src 'self' 'nonce-${nonce}' https://challenges.cloudflare.com`,
+        `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' https://challenges.cloudflare.com`,
         `style-src 'self' 'nonce-${nonce}' https://fonts.googleapis.com`,
         "font-src 'self' https://fonts.gstatic.com",
         "frame-src https://challenges.cloudflare.com",
