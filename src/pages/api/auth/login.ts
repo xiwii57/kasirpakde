@@ -37,19 +37,10 @@ function safeCompare(a: string, b: string): boolean {
 }
 
 function cookieStr(name: string, value: string, maxAge: number): string {
-    // ⚠️ SameSite=Lax (bukan Strict) — KRUSIAL untuk login berfungsi di production.
-    //
-    // Kenapa Lax dan bukan Strict?
-    // Setelah login sukses, server mengirim 302 redirect ke /dashboard.
-    // Browser melakukan GET /dashboard — ini adalah "cross-site top-level navigation".
-    // Dengan SameSite=Strict, cookie TIDAK dikirim pada navigasi ini → middleware
-    // anggap tidak ada session → redirect balik ke login → infinite loop.
-    //
-    // SameSite=Lax: cookie dikirim pada top-level GET navigation (aman untuk kasus ini),
-    // tapi TIDAK dikirim pada sub-resource requests dari domain lain (tetap aman dari CSRF).
-    //
-    // SameSite=Strict lebih ketat tapi menyebabkan UX rusak untuk redirect post-login.
-    // Referensi: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite
+    // SameSite=Lax: cookie dikirim pada top-level GET navigation setelah redirect,
+    // tapi tidak pada sub-resource requests dari domain lain (aman dari CSRF).
+    // SameSite=Strict menyebabkan cookie tidak terkirim setelah POST→302→GET,
+    // sehingga middleware anggap tidak ada session → infinite redirect loop.
     const base = `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax`;
     return IS_PROD ? `${base}; Secure` : base;
 }
@@ -60,13 +51,6 @@ const SECURITY_HEADERS: [string, string][] = [
 ["X-Frame-Options",        "DENY"],
 ["Referrer-Policy",        "no-referrer"],
 ];
-
-function redirectTo(path: string): Response {
-    return new Response(null, {
-        status:  302,
-        headers: new Headers([["Location", path], ...SECURITY_HEADERS]),
-    });
-}
 
 function randomDelay(): Promise<void> {
     return new Promise((r) => setTimeout(r, 300 + Math.random() * 250));
@@ -112,7 +96,10 @@ export const POST: APIRoute = async ({ request }) => {
     const ct = request.headers.get("content-type") ?? "";
     if (!ct.includes("application/x-www-form-urlencoded") && !ct.includes("multipart/form-data")) {
         await randomDelay();
-        return redirectTo("/?error=invalid_credentials");
+        return new Response(null, {
+            status: 302,
+            headers: buildRedirectHeaders("/?error=invalid_credentials"),
+        });
     }
 
     // 2. Parse form
@@ -120,7 +107,10 @@ export const POST: APIRoute = async ({ request }) => {
     try {
         formData = await request.formData();
     } catch {
-        return redirectTo("/?error=invalid_credentials");
+        return new Response(null, {
+            status: 302,
+            headers: buildRedirectHeaders("/?error=invalid_credentials"),
+        });
     }
 
     const rawEmail = formData.get("email")?.toString().trim().toLowerCase() ?? "";
@@ -131,18 +121,27 @@ export const POST: APIRoute = async ({ request }) => {
     const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
     if (!rawEmail || !emailRegex.test(rawEmail) || rawEmail.length > 254) {
         await randomDelay();
-        return redirectTo("/?error=invalid_credentials");
+        return new Response(null, {
+            status: 302,
+            headers: buildRedirectHeaders("/?error=invalid_credentials"),
+        });
     }
     if (!password || password.length < 8 || password.length > 128) {
         await randomDelay();
-        return redirectTo("/?error=invalid_credentials");
+        return new Response(null, {
+            status: 302,
+            headers: buildRedirectHeaders("/?error=invalid_credentials"),
+        });
     }
 
     // 4. Verifikasi Turnstile
     if (!tsToken || !(await verifyTurnstile(tsToken, ip))) {
         console.warn(`[Login] Turnstile gagal dari IP: ${ip}`);
         await randomDelay();
-        return redirectTo("/?error=invalid_credentials");
+        return new Response(null, {
+            status: 302,
+            headers: buildRedirectHeaders("/?error=invalid_credentials"),
+        });
     }
 
     // 5. Buat Supabase client per-request
@@ -163,7 +162,10 @@ export const POST: APIRoute = async ({ request }) => {
     if (error || !data.session || !data.user) {
         await randomDelay();
         console.warn(`[Login] Gagal: ${rawEmail} dari IP ${ip}`);
-        return redirectTo("/?error=invalid_credentials");
+        return new Response(null, {
+            status: 302,
+            headers: buildRedirectHeaders("/?error=invalid_credentials"),
+        });
     }
 
     // 7. Cek admin
@@ -182,27 +184,41 @@ export const POST: APIRoute = async ({ request }) => {
 
         await randomDelay();
         console.warn(`[Login] Bukan admin: ${userEmail} dari IP ${ip}`);
-        return redirectTo("/?error=invalid_credentials");
+        return new Response(null, {
+            status: 302,
+            headers: buildRedirectHeaders("/?error=invalid_credentials"),
+        });
     }
 
-    // 8. Sukses — set cookie dengan SameSite=Lax
+    // 8. Sukses — gunakan Headers.append() untuk multiple Set-Cookie
+    //
+    // ⚠️ KRITIS: new Headers([["Set-Cookie", a], ["Set-Cookie", b]])
+    // akan mendeduplikasi key — hanya cookie terakhir yang tersimpan!
+    // Solusi wajib: pakai .append() untuk setiap Set-Cookie secara terpisah.
+    // Referensi: https://fetch.spec.whatwg.org/#concept-headers-append
     const { access_token, refresh_token, expires_in } = data.session;
     console.info(`[Login] ✓ Admin login: ${userEmail} dari IP ${ip}`);
 
-    return new Response(null, {
-        status:  302,
-        headers: new Headers([
-            ["Location",   "/dashboard"],
-            ...SECURITY_HEADERS,
-            ["Set-Cookie", cookieStr("sb-access-token",  access_token,  expires_in)],
-                             ["Set-Cookie", cookieStr("sb-refresh-token", refresh_token, 60 * 60 * 24 * 7)],
-        ]),
-    });
+    const headers = buildRedirectHeaders("/dashboard");
+    headers.append("Set-Cookie", cookieStr("sb-access-token",  access_token,  expires_in));
+    headers.append("Set-Cookie", cookieStr("sb-refresh-token", refresh_token, 60 * 60 * 24 * 7));
+
+    return new Response(null, { status: 302, headers });
 };
+
+// ─── Helper: bangun Headers untuk redirect ────────────────────────────────────
+
+function buildRedirectHeaders(location: string): Headers {
+    const headers = new Headers();
+    headers.set("Location", location);
+    for (const [k, v] of SECURITY_HEADERS) {
+        headers.set(k, v);
+    }
+    return headers;
+}
 
 // ─── Method lainnya ───────────────────────────────────────────────────────────
 
-// GET redirect ke "/" — agar tidak 405 jika browser follow redirect sebagai GET
 export const GET: APIRoute = () => new Response(null, {
     status:  302,
     headers: { "Location": "/" },

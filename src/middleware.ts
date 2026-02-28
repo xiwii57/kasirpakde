@@ -21,8 +21,6 @@ function redirectToCanonical(request: Request, url: URL): Response | null {
 
     const canonical = new URL(url.pathname + url.search, `https://${CANONICAL_DOMAIN}`);
     return new Response(null, {
-        // 308 = Permanent Redirect — tidak mengubah HTTP method (POST tetap POST)
-        // 301 mengubah POST → GET, menyebabkan 405 di /api/auth/login
         status: request.method === "GET" ? 301 : 308,
         headers: {
             "Location":      canonical.toString(),
@@ -222,10 +220,7 @@ function jsonError(message: string, status: number): Response {
 }
 
 function clearSessionCookies(): string[] {
-    // ⚠️ PENTING: SameSite=Lax — HARUS sama persis dengan saat set di login.ts
-    // Browser mencocokkan path+sameSite+secure saat delete cookie.
-    // Jika pakai Strict di sini tapi Lax di login.ts → cookie tidak terhapus saat logout.
-    // SameSite=Lax diperlukan agar cookie terkirim setelah redirect POST→GET (308 → navigasi)
+    // SameSite=Lax — harus sama persis dengan saat set di login.ts
     const base = `Path=/; Max-Age=0; HttpOnly; SameSite=Lax${IS_PROD ? "; Secure" : ""}`;
     return [
         `sb-access-token=; ${base}`,
@@ -267,19 +262,17 @@ function buildCSP(nonce: string): string {
         ].join("; ");
     }
 
-    // ✅ FIX: Tambahkan 'wasm-unsafe-eval' pada script-src production.
+    // Production CSP:
+    // - 'wasm-unsafe-eval': diperlukan untuk Supabase JS client yang menggunakan
+    //   WebAssembly internal untuk JWT verification dan crypto operations.
+    //   Directive ini HANYA mengizinkan kompilasi WASM binary, TIDAK membuka
+    //   celah untuk arbitrary JavaScript eval().
     //
-    // Kenapa diperlukan?
-    // Supabase JS client menggunakan WebAssembly (WASM) secara internal untuk
-    // operasi JWT verification dan crypto. Tanpa directive ini, browser memblokir
-    // kompilasi WASM dan melempar error:
-    //   "CompileError: WebAssembly.compile(): Wasm code generation disallowed by embedder"
-    //
-    // Kenapa 'wasm-unsafe-eval' aman?
-    // Directive ini HANYA mengizinkan kompilasi WebAssembly binary (.wasm),
-    // TIDAK membuka celah untuk arbitrary JavaScript eval() seperti 'unsafe-eval'.
-    // Ini adalah rekomendasi resmi W3C untuk library yang menggunakan WASM.
-    // Referensi: https://www.w3.org/TR/CSP3/#directive-script-src-attr
+    // - 'require-trusted-types-for' DIHAPUS: directive ini memblokir semua
+    //   innerHTML assignment dan DOM manipulation di script halaman (login form,
+    //   kasir, produk). Browser melempar TrustedTypes violation dan script berhenti.
+    //   Implementasi Trusted Types memerlukan refactor besar seluruh codebase.
+    //   Referensi: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy/require-trusted-types-for
     return [
         "default-src 'none'",
         `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' https://challenges.cloudflare.com`,
@@ -296,7 +289,6 @@ function buildCSP(nonce: string): string {
         "manifest-src 'none'",
         "worker-src blob:",
         "media-src 'none'",
-        "require-trusted-types-for 'script'",
     ].join("; ");
 }
 
@@ -355,25 +347,18 @@ function applySecurityHeaders(
 }
 
 // ─── CSRF Protection ──────────────────────────────────────────────────────────
-//
-// Pelajaran dari projek referensi yang bekerja:
-// - API route: origin wajib ada dan harus match
-// - Halaman biasa: origin boleh tidak ada, jika ada harus match
-// - origin "null": izinkan via Host header fallback (browser form submit)
-//
+
 function checkOrigin(request: Request, url: URL): boolean {
     if (!REQUIRED_CONTENT_TYPE_METHODS.has(request.method)) return true;
 
     const origin  = request.headers.get("origin");
     const referer = request.headers.get("referer");
 
-    // Semua origin yang valid
     const allowedOrigins = new Set([
         url.origin,
         ...(CANONICAL_DOMAIN ? [`https://${CANONICAL_DOMAIN}`] : []),
     ]);
 
-    // Origin ada dan bukan string literal "null" — validasi normal
     if (origin && origin !== "null") {
         try {
             return allowedOrigins.has(new URL(origin).origin);
@@ -382,9 +367,6 @@ function checkOrigin(request: Request, url: URL): boolean {
         }
     }
 
-    // origin === "null": browser mengirim ini untuk same-site form submit
-    // dalam kondisi tertentu (redirect chain, privacy mode, beberapa mobile browser).
-    // Validasi via Host header sebagai fallback yang aman.
     if (origin === "null") {
         const host          = request.headers.get("host") ?? "";
         const expectedHosts = new Set([
@@ -394,7 +376,6 @@ function checkOrigin(request: Request, url: URL): boolean {
         return expectedHosts.has(host.split(":")[0]) || expectedHosts.has(host);
     }
 
-    // Tidak ada origin — coba referer
     if (referer) {
         try {
             return allowedOrigins.has(new URL(referer).origin);
@@ -403,7 +384,6 @@ function checkOrigin(request: Request, url: URL): boolean {
         }
     }
 
-    // Tidak ada origin maupun referer
     if (IS_PROD) {
         console.warn(`[Middleware] CSRF: tidak ada origin/referer valid di production`);
         return false;
@@ -458,8 +438,7 @@ function getSessionCacheKey(accessToken: string): string {
 
 export function invalidateSessionCache(accessToken: string): void {
     if (!accessToken) return;
-    const key = getSessionCacheKey(accessToken);
-    sessionCache.delete(key);
+    sessionCache.delete(getSessionCacheKey(accessToken));
 }
 
 async function validateSession(
@@ -475,12 +454,24 @@ async function validateSession(
 
     const cacheKey = getSessionCacheKey(accessToken);
     const cached   = sessionCache.get(cacheKey);
-    if (cached && Date.now() < cached.expiresAt) {
+
+    // FIX: hanya gunakan cache jika result valid=true.
+    // Jika cache menyimpan valid=false (misalnya karena transient network error),
+    // jangan gunakan — coba validasi ulang ke Supabase.
+    if (cached && Date.now() < cached.expiresAt && cached.result.valid) {
         return cached.result;
     }
 
+    // Hapus cache yang stale atau invalid sebelum validasi ulang
+    if (cached) {
+        sessionCache.delete(cacheKey);
+    }
+
     const store = (result: SessionResult) => {
-        sessionCache.set(cacheKey, { result, expiresAt: Date.now() + SESSION_CACHE_TTL_MS });
+        // Hanya cache jika valid, agar invalid result tidak menghalangi login berikutnya
+        if (result.valid) {
+            sessionCache.set(cacheKey, { result, expiresAt: Date.now() + SESSION_CACHE_TTL_MS });
+        }
         return result;
     };
 
@@ -520,7 +511,7 @@ async function validateSession(
         });
 
         if (re || !rd?.user || !rd?.session) {
-            return store({ valid: false, isAdmin: false });
+            return { valid: false, isAdmin: false }; // tidak di-cache
         }
 
         const isAdmin = safeCompare(
@@ -528,8 +519,7 @@ async function validateSession(
                                     ADMIN_EMAIL_NORMALIZED,
         );
 
-        sessionCache.delete(cacheKey);
-
+        // Token baru — jangan cache di sini, biarkan request berikutnya cache token baru
         return {
             valid:           true,
             isAdmin,
@@ -540,7 +530,7 @@ async function validateSession(
 
     } catch (err) {
         console.error("[Middleware] Session validation error:", err instanceof Error ? err.message : "unknown");
-        return { valid: false, isAdmin: false };
+        return { valid: false, isAdmin: false }; // tidak di-cache
     }
 }
 
@@ -729,7 +719,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
         if (session.newAccessToken) {
             const expiresIn  = session.newExpiresIn ?? 3600;
-            // SameSite=Lax — sama dengan login.ts agar cookie terkirim setelah redirect
             const cookieOpts = `Path=/; HttpOnly; SameSite=Lax; Max-Age=${expiresIn}${IS_PROD ? "; Secure" : ""}`;
             const headers    = new Headers(response.headers);
             headers.append("Set-Cookie", `sb-access-token=${session.newAccessToken}; ${cookieOpts}`);
