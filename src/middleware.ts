@@ -1,6 +1,4 @@
 // src/middleware.ts
-import { defineMiddleware } from "astro:middleware";
-import { createClient }     from "@supabase/supabase-js";
 
 // ─── Konstanta ────────────────────────────────────────────────────────────────
 
