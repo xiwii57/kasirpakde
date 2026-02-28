@@ -10,15 +10,10 @@ const SUPABASE_ANON_KEY = import.meta.env.PUBLIC_SUPABASE_ANON_KEY as string;
 const TURNSTILE_SECRET  = import.meta.env.TURNSTILE_SECRET_KEY     as string;
 const IS_PROD           = import.meta.env.PROD as boolean;
 
-// ─── Normalkan ADMIN_EMAIL sekali saja (konsisten dengan middleware) ───────────
 const ADMIN_EMAIL_NORMALIZED = ADMIN_EMAIL.toLowerCase().trim();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Ambil IP nyata klien — logika identik dengan middleware.ts.
- * cf-connecting-ip paling terpercaya (diset Cloudflare, tidak bisa dipalsukan klien).
- */
 function getClientIp(request: Request): string {
     const cfIp = request.headers.get("cf-connecting-ip");
     if (cfIp) return cfIp.trim().slice(0, 45);
@@ -29,10 +24,6 @@ function getClientIp(request: Request): string {
     return request.headers.get("x-real-ip")?.trim().slice(0, 45) ?? "0.0.0.0";
 }
 
-/**
- * Bandingkan string secara constant-time — mencegah timing attack.
- * Identik dengan implementasi di middleware.ts.
- */
 function safeCompare(a: string, b: string): boolean {
     if (a.length !== b.length) return false;
     const enc    = new TextEncoder();
@@ -46,7 +37,20 @@ function safeCompare(a: string, b: string): boolean {
 }
 
 function cookieStr(name: string, value: string, maxAge: number): string {
-    const base = `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Strict`;
+    // ⚠️ SameSite=Lax (bukan Strict) — KRUSIAL untuk login berfungsi di production.
+    //
+    // Kenapa Lax dan bukan Strict?
+    // Setelah login sukses, server mengirim 302 redirect ke /dashboard.
+    // Browser melakukan GET /dashboard — ini adalah "cross-site top-level navigation".
+    // Dengan SameSite=Strict, cookie TIDAK dikirim pada navigasi ini → middleware
+    // anggap tidak ada session → redirect balik ke login → infinite loop.
+    //
+    // SameSite=Lax: cookie dikirim pada top-level GET navigation (aman untuk kasus ini),
+    // tapi TIDAK dikirim pada sub-resource requests dari domain lain (tetap aman dari CSRF).
+    //
+    // SameSite=Strict lebih ketat tapi menyebabkan UX rusak untuk redirect post-login.
+    // Referensi: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite
+    const base = `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax`;
     return IS_PROD ? `${base}; Secure` : base;
 }
 
@@ -64,12 +68,12 @@ function redirectTo(path: string): Response {
     });
 }
 
-// Delay acak — samakan response time sukses & gagal (anti-timing attack)
 function randomDelay(): Promise<void> {
     return new Promise((r) => setTimeout(r, 300 + Math.random() * 250));
 }
 
 // ─── Verifikasi Cloudflare Turnstile ──────────────────────────────────────────
+
 async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
     if (!TURNSTILE_SECRET) {
         if (!IS_PROD) return true; // skip di dev
@@ -100,17 +104,11 @@ async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
 }
 
 // ─── POST /api/auth/login ─────────────────────────────────────────────────────
-//
-// Catatan: rate limiting sudah ditangani sepenuhnya oleh middleware.ts
-// (checkRateLimit "login" + checkRateLimit "api"), sehingga tidak perlu
-// rate limiter duplikat di sini.
-//
+
 export const POST: APIRoute = async ({ request }) => {
     const ip = getClientIp(request);
 
     // 1. Validasi Content-Type
-    //    Middleware sudah cek untuk /api/* secara umum, tapi /api/auth/login
-    //    menerima form-data, bukan JSON — validasi eksplisit tetap diperlukan.
     const ct = request.headers.get("content-type") ?? "";
     if (!ct.includes("application/x-www-form-urlencoded") && !ct.includes("multipart/form-data")) {
         await randomDelay();
@@ -140,14 +138,14 @@ export const POST: APIRoute = async ({ request }) => {
         return redirectTo("/?error=invalid_credentials");
     }
 
-    // 4. Verifikasi Turnstile — sebelum menyentuh Supabase
+    // 4. Verifikasi Turnstile
     if (!tsToken || !(await verifyTurnstile(tsToken, ip))) {
         console.warn(`[Login] Turnstile gagal dari IP: ${ip}`);
         await randomDelay();
-        return redirectTo("/?error=invalid_credentials"); // tidak bocorkan alasan spesifik
+        return redirectTo("/?error=invalid_credentials");
     }
 
-    // 5. Buat Supabase client per-request agar tidak ada shared state antar request
+    // 5. Buat Supabase client per-request
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         auth: {
             autoRefreshToken:   false,
@@ -168,11 +166,9 @@ export const POST: APIRoute = async ({ request }) => {
         return redirectTo("/?error=invalid_credentials");
     }
 
-    // 7. Cek admin dengan constant-time compare (konsisten dengan middleware.ts)
-    //    Pesan error SAMA untuk semua kasus — cegah user enumeration.
+    // 7. Cek admin
     const userEmail = (data.user.email ?? "").toLowerCase().trim();
     if (!safeCompare(userEmail, ADMIN_EMAIL_NORMALIZED)) {
-        // Revoke session yang baru saja dibuat
         await createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
             auth: {
                 autoRefreshToken:   false,
@@ -186,29 +182,32 @@ export const POST: APIRoute = async ({ request }) => {
 
         await randomDelay();
         console.warn(`[Login] Bukan admin: ${userEmail} dari IP ${ip}`);
-        return redirectTo("/?error=invalid_credentials"); // JANGAN "unauthorized" — bocorkan info
+        return redirectTo("/?error=invalid_credentials");
     }
 
-    // 8. Sukses — set cookie
-    //    Reset rate limit ditangani oleh middleware.ts (resetLoginRateLimit) setelah
-    //    session tervalidasi di request berikutnya ke protected route.
+    // 8. Sukses — set cookie dengan SameSite=Lax
     const { access_token, refresh_token, expires_in } = data.session;
     console.info(`[Login] ✓ Admin login: ${userEmail} dari IP ${ip}`);
 
     return new Response(null, {
         status:  302,
         headers: new Headers([
-            ["Location", "/dashboard"],
+            ["Location",   "/dashboard"],
             ...SECURITY_HEADERS,
-            // Cookie attributes identik dengan clearSessionCookies() di middleware.ts:
-            // HttpOnly, SameSite=Strict, Secure (prod only)
             ["Set-Cookie", cookieStr("sb-access-token",  access_token,  expires_in)],
-                             ["Set-Cookie", cookieStr("sb-refresh-token", refresh_token, 60 * 60 * 24 * 7)], // 7 hari
+                             ["Set-Cookie", cookieStr("sb-refresh-token", refresh_token, 60 * 60 * 24 * 7)],
         ]),
     });
 };
 
-export const GET:    APIRoute = () => new Response("Method Not Allowed", { status: 405 });
+// ─── Method lainnya ───────────────────────────────────────────────────────────
+
+// GET redirect ke "/" — agar tidak 405 jika browser follow redirect sebagai GET
+export const GET: APIRoute = () => new Response(null, {
+    status:  302,
+    headers: { "Location": "/" },
+});
+
 export const PUT:    APIRoute = () => new Response("Method Not Allowed", { status: 405 });
 export const DELETE: APIRoute = () => new Response("Method Not Allowed", { status: 405 });
 export const PATCH:  APIRoute = () => new Response("Method Not Allowed", { status: 405 });

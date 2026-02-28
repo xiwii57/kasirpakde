@@ -8,7 +8,7 @@ const ADMIN_EMAIL           = import.meta.env.ADMIN_EMAIL               as strin
 const SUPABASE_URL          = import.meta.env.PUBLIC_SUPABASE_URL       as string;
 const SUPABASE_ANON_KEY     = import.meta.env.PUBLIC_SUPABASE_ANON_KEY  as string;
 const SUPABASE_SERVICE_ROLE = import.meta.env.SUPABASE_SERVICE_ROLE     as string;
-const IS_PROD               = import.meta.env.PROD as boolean;
+const IS_PROD               = import.meta.env.PROD                      as boolean;
 const CANONICAL_DOMAIN      = (import.meta.env.CANONICAL_DOMAIN as string)?.trim() ?? "";
 
 // ─── Domain Redirect ──────────────────────────────────────────────────────────
@@ -17,12 +17,13 @@ function redirectToCanonical(request: Request, url: URL): Response | null {
     if (!IS_PROD || !CANONICAL_DOMAIN) return null;
 
     const host = (request.headers.get("host") ?? url.hostname).split(":")[0].toLowerCase();
-
     if (host === CANONICAL_DOMAIN) return null;
 
     const canonical = new URL(url.pathname + url.search, `https://${CANONICAL_DOMAIN}`);
     return new Response(null, {
-        status: 301,
+        // 308 = Permanent Redirect — tidak mengubah HTTP method (POST tetap POST)
+        // 301 mengubah POST → GET, menyebabkan 405 di /api/auth/login
+        status: request.method === "GET" ? 301 : 308,
         headers: {
             "Location":      canonical.toString(),
                         "Cache-Control": "public, max-age=31536000, immutable",
@@ -30,7 +31,8 @@ function redirectToCanonical(request: Request, url: URL): Response | null {
     });
 }
 
-// Validasi env kritis saat startup — gagal cepat daripada error tak terduga
+// ─── Validasi env kritis saat startup ────────────────────────────────────────
+
 for (const [key, val] of Object.entries({
     ADMIN_EMAIL,
     PUBLIC_SUPABASE_URL:      SUPABASE_URL,
@@ -42,18 +44,14 @@ for (const [key, val] of Object.entries({
     }
 }
 
-// Pastikan SUPABASE_URL adalah HTTPS
 if (!SUPABASE_URL.startsWith("https://")) {
     throw new Error("[Middleware] PUBLIC_SUPABASE_URL harus menggunakan HTTPS.");
 }
 
-// Normalkan ADMIN_EMAIL sekali saja
 const ADMIN_EMAIL_NORMALIZED = ADMIN_EMAIL.toLowerCase().trim();
 
-// Route yang boleh diakses tanpa autentikasi (eksak match)
-const PUBLIC_ROUTES = new Set(["/", "/api/auth/login", "/api/auth/logout", "/api/auth/callback",]);
+const PUBLIC_ROUTES = new Set(["/", "/api/auth/login", "/api/auth/logout", "/api/auth/callback"]);
 
-// Prefix yang memerlukan autentikasi (prefix-match)
 const PROTECTED_PREFIXES = [
     "/dashboard",
 "/kasir",
@@ -63,19 +61,12 @@ const PROTECTED_PREFIXES = [
 "/api/produk",
 ];
 
-// Ekstensi aset statis — skip validasi session untuk performa
 const STATIC_EXTS = /\.(ico|png|jpg|jpeg|webp|svg|gif|woff2?|ttf|otf|css|js|map|txt|xml|json)$/i;
 
-// Batas ukuran body request — cegah DoS via large payload
 const MAX_BODY_BYTES = 512 * 1024; // 512 KB
 
-// Method yang diizinkan
 const ALLOWED_METHODS = new Set(["GET", "POST", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
 
-// Header Content-Type wajib hanya untuk POST dan PATCH yang membawa body data.
-// DELETE **tidak** dimasukkan karena secara semantik HTTP, DELETE menyampaikan
-// intent via URL (query params), bukan request body — memaksanya butuh Content-Type
-// hanya akan menyebabkan false-positive 415 pada client yang tidak kirim body.
 const REQUIRED_CONTENT_TYPE_METHODS = new Set(["POST", "PATCH"]);
 
 // ─── Nonce ────────────────────────────────────────────────────────────────────
@@ -178,7 +169,6 @@ function resetLoginRateLimit(ip: string): void {
     rateStore.delete(makeRateKey(ip, "login"));
 }
 
-// Cleanup entry expired setiap jam — cegah memory leak
 if (typeof setInterval !== "undefined") {
     setInterval(() => {
         const now = Date.now();
@@ -232,7 +222,11 @@ function jsonError(message: string, status: number): Response {
 }
 
 function clearSessionCookies(): string[] {
-    const base = `Path=/; Max-Age=0; HttpOnly; SameSite=Strict${IS_PROD ? "; Secure" : ""}`;
+    // ⚠️ PENTING: SameSite=Lax — HARUS sama persis dengan saat set di login.ts
+    // Browser mencocokkan path+sameSite+secure saat delete cookie.
+    // Jika pakai Strict di sini tapi Lax di login.ts → cookie tidak terhapus saat logout.
+    // SameSite=Lax diperlukan agar cookie terkirim setelah redirect POST→GET (308 → navigasi)
+    const base = `Path=/; Max-Age=0; HttpOnly; SameSite=Lax${IS_PROD ? "; Secure" : ""}`;
     return [
         `sb-access-token=; ${base}`,
         `sb-refresh-token=; ${base}`,
@@ -313,7 +307,6 @@ function applySecurityHeaders(
           "browsing-topics=()",
     ].join(", "));
 
-    // Hanya set Cache-Control jika halaman belum set sendiri
     if (!h.has("Cache-Control") || h.get("Cache-Control") === "") {
         h.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
     }
@@ -349,7 +342,12 @@ function applySecurityHeaders(
 }
 
 // ─── CSRF Protection ──────────────────────────────────────────────────────────
-
+//
+// Pelajaran dari projek referensi yang bekerja:
+// - API route: origin wajib ada dan harus match
+// - Halaman biasa: origin boleh tidak ada, jika ada harus match
+// - origin "null": izinkan via Host header fallback (browser form submit)
+//
 function checkOrigin(request: Request, url: URL): boolean {
     if (!REQUIRED_CONTENT_TYPE_METHODS.has(request.method)) return true;
 
@@ -362,7 +360,7 @@ function checkOrigin(request: Request, url: URL): boolean {
         ...(CANONICAL_DOMAIN ? [`https://${CANONICAL_DOMAIN}`] : []),
     ]);
 
-    // Origin ada dan bukan "null" — validasi normal
+    // Origin ada dan bukan string literal "null" — validasi normal
     if (origin && origin !== "null") {
         try {
             return allowedOrigins.has(new URL(origin).origin);
@@ -371,7 +369,19 @@ function checkOrigin(request: Request, url: URL): boolean {
         }
     }
 
-    // Referer ada — validasi dari referer
+    // origin === "null": browser mengirim ini untuk same-site form submit
+    // dalam kondisi tertentu (redirect chain, privacy mode, beberapa mobile browser).
+    // Validasi via Host header sebagai fallback yang aman.
+    if (origin === "null") {
+        const host          = request.headers.get("host") ?? "";
+        const expectedHosts = new Set([
+            url.host,
+            ...(CANONICAL_DOMAIN ? [CANONICAL_DOMAIN] : []),
+        ]);
+        return expectedHosts.has(host.split(":")[0]) || expectedHosts.has(host);
+    }
+
+    // Tidak ada origin — coba referer
     if (referer) {
         try {
             return allowedOrigins.has(new URL(referer).origin);
@@ -380,17 +390,7 @@ function checkOrigin(request: Request, url: URL): boolean {
         }
     }
 
-    // origin === "null" (form submit browser) — validasi dari Host header
-    // Browser mengirim origin:"null" untuk same-site form submit dalam kondisi tertentu
-    if (origin === "null") {
-        const host           = request.headers.get("host") ?? "";
-        const expectedHosts  = new Set([
-            url.host,
-            ...(CANONICAL_DOMAIN ? [CANONICAL_DOMAIN] : []),
-        ]);
-        return expectedHosts.has(host.split(":")[0]) || expectedHosts.has(host);
-    }
-
+    // Tidak ada origin maupun referer
     if (IS_PROD) {
         console.warn(`[Middleware] CSRF: tidak ada origin/referer valid di production`);
         return false;
@@ -415,13 +415,15 @@ function isSuspiciousRequest(request: Request, pathname: string): boolean {
 
     if (!ua && pathname.startsWith("/api/")) return true;
 
-    if (ua.toLowerCase().includes("sqlmap") ||
-        ua.toLowerCase().includes("nikto")  ||
-        ua.toLowerCase().includes("masscan")) {
+    if (
+        ua.toLowerCase().includes("sqlmap")  ||
+        ua.toLowerCase().includes("nikto")   ||
+        ua.toLowerCase().includes("masscan")
+    ) {
         return true;
-        }
+    }
 
-        return false;
+    return false;
 }
 
 // ─── Session Validator ────────────────────────────────────────────────────────
@@ -529,7 +531,6 @@ async function validateSession(
     }
 }
 
-// Cleanup session cache secara periodik
 if (typeof setInterval !== "undefined") {
     setInterval(() => {
         const now = Date.now();
@@ -590,7 +591,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
 
     // ── 5. CSRF check ─────────────────────────────────────────────────────────
-    // checkOrigin hanya aktif untuk POST dan PATCH (sesuai REQUIRED_CONTENT_TYPE_METHODS)
     if (!checkOrigin(request, url)) {
         console.warn(`[Middleware] CSRF check gagal — IP: ${ip}, path: ${pathname}, method: ${method}`);
         return applySecurityHeaders(
@@ -600,8 +600,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
 
     // ── 6. Content-Type validation ────────────────────────────────────────────
-    // Hanya POST dan PATCH yang wajib punya Content-Type.
-    // DELETE dikecualikan karena menyampaikan intent via URL params, bukan body.
     if (REQUIRED_CONTENT_TYPE_METHODS.has(method) && isApiRoute) {
         const ct = request.headers.get("content-type") ?? "";
         const validCT = ct.includes("application/json") ||
@@ -718,7 +716,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
         if (session.newAccessToken) {
             const expiresIn  = session.newExpiresIn ?? 3600;
-            const cookieOpts = `Path=/; HttpOnly; SameSite=Strict; Max-Age=${expiresIn}${IS_PROD ? "; Secure" : ""}`;
+            // SameSite=Lax — sama dengan login.ts agar cookie terkirim setelah redirect
+            const cookieOpts = `Path=/; HttpOnly; SameSite=Lax; Max-Age=${expiresIn}${IS_PROD ? "; Secure" : ""}`;
             const headers    = new Headers(response.headers);
             headers.append("Set-Cookie", `sb-access-token=${session.newAccessToken}; ${cookieOpts}`);
             return applySecurityHeaders(
