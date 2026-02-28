@@ -50,7 +50,19 @@ export interface TopSeller {
 }
 
 export const KATEGORI_LIST = [
-    "Minuman", "Snack", "Rokok", "Sembako", "Lainnya"
+    "Minuman",
+"Makanan",
+"Snack",
+"Rokok",
+"Sembako",
+"Bumbu & Masak",
+"Roti & Kue",
+"Es Krim & Frozen",
+"Kebersihan Diri",
+"Kebersihan Rumah",
+"Obat & Kesehatan",
+"Alat Tulis",
+"Lainnya",
 ] as const;
 
 export type Kategori = typeof KATEGORI_LIST[number];
