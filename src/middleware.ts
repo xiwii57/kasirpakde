@@ -360,7 +360,14 @@ function buildCSP(nonce: string): string {
 }
 
 function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boolean): Response {
+    // ⚠️ KRITIS: new Headers(response.headers) mendeduplikasi Set-Cookie!
+    // login.ts mengirim 2x Set-Cookie (sb-access-token + sb-refresh-token).
+    // Headers constructor menimpa cookie pertama dengan yang kedua — satu hilang.
+    // Solusi: simpan semua cookie dulu via getSetCookie(), hapus dari headers,
+    // lalu append ulang satu per satu setelah semua security headers di-set.
+    const existingCookies: string[] = (response.headers as any).getSetCookie?.() ?? [];
     const h = new Headers(response.headers);
+    h.delete('Set-Cookie'); // hapus yang terdeduplikasi
 
     h.set("Content-Security-Policy",   buildCSP(nonce));
     h.set("X-Frame-Options",           "DENY");
@@ -397,6 +404,9 @@ function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boo
         h.set("X-Content-Type-Options",       "nosniff");
         h.set("Cross-Origin-Resource-Policy", "same-site");
     }
+
+    // Append ulang semua Set-Cookie yang sudah disimpan — preserves multiple cookies
+    existingCookies.forEach((c: string) => h.append('Set-Cookie', c));
 
     return new Response(response.body, {
         status:     response.status,
