@@ -454,6 +454,7 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
 
 function buildCSP(nonce: string): string {
     const supabaseOrigin = new URL(SUPABASE_URL).origin;
+
     if (!IS_PROD) {
         return [
             "default-src 'self'",
@@ -470,20 +471,21 @@ function buildCSP(nonce: string): string {
             "worker-src blob:",
         ].join("; ");
     }
+
     return [
-        "default-src 'none'",
-        `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' https://challenges.cloudflare.com`,
+        "default-src 'self'",
+        `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' 'wasm-unsafe-eval' https://challenges.cloudflare.com`,
         `style-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://fonts.googleapis.com`,
         "font-src 'self' https://fonts.gstatic.com",
         "frame-src https://challenges.cloudflare.com",
         `connect-src 'self' ${supabaseOrigin} wss://*.supabase.co https://challenges.cloudflare.com`,
         `img-src 'self' data: blob: ${supabaseOrigin} https://*.supabase.co`,
+
         "form-action 'self'",
         "frame-ancestors 'none'",
         "object-src 'none'",
         "base-uri 'self'",
         "upgrade-insecure-requests",
-        "manifest-src 'none'",
         "worker-src blob:",
         "media-src 'none'",
     ].join("; ");
