@@ -11,7 +11,6 @@ const SUPABASE_URL          = import.meta.env.PUBLIC_SUPABASE_URL       as strin
 const SUPABASE_ANON_KEY     = import.meta.env.PUBLIC_SUPABASE_ANON_KEY  as string;
 const SUPABASE_SERVICE_ROLE = import.meta.env.SUPABASE_SERVICE_ROLE     as string;
 const IS_PROD               = import.meta.env.PROD                      as boolean;
-const CANONICAL_DOMAIN      = (import.meta.env.CANONICAL_DOMAIN as string)?.trim() ?? "";
 
 // ── Validasi env wajib saat startup ──────────────────────────────
 for (const [key, val] of Object.entries({
@@ -33,6 +32,7 @@ const ADMIN_EMAIL_NORMALIZED = ADMIN_EMAIL.toLowerCase().trim();
 
 // ── Cookie options — wajib konsisten antara set dan delete ───────
 // Browser mencocokkan path+secure+sameSite saat menghapus cookie.
+// Jika diubah di sini, WAJIB diubah juga di login.ts dan sebaliknya.
 const COOKIE_OPTIONS = {
     path:     "/",
     httpOnly: true,
@@ -56,10 +56,10 @@ const PROTECTED_PREFIXES = [
 // Browser bisa kirim Origin: null untuk ini — tangani secara khusus
 const AUTH_FORM_ROUTES = new Set(["/api/auth/login", "/api/auth/callback"]);
 
-const STATIC_EXTS     = /\.(ico|png|jpg|jpeg|webp|svg|gif|woff2?|ttf|otf|css|js|map|txt|xml|json)$/i;
-const MAX_BODY_BYTES  = 512 * 1024;
-const ALLOWED_METHODS = new Set(["GET", "POST", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
-const REQUIRED_CT_METHODS = new Set(["POST", "PATCH"]);
+const STATIC_EXTS         = /\.(ico|png|jpg|jpeg|webp|svg|gif|woff2?|ttf|otf|css|js|map|txt|xml|json)$/i;
+const MAX_BODY_BYTES       = 512 * 1024;
+const ALLOWED_METHODS      = new Set(["GET", "POST", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
+const REQUIRED_CT_METHODS  = new Set(["POST", "PATCH"]);
 
 // ══════════════════════════════════════════════════════════════════
 // NONCE
@@ -76,6 +76,9 @@ function generateNonce(): string {
 
 // ══════════════════════════════════════════════════════════════════
 // RATE LIMITER (In-Memory)
+// Catatan: in-memory store tidak persist antar serverless invocation.
+// Untuk rate limit yang lebih ketat di production, pertimbangkan
+// migrasi ke Upstash Redis atau Supabase RPC (seperti projek raehan).
 // ══════════════════════════════════════════════════════════════════
 
 interface RateRecord {
@@ -214,9 +217,9 @@ function isValidJwtStructure(token: string): boolean {
         const padded  = parts[1].replace(/-/g, "+").replace(/_/g, "/");
         const decoded = atob(padded);
         const payload = JSON.parse(decoded) as Record<string, unknown>;
-        if (typeof payload.exp !== "number")                            return false;
-        if (payload.exp * 1000 < Date.now())                           return false;
-        if (typeof payload.sub !== "string" || !payload.sub.trim())    return false;
+        if (typeof payload.exp !== "number")                         return false;
+        if (payload.exp * 1000 < Date.now())                        return false;
+        if (typeof payload.sub !== "string" || !payload.sub.trim()) return false;
         return true;
     } catch {
         return false;
@@ -314,8 +317,8 @@ export function invalidateSessionCache(accessToken: string): void {
 }
 
 async function validateSession(accessToken: string, refreshToken: string): Promise<SessionResult> {
-    if (!accessToken || !refreshToken)      return { valid: false, isAdmin: false };
-    if (!isValidJwtStructure(accessToken))  return { valid: false, isAdmin: false };
+    if (!accessToken || !refreshToken)     return { valid: false, isAdmin: false };
+    if (!isValidJwtStructure(accessToken)) return { valid: false, isAdmin: false };
 
     const cacheKey = getSessionCacheKey(accessToken);
     const cached   = sessionCache.get(cacheKey);
@@ -408,7 +411,6 @@ function buildCSP(nonce: string): string {
 // FIX UTAMA: Modifikasi response.headers langsung — JANGAN buat
 // Response baru. Cara ini menjamin Set-Cookie dari login.ts tidak
 // pernah hilang karena tidak ada proses copy headers manual.
-// Ini adalah pola yang sama dengan projek raehan yang berfungsi.
 // ══════════════════════════════════════════════════════════════════
 
 function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boolean): Response {
@@ -420,10 +422,8 @@ function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boo
     h.set("X-XSS-Protection",        "0");
     h.set("X-DNS-Prefetch-Control",  "off");
 
-    // FIX: "no-referrer" menyebabkan browser kirim Origin: null saat
-    // form submit → CSRF check gagal → cookie tidak pernah di-set.
     // "strict-origin-when-cross-origin" mengirim origin pada same-origin
-    // POST sehingga form login berfungsi. Ini juga yang dipakai raehan.
+    // POST sehingga form login berfungsi dan CSRF check tidak gagal.
     h.set("Referrer-Policy", "strict-origin-when-cross-origin");
 
     h.set("Permissions-Policy", [
@@ -466,26 +466,20 @@ function checkOrigin(request: Request, url: URL): boolean {
     const referer = request.headers.get("referer");
     const isApi   = url.pathname.startsWith("/api/");
 
-    const allowedOrigins = new Set([
-        url.origin,
-        ...(CANONICAL_DOMAIN ? [`https://${CANONICAL_DOMAIN}`] : []),
-    ]);
+    const allowedOrigins = new Set([url.origin]);
 
     if (isApi) {
         // AUTH_FORM_ROUTES dipanggil dari <form> HTML biasa.
-        // Browser bisa kirim Origin: null — validasi via Host header sebagai gantinya.
+        // Dengan Referrer-Policy "strict-origin-when-cross-origin" seharusnya
+        // origin sudah terisi, tapi tetap handle null sebagai fallback.
         const isFormRoute = AUTH_FORM_ROUTES.has(url.pathname);
 
         if (!origin || origin === "null") {
             if (isFormRoute) {
+                // Fallback: validasi via Host header
                 const host = request.headers.get("host") ?? "";
-                const expectedHosts = new Set([
-                    url.host,
-                    ...(CANONICAL_DOMAIN ? [CANONICAL_DOMAIN] : []),
-                ]);
-                return expectedHosts.has(host.split(":")[0]) || expectedHosts.has(host);
+                return host.split(":")[0] === url.hostname || host === url.host;
             }
-            // API non-form (fetch/XHR): origin wajib ada
             console.warn(`[Middleware] CSRF: origin tidak ada untuk ${url.pathname}`);
             return false;
         }
@@ -521,7 +515,7 @@ function isSuspiciousRequest(request: Request, pathname: string): boolean {
     }
     if (!ua && pathname.startsWith("/api/"))                   return true;
     const badUa = ["sqlmap", "nikto", "masscan", "zgrab", "nuclei"];
-    if (badUa.some((b) => ua.toLowerCase().includes(b)))      return true;
+    if (badUa.some((b) => ua.toLowerCase().includes(b)))       return true;
     return false;
 }
 
@@ -543,16 +537,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
     if (isStaticAsset(pathname)) return next();
 
     // ── 2. Canonical domain redirect ─────────────────────────────
-    if (IS_PROD && CANONICAL_DOMAIN) {
-        const host = (request.headers.get("host") ?? url.hostname).split(":")[0].toLowerCase();
-        if (host !== CANONICAL_DOMAIN) {
-            const canonical = new URL(url.pathname + url.search, `https://${CANONICAL_DOMAIN}`);
-            return new Response(null, {
-                status:  method === "GET" ? 301 : 308,
-                headers: { "Location": canonical.toString(), "Cache-Control": "public, max-age=31536000, immutable" },
-            });
-        }
-    }
+    // Ditangani oleh vercel.json di root project — tidak perlu di sini.
+    // Memisahkan redirect ke vercel.json memungkinkan middleware tetap
+    // jalan di Node.js runtime tanpa batasan Edge Runtime.
 
     // ── 3. Deteksi request mencurigakan ───────────────────────────
     if (isSuspiciousRequest(request, pathname)) {

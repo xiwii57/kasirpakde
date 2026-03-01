@@ -1,0 +1,15 @@
+{
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "karsip.my.id"
+        }
+      ],
+      "destination": "https://www.karsip.my.id/:path*",
+      "permanent": true
+    }
+  ]
+}
