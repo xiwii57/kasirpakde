@@ -1,0 +1,249 @@
+---
+// src/pages/401.astro  ← duplikat untuk 429.astro, 503.astro, dst
+// Atau bisa dijadikan komponen reusable ErrorPage.astro
+
+import Layoutc from "../layouts/Layoutc.astro";
+
+// Konfigurasi per error code — sesuaikan sesuai kebutuhan
+const errorConfig: Record<string, { title: string; subtitle: string; hint: string; icon: string; color: string }> = {
+  "401": {
+    title: "Sesi Kamu Habis",
+    subtitle: "Kamu perlu login ulang untuk melanjutkan. Sesi otomatis habis demi keamanan.",
+    hint: "Silakan login kembali dengan akun kasir kamu.",
+    icon: "user",
+    color: "#d97706",
+  },
+  "429": {
+    title: "Terlalu Banyak Request",
+    subtitle: "Kamu mengirim terlalu banyak permintaan dalam waktu singkat. Tunggu sebentar.",
+    hint: "Tunggu beberapa detik lalu coba lagi.",
+    icon: "zap",
+    color: "#7c3aed",
+  },
+  "503": {
+    title: "Server Sedang Maintenance",
+    subtitle: "Sistem sedang dalam proses pemeliharaan. Kami akan kembali sebentar lagi.",
+    hint: "Coba kembali dalam beberapa menit.",
+    icon: "tool",
+    color: "#0369a1",
+  },
+};
+
+// Ambil dari query param ?code=401 atau default ke 401
+const code = (Astro.url.searchParams.get("code") ?? "401") as string;
+const cfg  = errorConfig[code] ?? errorConfig["401"];
+---
+
+<Layoutc title={`${code} — ${cfg.title}`}>
+  <div class="err-wrap">
+
+    <div class="err-blob" aria-hidden="true"></div>
+
+    <div class="err-content">
+
+      <!-- Icon -->
+      <div class="err-icon-box" style={`--ec: ${cfg.color}`}>
+        {cfg.icon === "user" && (
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+        )}
+        {cfg.icon === "zap" && (
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+        )}
+        {cfg.icon === "tool" && (
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+          </svg>
+        )}
+      </div>
+
+      <!-- Code + Title -->
+      <div class="err-hero">
+        <span class="err-code-num" style={`--ec: ${cfg.color}`}>{code}</span>
+        <h1 class="err-title">{cfg.title}</h1>
+      </div>
+
+      <!-- Info card -->
+      <div class="err-card">
+        <p class="err-desc">{cfg.subtitle}</p>
+        <div class="err-hint">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          {cfg.hint}
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="err-actions">
+        <a href="/" class="err-btn primary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          Login Ulang
+        </a>
+        <button onclick="history.back()" class="err-btn secondary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          Kembali
+        </button>
+      </div>
+
+    </div>
+  </div>
+</Layoutc>
+
+<style>
+  .err-wrap {
+    position: relative;
+    min-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  /* Soft blob background */
+  .err-blob {
+    position: absolute;
+    width: 480px; height: 480px;
+    background: radial-gradient(circle, rgba(200,75,31,.06) 0%, transparent 70%);
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    animation: blobPulse 5s ease-in-out infinite;
+  }
+  @keyframes blobPulse {
+    0%,100% { transform: translate(-50%,-50%) scale(1); }
+    50%      { transform: translate(-50%,-50%) scale(1.15); }
+  }
+
+  /* Content */
+  .err-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    max-width: 360px;
+    width: 100%;
+    text-align: center;
+    animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Icon */
+  .err-icon-box {
+    width: 72px; height: 72px;
+    background: color-mix(in srgb, var(--ec) 10%, white);
+    border: 2px solid color-mix(in srgb, var(--ec) 20%, white);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ec);
+    box-shadow: 0 4px 20px color-mix(in srgb, var(--ec) 20%, transparent);
+    animation: iconBounce 0.6s 0.1s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  @keyframes iconBounce {
+    from { opacity: 0; transform: scale(0.5); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+
+  /* Hero */
+  .err-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    animation: fadeUp 0.5s 0.08s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .err-code-num {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: clamp(3rem, 12vw, 4.5rem);
+    line-height: 1;
+    color: var(--ec);
+    letter-spacing: -0.03em;
+  }
+  .err-title {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 1.25rem;
+    color: var(--dark);
+    margin: 0;
+    line-height: 1.2;
+  }
+
+  /* Card */
+  .err-card {
+    width: 100%;
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 2px 16px rgba(17,17,16,.06);
+    animation: fadeUp 0.5s 0.12s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .err-desc {
+    font-size: 0.77rem;
+    color: var(--sub);
+    line-height: 1.6;
+    margin: 0;
+  }
+  .err-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    background: var(--bg);
+    border-radius: 6px;
+    padding: 9px 11px;
+    font-size: 0.71rem;
+    color: var(--muted);
+    text-align: left;
+    border: 1px solid var(--border);
+  }
+  .err-hint svg { flex-shrink: 0; margin-top: 1px; color: var(--accent); }
+
+  /* Actions */
+  .err-actions {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    animation: fadeUp 0.5s 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .err-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 16px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    cursor: pointer;
+    text-decoration: none;
+    border: none;
+    transition: all 0.15s;
+  }
+  .err-btn.primary  { background: var(--dark); color: #fff; }
+  .err-btn.primary:hover { background: var(--accent); }
+  .err-btn.secondary {
+    background: transparent;
+    color: var(--dark);
+    border: 2px solid var(--border);
+  }
+  .err-btn.secondary:hover { border-color: var(--accent); color: var(--accent); }
+</style>

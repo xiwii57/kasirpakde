@@ -1,263 +1,404 @@
-    /* ── Variabel warna ─────────────────────────────────── */
-    :root {
-        --brand:        #c84b1f;
-        --brand-dark:   #a33a14;
-        --brand-light:  rgba(200,75,31,0.12);
-        --ink:          #1a1410;
-        --ink-soft:     #4a3f35;
-        --paper:        #f5f0e8;
-        --card:         #faf8f4;
-        --border:       rgba(26,20,16,0.14);
-        --border-focus: #c84b1f;
-        --muted:        #9a8f84;
-        --success:      #2a7a4b;
-    }
+/* ── Global box-sizing ──────────────────────────────── */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
 
-    /* ── Latar belakang ─────────────────────────────────── */
-    .auth-bg {
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 1.5rem;
-        background-color: var(--paper);
-        background-image:
-        radial-gradient(ellipse 70% 60% at 50% 40%, rgba(200,146,42,0.09) 0%, transparent 70%),
-        radial-gradient(circle, rgba(26,20,16,0.055) 1px, transparent 1px);
-        background-size: 100% 100%, 24px 24px;
-    }
+/* ── Variabel ───────────────────────────────────────── */
+:root {
+    --bg:           #F5F4F0;
+    --surface:      #FFFFFF;
+    --border:       #E4E2DC;
+    --border-focus: #1A1A1A;
+    --text:         #1A1A1A;
+    --text-2:       #6B6860;
+    --text-3:       #A09D97;
+    --accent:       #1A1A1A;
+    --accent-fg:    #FFFFFF;
+    --danger:       #C0392B;
+    --danger-bg:    #FDF2F1;
+    --success:      #1A7A4A;
+    --radius-sm:    8px;
+    --ease:         cubic-bezier(.4,0,.2,1);
+}
 
-    /* ── Ornamen sudut ──────────────────────────────────── */
-    .corner {
-        position: fixed;
-        width: 5rem; height: 5rem;
-        pointer-events: none; z-index: 0;
-        opacity: 0.22;
-    }
-    .corner-tl { top: 0; left: 0; border-top: 2px solid var(--brand); border-left: 2px solid var(--brand); }
-    .corner-br { bottom: 0; right: 0; border-bottom: 2px solid var(--brand); border-right: 2px solid var(--brand); }
+/* ── Animasi ────────────────────────────────────────── */
+@keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes shakeIn {
+    0%   { transform: translateX(-6px); opacity: 0; }
+    40%  { transform: translateX(4px); }
+    70%  { transform: translateX(-2px); }
+    100% { transform: translateX(0); opacity: 1; }
+}
+@keyframes drift1 {
+    from { transform: translate(0,0) scale(1); }
+    to   { transform: translate(30px,40px) scale(1.08); }
+}
+@keyframes drift2 {
+    from { transform: translate(0,0) scale(1); }
+    to   { transform: translate(-20px,-30px) scale(1.05); }
+}
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(26,122,74,.4); }
+    50%       { box-shadow: 0 0 0 5px rgba(26,122,74,0); }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Animasi masuk kartu ────────────────────────────── */
-    .card-enter {
-        animation: cardEnter 0.55s cubic-bezier(0.16,1,0.3,1) both;
-    }
-    @keyframes cardEnter {
-        from { opacity:0; transform: translateY(28px) scale(0.96); }
-        to   { opacity:1; transform: translateY(0)    scale(1); }
-    }
+/* ── Background ─────────────────────────────────────── */
+.auth-bg {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background: var(--bg);
+    position: relative;
+    overflow: hidden;
+}
 
-    /* ── Kartu ──────────────────────────────────────────── */
-    .card {
-        position: relative; z-index: 10;
-        width: 100%; max-width: 420px;
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        overflow: hidden;
-        box-shadow:
-        0 0 0 1px rgba(255,255,255,0.55) inset,
-        0 2px 0 rgba(200,75,31,0.45),
-        0 12px 40px rgba(26,20,16,0.1),
-        0 40px 100px rgba(26,20,16,0.06);
-    }
+.bg-layer {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+}
 
-    /* ── Stripe dekoratif ───────────────────────────────── */
-    .stripe {
-        height: 3.5px;
-        background: repeating-linear-gradient(
-            90deg,
-            var(--brand)      0px,  var(--brand)      16px,
-                                              #c8922a           16px, #c8922a            20px,
-                                              var(--brand)      20px
-        );
-    }
-
-    /* ── Body kartu ─────────────────────────────────────── */
-    .card-body { padding: 2rem 2rem 1.75rem; }
-
-    /* ── Brand header ───────────────────────────────────── */
-    .brand-header {
-        display: flex; align-items: center; gap: 0.875rem;
-        padding-bottom: 1.5rem;
-        margin-bottom: 1.75rem;
-        border-bottom: 1px dashed var(--border);
-        position: relative;
-    }
-    .brand-logo {
-        width: 2.75rem; height: 2.75rem;
-        background: var(--ink);
-        border-radius: 5px;
-        display: flex; align-items: center; justify-content: center;
-        flex-shrink: 0;
-        box-shadow: 0 2px 8px rgba(26,20,16,0.25);
-    }
-    .brand-name {
-        font-family: 'DM Serif Display', serif;
-        font-size: 1.3rem;
-        color: var(--ink);
-        line-height: 1.2;
-        letter-spacing: -0.01em;
-    }
-    .brand-sub {
-        font-size: 0.6rem;
-        font-weight: 700;
-        color: var(--muted);
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        margin-top: 0.2rem;
-    }
-    .brand-date {
-        position: absolute; right: 0; top: 0;
-        font-size: 0.62rem;
-        color: var(--muted);
-        letter-spacing: 0.04em;
-    }
-
-    /* ── Alert error ─────────────────────────────────────── */
-    .error-alert {
-        display: flex; align-items: flex-start; gap: 0.625rem;
-        background: #fff5f2;
-        border: 1px solid rgba(200,75,31,0.15);
-        border-left: 3px solid var(--brand);
-        border-radius: 4px;
-        padding: 0.75rem 0.875rem;
-        margin-bottom: 1.25rem;
-        font-size: 0.8rem;
-        color: var(--brand-dark);
-        font-weight: 500;
-        animation: shake 0.38s ease;
-    }
-    @keyframes shake {
-        0%,100% { transform: translateX(0); }
-        20%      { transform: translateX(-5px); }
-        40%      { transform: translateX(5px); }
-        60%      { transform: translateX(-3px); }
-        80%      { transform: translateX(3px); }
-    }
-
-    /* ── Label field ────────────────────────────────────── */
-    .field-label {
-        display: block;
-        font-size: 0.69rem;
-        font-weight: 700;
-        color: var(--ink-soft);
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        margin-bottom: 0.4rem;
-    }
-
-    /* ── Input wrapper ──────────────────────────────────── */
-    .input-wrap { position: relative; }
-
-    .field-input {
-        width: 100%;
-        padding: 0.7rem 0.875rem 0.7rem 2.375rem;
-        background: rgba(245,240,232,0.7);
-        border: 1.5px solid var(--border);
-        border-radius: 4px;
-        font-size: 0.875rem;
-        color: var(--ink);
-        font-family: inherit;
-        outline: none;
-        transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
-        appearance: none;
-        -webkit-appearance: none;
-    }
-    .field-input::placeholder { color: #bfb5aa; }
-    .field-input:focus {
-        border-color: var(--border-focus);
-        background: white;
-        box-shadow: 0 0 0 3.5px var(--brand-light);
-    }
-    /* State invalid setelah submit */
-    .field-input.is-invalid {
-        border-color: var(--brand);
-        background: #fff8f6;
-    }
-
-    /* Icon dalam input */
-    .input-icon {
-        position: absolute;
-        left: 0.75rem;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 14px; height: 14px;
-        color: #c5bbb4;
-        pointer-events: none;
-        transition: color 0.15s;
-    }
-    .field-input:focus + .input-icon,
-.field-input:focus ~ .input-icon { color: var(--brand); }
-
-/* Toggle password */
-.pw-toggle {
+.bg-grid {
     position: absolute;
-    right: 0.75rem;
+    inset: 0;
+    background-image:
+    linear-gradient(rgba(26,26,26,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(26,26,26,.035) 1px, transparent 1px);
+    background-size: 40px 40px;
+}
+
+.bg-circle {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: .45;
+}
+
+.bg-circle-1 {
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, #D4EDD4 0%, transparent 70%);
+    top: -120px; right: -80px;
+    animation: drift1 18s ease-in-out infinite alternate;
+}
+
+.bg-circle-2 {
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, #E8E0D4 0%, transparent 70%);
+    bottom: -100px; left: -60px;
+    animation: drift2 22s ease-in-out infinite alternate;
+}
+
+/* ── Wrapper ─────────────────────────────────────────── */
+.wrapper {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+/* ── Page header ─────────────────────────────────────── */
+.page-header {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: 0 .25rem;
+    opacity: 0;
+    transform: translateY(-12px);
+    animation: fadeUp .5s var(--ease) .1s forwards;
+}
+
+.logo-mark {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+}
+
+.page-title {
+    font-size: .875rem;
+    font-weight: 600;
+    letter-spacing: -.01em;
+    color: var(--text);
+}
+
+.page-subtitle {
+    font-size: .75rem;
+    color: var(--text-3);
+    font-weight: 400;
+    margin-top: 1px;
+}
+
+/* ── Card ────────────────────────────────────────────── */
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.06);
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(16px);
+    animation: fadeUp .55s var(--ease) .2s forwards;
+    max-width: 420px;
+    width: 100%;
+    position: relative;
+    z-index: 10;
+    min-width: 0;
+}
+
+.card-top {
+    padding: 2rem 2rem 1.75rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.card-label {
+    font-size: .6875rem;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    font-family: 'DM Mono', monospace;
+    margin-bottom: 1rem;
+}
+
+.card-heading {
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -.03em;
+    color: var(--text);
+    line-height: 1.2;
+    font-family: 'DM Sans', sans-serif;
+}
+
+.card-desc {
+    font-size: .8125rem;
+    color: var(--text-2);
+    margin-top: .375rem;
+    line-height: 1.5;
+}
+
+.card-body {
+    padding: 1.75rem 2rem 2rem;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* ── Error alert ─────────────────────────────────────── */
+.error-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: .625rem;
+    background: var(--danger-bg);
+    border: 1px solid #F5C6C2;
+    border-radius: var(--radius-sm);
+    padding: .75rem 1rem;
+    margin-bottom: 1.25rem;
+    font-size: .8125rem;
+    color: var(--danger);
+    line-height: 1.4;
+    font-weight: 400;
+    animation: shakeIn .4s var(--ease);
+}
+
+.error-alert svg { flex-shrink: 0; margin-top: 1px; }
+
+/* ── Form ────────────────────────────────────────────── */
+.form-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.form-fields > div {
+    min-width: 0;
+    width: 100%;
+}
+
+/* ── Label ───────────────────────────────────────────── */
+.field-label {
+    display: block;
+    font-size: .75rem;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    margin-bottom: .5rem;
+}
+
+/* ── Input wrap ──────────────────────────────────────── */
+.input-wrap {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+}
+
+/* ── Icon ────────────────────────────────────────────── */
+.input-icon {
+    position: absolute;
+    left: .9rem;
     top: 50%;
     transform: translateY(-50%);
-    background: none; border: none; padding: 0;
-    color: #c5bbb4;
-    cursor: pointer;
-    transition: color 0.15s;
-    display: flex; align-items: center;
-    line-height: 1;
+    width: 15px;
+    height: 15px;
+    color: #9C9890;
+    pointer-events: none;
+    transition: color .2s var(--ease);
+    z-index: 2;
 }
-.pw-toggle:hover,
-.pw-toggle:focus-visible { color: var(--brand); outline: none; }
 
-/* Teks error per field */
+.input-wrap:focus-within .input-icon {
+    color: #555250;
+}
+
+/* ── Input ───────────────────────────────────────────── */
+.field-input {
+    width: 100%;
+    box-sizing: border-box;
+    height: 46px;
+    padding: 0 1rem 0 2.75rem;
+    font-family: 'DM Sans', sans-serif;
+    font-size: .875rem;
+    color: var(--text);
+    background: #F7F6F3;
+    border: 1.5px solid #D9D7D1;
+    border-radius: var(--radius-sm);
+    outline: none;
+    transition: border-color .18s var(--ease),
+    box-shadow .18s var(--ease),
+    background .18s var(--ease);
+    appearance: none;
+    -webkit-appearance: none;
+    box-shadow: 0 1px 2px rgba(0,0,0,.05), inset 0 1px 2px rgba(0,0,0,.04);
+    /* penting: jangan overflow keluar card */
+    max-width: 100%;
+    min-width: 0;
+    display: block;
+}
+
+.field-input::placeholder {
+    color: #C0BDB7;
+}
+
+.field-input:hover {
+    border-color: #B8B4AE;
+    background: #F5F4F0;
+}
+
+.field-input:focus {
+    border-color: #1A1A1A;
+    background: #FFFFFF;
+    box-shadow: 0 0 0 3px rgba(26,26,26,.09),
+    0 1px 2px rgba(0,0,0,.05);
+}
+
+.field-input.is-invalid {
+    border-color: var(--danger);
+    background: #FEF4F3;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04), inset 0 1px 2px rgba(192,57,43,.06);
+}
+
+.field-input.is-invalid:focus {
+    box-shadow: 0 0 0 3px rgba(192,57,43,.11),
+    0 1px 2px rgba(0,0,0,.04);
+}
+
+/* ── Password toggle ─────────────────────────────────── */
+#password {
+padding-right: 3rem;
+}
+
+.pw-toggle {
+    position: absolute;
+    right: .625rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #A09D97;
+    padding: .35rem;
+    border-radius: 5px;
+    display: grid;
+    place-items: center;
+    transition: color .18s var(--ease), background .18s var(--ease);
+    z-index: 2;
+}
+
+.pw-toggle:hover {
+    color: var(--text-2);
+    background: rgba(0,0,0,.05);
+}
+
+.pw-toggle:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 1px;
+}
+
+/* ── Field error ─────────────────────────────────────── */
 .field-error {
     display: none;
-    font-size: 0.7rem;
-    color: var(--brand);
-    margin-top: 0.3rem;
-    font-weight: 500;
+    font-size: .75rem;
+    color: var(--danger);
+    margin-top: .35rem;
+    font-weight: 400;
+    padding-left: .125rem;
 }
+
 .field-error.show { display: block; }
 
-/* ── Turnstile wrapper ──────────────────────────────── */
+/* ── Turnstile ───────────────────────────────────────── */
 .turnstile-wrap {
     display: flex;
     justify-content: center;
-    padding: 0.25rem 0 0.1rem;
+    padding: .25rem 0;
 }
 
-/* ── Tombol submit ──────────────────────────────────── */
+/* ── Submit button ───────────────────────────────────── */
 .submit-btn {
     position: relative;
     width: 100%;
-    padding: 0.8rem 1rem;
-    background: var(--ink);
-    color: white;
-    font-size: 0.875rem;
-    font-weight: 600;
-    font-family: inherit;
-    letter-spacing: 0.03em;
-    border: 1.5px solid var(--ink);
-    border-radius: 4px;
+    height: 44px;
+    padding: 0 1rem;
+    background: var(--accent);
+    color: var(--accent-fg);
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: 'DM Sans', sans-serif;
+    font-size: .875rem;
+    font-weight: 500;
+    letter-spacing: -.01em;
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.08s;
     overflow: hidden;
-}
-.submit-btn:hover:not(:disabled) {
-    background: var(--brand);
-    border-color: var(--brand-dark);
-    box-shadow: 0 4px 18px rgba(200,75,31,0.38);
-}
-.submit-btn:active:not(:disabled) { transform: translateY(1px); }
-.submit-btn:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-}
-.submit-btn:focus-visible {
-    outline: 2.5px solid var(--brand);
-    outline-offset: 2px;
+    transition: opacity .18s var(--ease), transform .18s var(--ease);
+    box-sizing: border-box;
 }
 
+.submit-btn:hover:not(:disabled) { opacity: .88; }
+.submit-btn:active:not(:disabled) { transform: scale(.985); }
+.submit-btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+.submit-btn:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+
 .btn-inner {
-    display: flex; align-items: center; justify-content: center; gap: 0.5rem;
-    transition: opacity 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    transition: opacity .15s;
 }
+
 .btn-loading .btn-inner { opacity: 0; }
 
 /* Spinner */
@@ -267,58 +408,77 @@
     top: 50%; left: 50%;
     transform: translate(-50%, -50%);
     width: 18px; height: 18px;
-    border: 2.5px solid rgba(255,255,255,0.25);
-    border-top-color: white;
+    border: 2px solid rgba(255,255,255,.3);
+    border-top-color: #fff;
     border-radius: 50%;
-    animation: spin 0.65s linear infinite;
+    animation: spin .7s linear infinite;
 }
-@keyframes spin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+
 .btn-loading .spinner { display: block; }
 
-/* ── Footer kartu ───────────────────────────────────── */
+/* ── Card footer ─────────────────────────────────────── */
 .card-footer {
-    padding: 0.75rem 2rem;
-    background: rgba(245,240,232,0.6);
-    border-top: 1px solid rgba(26,20,16,0.07);
-    display: flex; align-items: center; justify-content: center;
-    gap: 0.625rem;
-}
-.dot-pulse {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--brand);
-    animation: pulse 2s ease-in-out infinite;
-}
-@keyframes pulse {
-    0%,100% { opacity:1; transform: scale(1); }
-    50%      { opacity:0.35; transform: scale(0.7); }
-}
-.badge-admin {
-    display: flex; align-items: center; gap: 0.35rem;
-    background: rgba(26,20,16,0.06);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 0.25rem 0.5rem;
-}
-.badge-text {
-    font-size: 0.58rem;
-    font-weight: 700;
-    color: var(--ink-soft);
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-}
-.footer-text {
-    font-size: 0.66rem;
-    color: var(--muted);
-    font-weight: 500;
-    letter-spacing: 0.03em;
+    padding: 1rem 2rem;
+    background: #FAFAF9;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: .5rem;
 }
 
-/* ── Aksesibilitas: focus ring global ────────────────── */
+.dot-pulse {
+    width: 6px; height: 6px;
+    background: var(--success);
+    border-radius: 50%;
+    flex-shrink: 0;
+    animation: pulse 2.5s ease-in-out infinite;
+}
+
+.badge-admin {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    background: var(--border);
+    border: none;
+    border-radius: 4px;
+    padding: .2rem .5rem;
+}
+
+.badge-text {
+    font-size: .6875rem;
+    font-weight: 500;
+    color: var(--text-2);
+    letter-spacing: .02em;
+    text-transform: none;
+}
+
+.footer-text {
+    font-size: .6875rem;
+    color: var(--text-3);
+    font-weight: 400;
+    flex: 1;
+}
+
+/* ── Page caption ────────────────────────────────────── */
+.page-caption {
+    text-align: center;
+    font-size: .6875rem;
+    color: var(--text-3);
+    opacity: 0;
+    animation: fadeUp .5s var(--ease) .4s forwards;
+}
+
+/* ── Focus ring global ───────────────────────────────── */
 *:focus-visible {
-    outline: 2.5px solid var(--brand);
+    outline: 2px solid var(--border-focus);
     outline-offset: 2px;
 }
 
-/* ── Form spacing ────────────────────────────────────── */
-.form-fields { display: flex; flex-direction: column; gap: 1rem; }
+/* ── Responsive ──────────────────────────────────────── */
+@media (max-width: 480px) {
+    .card-top,
+    .card-body,
+    .card-footer { padding-left: 1.5rem; padding-right: 1.5rem; }
+
+    .wrapper { max-width: 100%; }
+}

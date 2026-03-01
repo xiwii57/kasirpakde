@@ -1,0 +1,326 @@
+---
+// src/pages/429.astro
+import Layoutc from "../layouts/Layoutc.astro";
+
+// Ambil retry countdown dari query param ?retry=300 (detik)
+const retrySeconds = parseInt(Astro.url.searchParams.get("retry") ?? "60", 10);
+const retryMin     = Math.ceil(retrySeconds / 60);
+---
+
+<Layoutc title="429 — Terlalu Banyak Request">
+  <div class="err-wrap">
+
+    <!-- Animated wave background -->
+    <div class="err-waves" aria-hidden="true">
+      <div class="wave wave-1"></div>
+      <div class="wave wave-2"></div>
+      <div class="wave wave-3"></div>
+    </div>
+
+    <div class="err-content">
+
+      <!-- Speed gauge icon -->
+      <div class="err-gauge">
+        <svg viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <!-- Track arc -->
+          <path d="M10 70 A50 50 0 0 1 110 70" stroke="#e5e0da" stroke-width="10" stroke-linecap="round" fill="none"/>
+          <!-- Fill arc (over limit = full red) -->
+          <path d="M10 70 A50 50 0 0 1 110 70" stroke="#c84b1f" stroke-width="10" stroke-linecap="round" fill="none"
+            stroke-dasharray="157" stroke-dashoffset="0" opacity="0.3"/>
+          <!-- Needle -->
+          <line id="gauge-needle" x1="60" y1="70" x2="110" y2="30"
+            stroke="#c84b1f" stroke-width="3" stroke-linecap="round"
+            style="transform-origin: 60px 70px; animation: needleSpin 1.4s ease-out forwards;"/>
+          <!-- Center dot -->
+          <circle cx="60" cy="70" r="6" fill="#c84b1f"/>
+          <circle cx="60" cy="70" r="3" fill="white"/>
+          <!-- Labels -->
+          <text x="10" y="78" font-size="9" fill="#9e9890" font-family="sans-serif">0</text>
+          <text x="104" y="78" font-size="9" fill="#9e9890" font-family="sans-serif">MAX</text>
+        </svg>
+        <div class="err-gauge-label">LIMIT TERCAPAI</div>
+      </div>
+
+      <!-- Code + Title -->
+      <div class="err-hero">
+        <span class="err-code">429</span>
+        <h1 class="err-title">Terlalu Banyak Request</h1>
+        <p class="err-sub">Kamu mengirim terlalu banyak permintaan dalam waktu singkat. Sistem kami melindungi diri secara otomatis.</p>
+      </div>
+
+      <!-- Countdown card -->
+      <div class="err-timer-card">
+        <div class="err-timer-header">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          Coba lagi dalam
+        </div>
+        <div class="err-timer-display">
+          <span id="timer-val">{retryMin > 1 ? `${retryMin} menit` : `${retrySeconds} detik`}</span>
+        </div>
+        <div class="err-timer-bar-wrap">
+          <div class="err-timer-bar" id="timer-bar"></div>
+        </div>
+        <p class="err-timer-hint">Halaman akan otomatis siap setelah waktu habis.</p>
+      </div>
+
+      <!-- Actions -->
+      <div class="err-actions">
+        <button id="retry-btn" class="err-btn primary" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+          <span id="retry-label">Tunggu…</span>
+        </button>
+        <a href="/" class="err-btn secondary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          Ke Beranda
+        </a>
+      </div>
+
+    </div>
+  </div>
+</Layoutc>
+
+<script define:vars={{ retrySeconds }}>
+  var total   = retrySeconds;
+  var remain  = total;
+  var bar     = document.getElementById('timer-bar');
+  var valEl   = document.getElementById('timer-val');
+  var btnEl   = document.getElementById('retry-btn');
+  var lblEl   = document.getElementById('retry-label');
+
+  function fmt(s) {
+    if (s >= 60) {
+      var m = Math.floor(s / 60), sec = s % 60;
+      return sec > 0 ? m + ' mnt ' + sec + ' dtk' : m + ' menit';
+    }
+    return s + ' detik';
+  }
+
+  function tick() {
+    remain--;
+    var pct = ((total - remain) / total) * 100;
+    if (bar) bar.style.width = pct + '%';
+    if (valEl) valEl.textContent = fmt(remain);
+
+    if (remain <= 0) {
+      clearInterval(iv);
+      if (btnEl)  { btnEl.disabled = false; btnEl.classList.add('ready'); }
+      if (lblEl)  lblEl.textContent = 'Coba Lagi Sekarang';
+      if (valEl)  valEl.textContent = 'Siap!';
+    }
+  }
+
+  if (bar) bar.style.width = '0%';
+  var iv = setInterval(tick, 1000);
+
+  if (btnEl) {
+    btnEl.addEventListener('click', function() {
+      if (!this.disabled) history.back();
+    });
+  }
+</script>
+
+<style>
+  .err-wrap {
+    position: relative;
+    min-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  /* Wave background */
+  .err-waves {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .wave {
+    position: absolute;
+    bottom: -30px;
+    left: -10%;
+    width: 120%;
+    height: 180px;
+    border-radius: 50%;
+    background: rgba(200,75,31,.04);
+    animation: waveMove 6s ease-in-out infinite;
+  }
+  .wave-2 { animation-delay: -2s; background: rgba(200,75,31,.03); height: 200px; }
+  .wave-3 { animation-delay: -4s; background: rgba(200,75,31,.02); height: 220px; }
+  @keyframes waveMove {
+    0%,100% { transform: translateX(0) scaleY(1); }
+    50%      { transform: translateX(-4%) scaleY(1.05); }
+  }
+
+  /* Content */
+  .err-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 22px;
+    max-width: 380px;
+    width: 100%;
+    text-align: center;
+    animation: fadeUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Gauge */
+  .err-gauge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    animation: fadeUp 0.55s 0.05s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .err-gauge svg { width: 130px; }
+  @keyframes needleSpin {
+    from { transform: rotate(-90deg); }
+    to   { transform: rotate(0deg); }
+  }
+  .err-gauge-label {
+    font-size: 0.58rem;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(200,75,31,.08);
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(200,75,31,.2);
+  }
+
+  /* Hero */
+  .err-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    animation: fadeUp 0.55s 0.08s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .err-code {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: clamp(3.5rem, 14vw, 5rem);
+    color: var(--dark);
+    line-height: 1;
+    letter-spacing: -0.04em;
+  }
+  .err-title {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 1.2rem;
+    color: var(--dark);
+    margin: 0;
+  }
+  .err-sub {
+    font-size: 0.75rem;
+    color: var(--sub);
+    line-height: 1.6;
+    margin: 0;
+    max-width: 300px;
+  }
+
+  /* Timer card */
+  .err-timer-card {
+    width: 100%;
+    background: var(--card);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0 2px 16px rgba(17,17,16,.06);
+    animation: fadeUp 0.55s 0.12s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .err-timer-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--muted);
+  }
+  .err-timer-display {
+    text-align: center;
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 1.8rem;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .err-timer-bar-wrap {
+    height: 6px;
+    background: var(--bg);
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .err-timer-bar {
+    height: 100%;
+    background: linear-gradient(to right, var(--accent), #e8703a);
+    border-radius: 999px;
+    width: 0%;
+    transition: width 1s linear;
+  }
+  .err-timer-hint {
+    font-size: 0.67rem;
+    color: var(--muted);
+    margin: 0;
+    text-align: center;
+  }
+
+  /* Actions */
+  .err-actions {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    animation: fadeUp 0.55s 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .err-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 16px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    cursor: pointer;
+    text-decoration: none;
+    border: none;
+    transition: all 0.15s;
+  }
+  .err-btn.primary {
+    background: var(--dark);
+    color: #fff;
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .err-btn.primary.ready { opacity: 1; cursor: pointer; }
+  .err-btn.primary.ready:hover { background: var(--accent); }
+  .err-btn.secondary {
+    background: transparent;
+    color: var(--dark);
+    border: 2px solid var(--border);
+  }
+  .err-btn.secondary:hover { border-color: var(--accent); color: var(--accent); }
+</style>

@@ -4,25 +4,20 @@ import AuthLayout from "../layouts/AuthLayout.astro";
 import "../styles/global.css";
 import "../styles/login.css";
 
-// Ambil nonce dari middleware via locals
 const nonce = (Astro.locals as Record<string, unknown>).nonce as string ?? "";
 
-// ── Keamanan: Paksa HTTPS di production ──────────────────────────────────────
 if (import.meta.env.PROD && Astro.request.headers.get("x-forwarded-proto") === "http") {
   return Astro.redirect(`https://${Astro.url.host}${Astro.url.pathname}`, 301);
 }
 
-// ── Jika sudah login, redirect ke dashboard ──────────────────────────────────
 const accessToken  = Astro.cookies.get("sb-access-token");
 const refreshToken = Astro.cookies.get("sb-refresh-token");
 if (accessToken?.value && refreshToken?.value) {
   return Astro.redirect("/dashboard");
 }
 
-// ── Pemetaan pesan error ──────────────────────────────────────────────────────
 const error = Astro.url.searchParams.get("error");
 
-// Hanya izinkan parameter error yang valid (whitelist)
 const ALLOWED_ERRORS = new Set([
   "invalid_credentials",
   "too_many_requests",
@@ -43,226 +38,168 @@ const errorMessages: Record<string, string> = {
 
 const safeError = error && ALLOWED_ERRORS.has(error) ? error : null;
 const errorMsg  = safeError ? errorMessages[safeError] : null;
-
-// ── CSP nonce untuk script & style inline ────────────────────────────────────
-const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
+const siteKey   = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
 ---
-<AuthLayout title="Masuk" nonce={nonce}>
 
-  <!-- Turnstile script di head slot -->
-  <script
-    slot="head"
-    nonce={nonce}
-    src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-    async
-    defer
-  ></script>
+<AuthLayout title="Masuk — Kasir Warung" nonce={nonce}>
+  <script slot="head" nonce={nonce} src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 
   <div class="auth-bg">
+    <div class="bg-layer" aria-hidden="true">
+      <div class="bg-grid"></div>
+      <div class="bg-circle bg-circle-1"></div>
+      <div class="bg-circle bg-circle-2"></div>
+    </div>
 
-    <!-- Ornamen sudut -->
-    <div class="corner corner-tl"></div>
-    <div class="corner corner-br"></div>
+    <div class="wrapper">
 
-    <!-- Kartu login -->
-    <div class="card card-enter" role="main">
-
-      <div class="stripe" role="presentation" aria-hidden="true"></div>
-
-      <div class="card-body">
-
-        <!-- Brand -->
-        <div class="brand-header" aria-label="Kasir Warung Admin">
-          <div class="brand-logo" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white"
-                 stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
-              <line x1="3" y1="6" x2="21" y2="6"/>
-              <path d="M16 10a4 4 0 0 1-8 0"/>
-            </svg>
-          </div>
-          <div>
-            <div class="brand-name">Kasir Warung</div>
-            <div class="brand-sub">Dasbor Admin</div>
-          </div>
-          <span class="brand-date" id="brandDate" aria-hidden="true"></span>
+      <div class="page-header">
+        <div class="logo-mark" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white"
+               stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <path d="M16 10a4 4 0 0 1-8 0"/>
+          </svg>
         </div>
-
-        <!-- Alert error server-side -->
-        {errorMsg && (
-          <div
-            class="error-alert"
-            role="alert"
-            aria-live="assertive"
-            aria-atomic="true"
-          >
-            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24"
-                 fill="none" stroke="currentColor" stroke-width="2.5"
-                 stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="8" x2="12" y2="12"/>
-              <line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
-        <!-- Form -->
-        <form
-          id="loginForm"
-          action="/api/auth/login"
-          method="POST"
-          novalidate
-          autocomplete="on"
-          aria-label="Form masuk"
-        >
-          <div class="form-fields">
-
-            <!-- Email -->
-            <div>
-              <label for="email" class="field-label">Email</label>
-              <div class="input-wrap">
-                <input
-                  id="email"
-                  type="email"
-                  name="email"
-                  required
-                  autocomplete="email"
-                  inputmode="email"
-                  placeholder="admin@warung.com"
-                  maxlength="254"
-                  aria-required="true"
-                  aria-describedby="email-error"
-                  class="field-input"
-                />
-                <svg class="input-icon" aria-hidden="true" viewBox="0 0 24 24"
-                     fill="none" stroke="currentColor" stroke-width="2"
-                     stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="2" y="4" width="20" height="16" rx="2"/>
-                  <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
-                </svg>
-              </div>
-              <span id="email-error" class="field-error" role="alert" aria-live="polite"></span>
-            </div>
-
-            <!-- Password -->
-            <div class="field-group">
-              <label for="password" class="field-label">Password</label>
-              <div class="input-wrap" style="position: relative; display: flex; align-items: center;">
-
-                <svg class="input-icon" aria-hidden="true" viewBox="0 0 24 24"
-                    fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                </svg>
-
-                <input
-                  id="password"
-                  type="password"
-                  name="password"
-                  required
-                  autocomplete="current-password"
-                  placeholder="••••••••"
-                  class="field-input"
-                  style="width: 100%; padding: 0.625rem 2.5rem 0.625rem 2.5rem;"
-                />
-
-                <button
-                  type="button"
-                  id="pwToggle"
-                  class="pw-toggle"
-                  aria-label="Tampilkan password"
-                  aria-controls="password"
-                  aria-pressed="false"
-                  style="position: absolute; right: 0.75rem; background: none; border: none; cursor: pointer; color: #9ca3af; display: flex; align-items: center;"
-                >
-                  <svg id="eyeOpen" width="20" height="20" viewBox="0 0 24 24"
-                      fill="none" stroke="currentColor" stroke-width="2"
-                      stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-
-                  <svg id="eyeClosed" width="20" height="20" viewBox="0 0 24 24"
-                      fill="none" stroke="currentColor" stroke-width="2"
-                      stroke-linecap="round" stroke-linejoin="round"
-                      style="display:none" aria-hidden="true">
-                    <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/>
-                    <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/>
-                    <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/>
-                    <line x1="2" y1="2" x2="22" y2="22"/>
-                  </svg>
-                </button>
-              </div>
-              <span id="password-error" class="field-error" role="alert" aria-live="polite" style="color: #ef4444; font-size: 0.875rem;"></span>
-            </div>
-
-            <!-- Turnstile -->
-            <div class="turnstile-wrap">
-              <div
-                class="cf-turnstile"
-                data-sitekey={siteKey}
-                data-theme="light"
-                data-size="normal"
-                data-callback="onTurnstileSuccess"
-                data-error-callback="onTurnstileError"
-                data-expired-callback="onTurnstileExpired"
-              ></div>
-            </div>
-
-            <!-- Submit -->
-            <button type="submit" id="submitBtn" class="submit-btn">
-              <div class="btn-inner">
-                <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24"
-                     fill="none" stroke="currentColor" stroke-width="2.25"
-                     stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-                  <polyline points="10 17 15 12 10 7"/>
-                  <line x1="15" y1="12" x2="3" y2="12"/>
-                </svg>
-                <span class="btn-label">Masuk ke Kasir</span>
-              </div>
-              <div class="spinner" aria-hidden="true"></div>
-            </button>
-
-          </div><!-- /form-fields -->
-        </form>
-
-      </div><!-- /card-body -->
-
-      <!-- Footer -->
-      <div class="card-footer">
-        <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24"
-             fill="none" stroke="#9a8f84" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-        </svg>
-        <span class="footer-text">Akses terenkripsi SSL</span>
-        <div class="badge-admin" aria-label="Khusus admin">
-          <div class="dot-pulse" aria-hidden="true"></div>
-          <span class="badge-text">Admin Only</span>
+        <div>
+          <div class="page-title">Kasir Warung</div>
+          <div class="page-subtitle">Sistem manajemen kasir</div>
         </div>
       </div>
 
-    </div><!-- /card -->
-  </div><!-- /auth-bg -->
+      <div class="card" role="main">
+
+        <div class="card-top">
+          <div class="card-label">Admin Portal</div>
+          <h1 class="card-heading">Selamat datang</h1>
+          <p class="card-desc">Masuk untuk mengelola transaksi dan produk.</p>
+        </div>
+
+        <div class="card-body">
+
+          {errorMsg && (
+            <div class="error-alert" role="alert" aria-live="assertive" aria-atomic="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          <form id="loginForm" action="/api/auth/login" method="POST" novalidate
+                autocomplete="on" aria-label="Form masuk">
+            <div class="form-fields">
+
+              <div>
+                <label for="email" class="field-label">Email</label>
+                <div class="input-wrap">
+                  <input id="email" type="email" name="email" required
+                    autocomplete="email" inputmode="email"
+                    placeholder="admin@warung.com" maxlength="254"
+                    aria-required="true" aria-describedby="email-error"
+                    class="field-input" />
+                  <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                  </svg>
+                </div>
+                <span id="email-error" class="field-error" role="alert" aria-live="polite"></span>
+              </div>
+
+              <div>
+                <label for="password" class="field-label">Password</label>
+                <div class="input-wrap">
+                  <input id="password" type="password" name="password" required
+                    autocomplete="current-password" placeholder="••••••••"
+                    class="field-input" style="padding-right: 2.75rem;"
+                    aria-required="true" aria-describedby="password-error" />
+                  <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="11" width="18" height="11" rx="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                  <button type="button" id="pwToggle" class="pw-toggle"
+                          aria-label="Tampilkan password" aria-controls="password" aria-pressed="false">
+                    <svg id="eyeOpen" width="15" height="15" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    <svg id="eyeClosed" width="15" height="15" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                         style="display:none" aria-hidden="true">
+                      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/>
+                      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/>
+                      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/>
+                      <line x1="2" y1="2" x2="22" y2="22"/>
+                    </svg>
+                  </button>
+                </div>
+                <span id="password-error" class="field-error" role="alert" aria-live="polite"></span>
+              </div>
+
+              <div class="turnstile-wrap">
+                <div class="cf-turnstile"
+                     data-sitekey={siteKey}
+                     data-theme="light"
+                     data-size="normal"
+                     data-callback="onTurnstileSuccess"
+                     data-error-callback="onTurnstileError"
+                     data-expired-callback="onTurnstileExpired">
+                </div>
+              </div>
+
+              <button type="submit" id="submitBtn" class="submit-btn" aria-busy="false">
+                <div class="btn-inner">
+                  <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24"
+                       fill="none" stroke="currentColor" stroke-width="2.25"
+                       stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                    <polyline points="10 17 15 12 10 7"/>
+                    <line x1="15" y1="12" x2="3" y2="12"/>
+                  </svg>
+                  <span class="btn-label">Masuk ke Dashboard</span>
+                </div>
+                <div class="spinner" aria-hidden="true"></div>
+              </button>
+
+            </div>
+          </form>
+        </div>
+
+        <div class="card-footer">
+          <div class="dot-pulse" aria-hidden="true"></div>
+          <span class="footer-text">Koneksi terenkripsi SSL</span>
+          <div class="badge-admin" aria-label="Khusus admin">
+            <span class="badge-text">Admin Only</span>
+          </div>
+        </div>
+
+      </div>
+
+      <p class="page-caption" id="pageDate"></p>
+
+    </div>
+  </div>
 
   <script nonce={nonce} is:inline>
   (function () {
     "use strict";
 
-    /* ── Tampilkan tanggal di brand header ───────────────── */
-    var dateEl = document.getElementById("brandDate");
-    if (dateEl) {
-      dateEl.textContent = new Date().toLocaleDateString("id-ID", {
-        day: "2-digit", month: "short", year: "numeric"
+    var d = document.getElementById("pageDate");
+    if (d) {
+      d.textContent = new Date().toLocaleDateString("id-ID", {
+        weekday: "long", day: "numeric", month: "long", year: "numeric"
       });
     }
 
-    /* ── Toggle visibility password ─────────────────────── */
-    var pwToggle  = document.getElementById("pwToggle");
     var pwInput   = document.getElementById("password");
+    var pwToggle  = document.getElementById("pwToggle");
     var eyeOpen   = document.getElementById("eyeOpen");
     var eyeClosed = document.getElementById("eyeClosed");
 
@@ -270,26 +207,21 @@ const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
       pwToggle.addEventListener("click", function () {
         var isHidden = pwInput.getAttribute("type") === "password";
         pwInput.setAttribute("type", isHidden ? "text" : "password");
-        eyeOpen.style.display              = isHidden ? "none" : "";
-        eyeOpen.setAttribute("aria-hidden",  isHidden ? "true" : "false");
-        eyeClosed.style.display            = isHidden ? "" : "none";
-        eyeClosed.setAttribute("aria-hidden", isHidden ? "false" : "true");
+        eyeOpen.style.display   = isHidden ? "none" : "";
+        eyeClosed.style.display = isHidden ? "" : "none";
         pwToggle.setAttribute("aria-label",   isHidden ? "Sembunyikan password" : "Tampilkan password");
         pwToggle.setAttribute("aria-pressed", isHidden ? "true" : "false");
       });
     }
 
-    /* ── State Turnstile ─────────────────────────────────── */
     window.onTurnstileSuccess = function () { window._tsReady = true; };
     window.onTurnstileError   = function () { window._tsReady = false; };
     window.onTurnstileExpired = function () { window._tsReady = false; };
 
-    /* ── Validasi email sederhana ────────────────────────── */
     function isValidEmail(val) {
       return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
     }
 
-    /* ── Tampilkan / sembunyikan error per field ─────────── */
     function setFieldError(inputId, errorId, msg) {
       var inp = document.getElementById(inputId);
       var err = document.getElementById(errorId);
@@ -307,24 +239,17 @@ const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
       }
     }
 
-    /* ── Bersihkan error saat pengguna mengetik ──────────── */
     ["email", "password"].forEach(function (id) {
       var el = document.getElementById(id);
-      if (el) {
-        el.addEventListener("input", function () {
-          setFieldError(id, id + "-error", "");
-        });
-      }
+      if (el) el.addEventListener("input", function () { setFieldError(id, id + "-error", ""); });
     });
 
-    /* ── Helper: reset state tombol ─────────────────────── */
     function resetBtn(btn) {
       btn.disabled = false;
       btn.classList.remove("btn-loading");
       btn.setAttribute("aria-busy", "false");
     }
 
-    /* ── Validasi & submit ───────────────────────────────── */
     var form      = document.getElementById("loginForm");
     var submitBtn = document.getElementById("submitBtn");
 
@@ -335,10 +260,8 @@ const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
         var emailVal    = document.getElementById("email").value.trim();
         var passwordVal = document.getElementById("password").value;
         var tsRes       = document.querySelector('[name="cf-turnstile-response"]');
+        var valid       = true;
 
-        var valid = true;
-
-        /* Validasi email */
         if (!emailVal) {
           setFieldError("email", "email-error", "Email wajib diisi.");
           valid = false;
@@ -349,7 +272,6 @@ const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
           setFieldError("email", "email-error", "");
         }
 
-        /* Validasi password */
         if (!passwordVal) {
           setFieldError("password", "password-error", "Password wajib diisi.");
           valid = false;
@@ -360,7 +282,6 @@ const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
           setFieldError("password", "password-error", "");
         }
 
-        /* Validasi Turnstile */
         if (!tsRes || !tsRes.value) {
           valid = false;
           var existing = form.querySelector(".turnstile-err");
@@ -380,45 +301,25 @@ const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
 
         if (!valid) return;
 
-        /* Nonaktifkan tombol & tampilkan spinner */
         submitBtn.disabled = true;
         submitBtn.classList.add("btn-loading");
         submitBtn.setAttribute("aria-busy", "true");
 
-        /*
-         * ✅ FIX #1: Submit via fetch dengan credentials: "same-origin"
-         *
-         * Kenapa tidak pakai form.submit() biasa:
-         * - form.submit() bypass event handler → Astro CSRF check gagal (error awal)
-         *
-         * Kenapa tidak pakai fetch lalu ikuti redirect 302 dari API:
-         * - fetch() mengikuti redirect secara internal (opaque redirect)
-         * - Browser tidak memproses Set-Cookie dari response chain redirect
-         * - Cookie login tidak pernah tersimpan → middleware selalu reject
-         *
-         * Solusi: API return JSON 200 + set cookie, lalu redirect manual di sini.
-         * credentials: "same-origin" wajib agar cookie dikirim dan diterima.
-         */
-        var formData = new FormData(form);
         fetch("/api/auth/login", {
           method:      "POST",
-          body:        formData,
+          body:        new FormData(form),
           credentials: "same-origin",
         })
         .then(function (res) {
           return res.json().then(function (data) {
             if (res.ok && data.ok) {
-              /* Login sukses — cookie sudah di-set, redirect ke dashboard */
               window.location.href = data.redirect || "/dashboard";
             } else {
-              /* Login gagal — redirect ke halaman error */
-              var errParam = data.error || "server_error";
-              window.location.href = "/?error=" + encodeURIComponent(errParam);
+              window.location.href = "/?error=" + encodeURIComponent(data.error || "server_error");
             }
           });
         })
         .catch(function () {
-          /* Network error atau JSON parse gagal */
           window.location.href = "/?error=server_error";
         })
         .finally(function () {

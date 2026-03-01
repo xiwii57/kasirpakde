@@ -147,6 +147,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); }
 }
 
 /* ── Quick Cash ──────────────────────────── */
+/* ── Quick Cash ──────────────────────────── */
 .qc-bar {
     background: var(--card);
     border-bottom: 1px solid var(--border);
@@ -154,52 +155,75 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); }
     display: flex;
     align-items: center;
     gap: 6px;
-    flex-shrink: 0;
     overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
     scrollbar-width: none;
-    -ms-overflow-style: none;
-    -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
-    mask-image: linear-gradient(to right, black 85%, transparent 100%);
+    flex-shrink: 0;
+    -webkit-overflow-scrolling: touch;
+    /* Fade kanan saja, transparan ke background card */
+    -webkit-mask-image: linear-gradient(to right, black 0%, black 88%, transparent 100%);
+    mask-image: linear-gradient(to right, black 0%, black 88%, transparent 100%);
+}
+.qc-bar::-webkit-scrollbar { display: none; }
+
+.qc-tag {
+    font-size: 0.58rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--muted);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
 }
 
-.qc-bar::-webkit-scrollbar { display: none; }
-.qc-items-scroll {
+.qc-sep {
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+    flex-shrink: 0;
+}
+
+.qc-item {
+    flex-shrink: 0;
+    background: var(--bg);
+    color: var(--dark);
+    border: 1.5px solid var(--border);
+    border-radius: 7px;
+    padding: 5px 11px;
+    font-family: var(--sans);
+    font-size: 0.73rem;
+    font-weight: 600;
+    cursor: pointer;
     display: flex;
-    flex-wrap: nowrap;
     align-items: center;
-    gap: 6px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    flex: 1;
-    min-width: 0;
+    gap: 8px;
+    white-space: nowrap;
+    transition: background 0.12s, border-color 0.12s, transform 0.08s, box-shadow 0.12s;
 }
-.qc-item {
-    flex-shrink: 0;
+.qc-item:hover {
+    background: #fff9f7;
+    border-color: var(--accent);
+    box-shadow: 0 2px 8px rgba(200,75,31,0.12);
+    transform: translateY(-1px);
 }
-#qris-lightbox        { display: none; }
-#qris-lightbox.open   { display: flex !important; }
-.qc-items-scroll::-webkit-scrollbar { display: none; }
-.qc-item {flex-shrink: 0; }
-.qc-tag {
-    font-size: 0.58rem; font-weight: 700; text-transform: uppercase;
-    letter-spacing: .1em; color: var(--muted); flex-shrink: 0;
+.qc-item:active {
+    transform: scale(.96);
 }
-.qc-sep { width: 1px; height: 16px; background: var(--border); flex-shrink: 0; }
-.qc-item {
-    flex-shrink: 0;
-    background: var(--dark); color: #fff;
-    border: none; border-radius: 5px;
-    padding: 5px 10px;
-    font-family: var(--sans); font-size: 0.73rem; font-weight: 600;
-    cursor: pointer; text-align: left;
-    transition: background 0.12s, transform 0.08s;
+
+.qc-item-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
 }
-.qc-item small { display: block; font-size: 0.6rem; opacity: .55; font-weight: 400; margin-top: 1px; }
-.qc-item:hover  { background: var(--accent); }
-.qc-item:active { transform: scale(.97); }
+.qc-item small {
+    display: block;
+    font-size: 0.6rem;
+    color: var(--accent);
+    font-weight: 700;
+    opacity: 1;
+}
 
 /* ── Category tabs ───────────────────────── */
 .kat-bar {
@@ -219,26 +243,6 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); }
     font-family: var(--sans); font-size: 0.72rem; font-weight: 500;
     color: var(--sub); cursor: pointer; white-space: nowrap;
     transition: all 0.12s;
-}
-.kat-items-scroll {
-    display: flex;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    gap: 6px;
-    padding: 0;
-    flex: 1;
-    min-width: 0;
-}
-
-.kat-items-scroll::-webkit-scrollbar {
-    display: none;
-}
-
-.kat-btn {
-    flex-shrink: 0;
-    white-space: nowrap;
 }
 .kat-btn:hover { border-color: var(--accent); color: var(--accent); }
 .kat-btn.on { background: var(--dark); border-color: var(--dark); color: #fff; font-weight: 600; }
@@ -540,6 +544,19 @@ transform: translateY(0);
 .modal-head {
     padding: 13px 16px; border-bottom: 1px solid var(--border);
     display: flex; align-items: center; justify-content: space-between;
+}
+.custom-scrollbar::-webkit-scrollbar {
+    width: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #e5e7eb;
+    border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #d1d5db;
 }
 .modal-head h2 { font-size: .88rem; font-weight: 700; color: var(--dark); }
 .modal-close-btn {

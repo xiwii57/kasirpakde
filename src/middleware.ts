@@ -11,11 +11,9 @@ const SUPABASE_URL      = import.meta.env.PUBLIC_SUPABASE_URL       as string;
 const SUPABASE_ANON_KEY = import.meta.env.PUBLIC_SUPABASE_ANON_KEY  as string;
 const IS_PROD           = import.meta.env.PROD                      as boolean;
 
-// Domain hardcode — tambah/kurangi sesuai kebutuhan
 const ALLOWED_DOMAINS  = new Set(["karsip.my.id", "www.karsip.my.id"]);
-const CANONICAL_DOMAIN = "www.karsip.my.id"; // domain utama untuk redirect
+const CANONICAL_DOMAIN = "www.karsip.my.id";
 
-// ── Validasi env wajib saat startup ──────────────────────────────
 for (const [key, val] of Object.entries({
     ADMIN_EMAIL,
     PUBLIC_SUPABASE_URL:      SUPABASE_URL,
@@ -32,7 +30,6 @@ if (!SUPABASE_URL.startsWith("https://")) {
 
 const ADMIN_EMAIL_NORMALIZED = ADMIN_EMAIL.toLowerCase().trim();
 
-// ── Cookie options — wajib konsisten antara set dan delete ───────
 const COOKIE_OPTIONS = {
     path:     "/",
     httpOnly: true,
@@ -67,6 +64,42 @@ const ALLOWED_METHODS     = new Set(["GET", "POST", "PATCH", "DELETE", "HEAD", "
 const REQUIRED_CT_METHODS = new Set(["POST", "PATCH"]);
 
 // ══════════════════════════════════════════════════════════════════
+// ERROR PAGE HELPERS
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * Untuk route API  → selalu JSON (tidak ada UI)
+ * Untuk route HTML → redirect ke halaman error custom
+ *
+ * Halaman error tersedia di:
+ *   /401  — sesi habis / tidak login
+ *   /403  — akses ditolak (bukan admin)
+ *   /429  — rate limit
+ *   /500  — server error
+ *   /404  — tidak ditemukan (ditangani Astro otomatis via src/pages/404.astro)
+ */
+function errorPageUrl(code: 401 | 403 | 429 | 500, extra?: string): string {
+    const base = `https://${CANONICAL_DOMAIN}/${code}`;
+    return extra ? `${base}?${extra}` : base;
+}
+
+function htmlErrorRedirect(code: 401 | 403 | 429 | 500, extra?: string): Response {
+    return new Response(null, {
+        status:  302,
+        headers: { Location: errorPageUrl(code, extra) },
+    });
+}
+
+function jsonError(message: string, status: number, retryAfter?: number): Response {
+    const headers: Record<string, string> = {
+        "Content-Type":  "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+    };
+    if (retryAfter) headers["Retry-After"] = String(retryAfter);
+    return new Response(JSON.stringify({ error: message }), { status, headers });
+}
+
+// ══════════════════════════════════════════════════════════════════
 // NONCE
 // ══════════════════════════════════════════════════════════════════
 
@@ -81,9 +114,6 @@ function generateNonce(): string {
 
 // ══════════════════════════════════════════════════════════════════
 // RATE LIMITER (In-Memory)
-//
-// ⚠️  CATATAN: rateStore bersifat in-memory dan reset setiap cold
-// start Vercel. Untuk single-admin + Turnstile ini sudah cukup.
 // ══════════════════════════════════════════════════════════════════
 
 interface RateRecord {
@@ -120,12 +150,9 @@ function checkRateLimit(ip: string, category: RateCategory): { allowed: boolean;
     const key = `${category}:${ip.replace(/[^a-fA-F0-9.:]/g, "").slice(0, 45)}`;
     const now = Date.now();
 
-    // Cleanup opportunistik
     if (rateStore.size > 500) {
         for (const [k, r] of rateStore.entries()) {
-            if (now > r.resetAt && (!r.blocked || now > r.blockUntil)) {
-                rateStore.delete(k);
-            }
+            if (now > r.resetAt && (!r.blocked || now > r.blockUntil)) rateStore.delete(k);
         }
     }
 
@@ -196,13 +223,70 @@ function clearAuthCookies(cookies: AstroCookies): void {
     cookies.delete("sb-refresh-token", COOKIE_OPTIONS);
 }
 
-function jsonError(message: string, status: number, retryAfter?: number): Response {
-    const headers: Record<string, string> = {
-        "Content-Type":  "application/json; charset=utf-8",
-        "Cache-Control": "no-store",
-    };
-    if (retryAfter) headers["Retry-After"] = String(retryAfter);
-    return new Response(JSON.stringify({ error: message }), { status, headers });
+// ══════════════════════════════════════════════════════════════════
+// CSRF PROTECTION
+// ══════════════════════════════════════════════════════════════════
+
+function getAllowedOrigins(request: Request): Set<string> {
+    const origins = new Set<string>(
+        [...ALLOWED_DOMAINS].map(d => `https://${d}`)
+    );
+    const host = request.headers.get("host");
+    if (host) {
+        const hostname = host.split(":")[0].toLowerCase();
+        if ([...ALLOWED_DOMAINS].some(d => hostname === d || hostname.endsWith(`.${d}`))) {
+            origins.add(`https://${host}`);
+            origins.add(`https://${hostname}`);
+        }
+    }
+    if (!IS_PROD) {
+        origins.add("http://localhost:4321");
+        origins.add("http://localhost:3000");
+        origins.add("http://127.0.0.1:4321");
+    }
+    return origins;
+}
+
+function checkOrigin(request: Request, url: URL): boolean {
+    if (!REQUIRED_CT_METHODS.has(request.method)) return true;
+
+    const origin  = request.headers.get("origin");
+    const referer = request.headers.get("referer");
+    const isApi   = url.pathname.startsWith("/api/");
+    const isFormRoute = AUTH_FORM_ROUTES.has(url.pathname);
+    const allowedOrigins = getAllowedOrigins(request);
+
+    if (isApi) {
+        if (!origin || origin === "null") {
+            if (isFormRoute) {
+                const host = (request.headers.get("host") ?? "").split(":")[0].toLowerCase();
+                const isAllowedHost = [...ALLOWED_DOMAINS].some(d => host === d);
+                if (isAllowedHost) return true;
+                if (!IS_PROD && (host === "localhost" || host === "127.0.0.1")) return true;
+                console.warn(`[Middleware] CSRF: host tidak dikenali untuk ${url.pathname}: ${host}`);
+                return false;
+            }
+            console.warn(`[Middleware] CSRF: origin tidak ada untuk ${url.pathname}`);
+            return false;
+        }
+        try {
+            const originUrl = new URL(origin);
+            const allowed   = allowedOrigins.has(originUrl.origin);
+            if (!allowed) console.warn(`[Middleware] CSRF ditolak — origin: ${originUrl.origin}`);
+            return allowed;
+        } catch { return false; }
+    }
+
+    if (!origin || origin === "null") {
+        if (request.method === "GET") return true;
+        if (referer) {
+            try { return allowedOrigins.has(new URL(referer).origin); }
+            catch { return false; }
+        }
+        return false;
+    }
+    try { return allowedOrigins.has(new URL(origin).origin); }
+    catch { return false; }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -213,10 +297,8 @@ function isValidJwtStructure(token: string): boolean {
     if (!token || typeof token !== "string") return false;
     const parts = token.split(".");
     if (parts.length !== 3) return false;
-
     const b64url = /^[A-Za-z0-9_-]+$/;
     if (!parts.every((p) => p.length > 0 && b64url.test(p))) return false;
-
     try {
         const padded  = parts[1].replace(/-/g, "+").replace(/_/g, "/");
         const decoded = atob(padded);
@@ -225,13 +307,11 @@ function isValidJwtStructure(token: string): boolean {
         if (payload.exp * 1000 < Date.now())                        return false;
         if (typeof payload.sub !== "string" || !payload.sub.trim()) return false;
         return true;
-    } catch {
-        return false;
-    }
+    } catch { return false; }
 }
 
 // ══════════════════════════════════════════════════════════════════
-// SUPABASE REST API — NO WASM
+// SUPABASE REST API
 // ══════════════════════════════════════════════════════════════════
 
 interface SupabaseUser {
@@ -304,9 +384,6 @@ async function refreshSessionFromToken(refreshToken: string): Promise<{
 
 // ══════════════════════════════════════════════════════════════════
 // SESSION CACHE (30 detik)
-//
-// ⚠️  CATATAN: sessionCache reset setiap cold start Vercel.
-// Untuk single-admin ini tidak masalah.
 // ══════════════════════════════════════════════════════════════════
 
 interface SessionResult {
@@ -335,7 +412,6 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
 
     const cacheKey = getSessionCacheKey(accessToken);
 
-    // Cleanup opportunistik
     if (sessionCache.size > 200) {
         const now = Date.now();
         for (const [k, entry] of sessionCache.entries()) {
@@ -355,10 +431,8 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
             sessionCache.set(cacheKey, { result, expiresAt: Date.now() + SESSION_CACHE_TTL });
             return result;
         }
-
         const { data: rd, error: re } = await refreshSessionFromToken(refreshToken);
         if (re || !rd) return { valid: false, isAdmin: false };
-
         const isAdmin = safeCompare((rd.user.email ?? "").toLowerCase().trim(), ADMIN_EMAIL_NORMALIZED);
         return {
             valid:           true,
@@ -380,7 +454,6 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
 
 function buildCSP(nonce: string): string {
     const supabaseOrigin = new URL(SUPABASE_URL).origin;
-
     if (!IS_PROD) {
         return [
             "default-src 'self'",
@@ -397,7 +470,6 @@ function buildCSP(nonce: string): string {
             "worker-src blob:",
         ].join("; ");
     }
-
     return [
         "default-src 'none'",
         `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' https://challenges.cloudflare.com`,
@@ -423,89 +495,32 @@ function buildCSP(nonce: string): string {
 
 function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boolean): Response {
     const h = response.headers;
-
     h.set("Content-Security-Policy", buildCSP(nonce));
     h.set("X-Frame-Options",         "DENY");
     h.set("X-Content-Type-Options",  "nosniff");
     h.set("X-XSS-Protection",        "0");
     h.set("X-DNS-Prefetch-Control",  "off");
     h.set("Referrer-Policy",         "strict-origin-when-cross-origin");
-
     h.set("Permissions-Policy", [
         "camera=()", "microphone=()", "geolocation=()", "payment=()", "usb=()",
           "bluetooth=()", "accelerometer=()", "gyroscope=()", "magnetometer=()",
           "interest-cohort=()", "browsing-topics=()",
     ].join(", "));
-
-    if (IS_PROD) {
-        h.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
-    }
-
+    if (IS_PROD) h.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
     h.set("Cross-Origin-Opener-Policy",   "same-origin");
     h.set("Cross-Origin-Embedder-Policy", "unsafe-none");
     h.set("Cross-Origin-Resource-Policy", isApiRoute ? "same-site" : "same-origin");
-
     h.delete("Server");
     h.delete("X-Powered-By");
     h.delete("X-Runtime");
     h.delete("X-AspNet-Version");
-
     if (isApiRoute) {
         h.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
         h.set("Pragma",        "no-cache");
         h.set("Expires",       "0");
         h.set("Vary",          "Cookie");
     }
-
     return response;
-}
-
-// ══════════════════════════════════════════════════════════════════
-// CSRF PROTECTION
-// ══════════════════════════════════════════════════════════════════
-
-function checkOrigin(request: Request, url: URL): boolean {
-    if (!REQUIRED_CT_METHODS.has(request.method)) return true;
-
-    const origin  = request.headers.get("origin");
-    const referer = request.headers.get("referer");
-    const isApi   = url.pathname.startsWith("/api/");
-
-    // ✅ Hardcode allowed origins — www dan non-www keduanya diizinkan
-    const allowedOrigins = new Set([
-        url.origin,
-        ...([...ALLOWED_DOMAINS].map(d => `https://${d}`)),
-    ]);
-
-    if (isApi) {
-        const isFormRoute = AUTH_FORM_ROUTES.has(url.pathname);
-
-        if (!origin || origin === "null") {
-            if (isFormRoute) {
-                const host = request.headers.get("host") ?? "";
-                // ✅ Hardcode expected hosts — www dan non-www
-                const expectedHosts = new Set([url.host, ...ALLOWED_DOMAINS]);
-                return expectedHosts.has(host.split(":")[0]) || expectedHosts.has(host);
-            }
-            console.warn(`[Middleware] CSRF: origin tidak ada untuk ${url.pathname}`);
-            return false;
-        }
-
-        try { return allowedOrigins.has(new URL(origin).origin); }
-        catch { return false; }
-    }
-
-    if (!origin || origin === "null") {
-        if (request.method === "GET") return true;
-        if (referer) {
-            try { return allowedOrigins.has(new URL(referer).origin); }
-            catch { return false; }
-        }
-        return false;
-    }
-
-    try { return allowedOrigins.has(new URL(origin).origin); }
-    catch { return false; }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -543,7 +558,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
     // ── 1. Aset statis ────────────────────────────────────────────
     if (isStaticAsset(pathname)) return next();
 
-    // ── 2. Canonical domain redirect ─────────────────────────────
+    // ── 2. Izinkan halaman error custom diakses bebas ─────────────
+    // Tanpa ini, /401 /403 /429 /500 bisa kena loop redirect
+    const ERROR_PAGES = new Set(["/401", "/403", "/404", "/429", "/500"]);
+    if (ERROR_PAGES.has(pathname)) {
+        const response = await next();
+        return applySecurityHeaders(response, nonce, false);
+    }
+
+    // ── 3. Canonical domain redirect ─────────────────────────────
     if (IS_PROD) {
         const host = (request.headers.get("host") ?? url.hostname).split(":")[0].toLowerCase();
         if (host !== CANONICAL_DOMAIN) {
@@ -555,13 +578,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
         }
     }
 
-    // ── 3. Deteksi request mencurigakan ───────────────────────────
+    // ── 4. Deteksi request mencurigakan ───────────────────────────
     if (isSuspiciousRequest(request, pathname)) {
         console.warn(`[Middleware] Request mencurigakan — IP: ${ip}, path: ${pathname}`);
         return new Response("Bad Request", { status: 400 });
     }
 
-    // ── 4. Blokir HTTP method tidak diizinkan ─────────────────────
+    // ── 5. Blokir HTTP method tidak diizinkan ─────────────────────
     if (!ALLOWED_METHODS.has(method)) {
         return new Response("Method Not Allowed", {
             status:  405,
@@ -569,21 +592,23 @@ export const onRequest = defineMiddleware(async (context, next) => {
         });
     }
 
-    // ── 5. Cegah body terlalu besar ───────────────────────────────
+    // ── 6. Cegah body terlalu besar ───────────────────────────────
     const contentLength = parseInt(request.headers.get("content-length") ?? "0", 10);
     if (Number.isNaN(contentLength) || contentLength > MAX_BODY_BYTES) {
-        return jsonError("Payload terlalu besar", 413);
+        return isApiRoute
+        ? jsonError("Payload terlalu besar", 413)
+        : htmlErrorRedirect(500);
     }
 
-    // ── 6. CSRF check ─────────────────────────────────────────────
+    // ── 7. CSRF check ─────────────────────────────────────────────
     if (!checkOrigin(request, url)) {
-        console.warn(`[Middleware] CSRF gagal — IP: ${ip}, path: ${pathname}, method: ${method}`);
+        console.warn(`[Middleware] CSRF gagal — IP: ${ip}, path: ${pathname}, method: ${method}, origin: ${request.headers.get("origin")}`);
         return isApiRoute
         ? jsonError("Forbidden: origin tidak valid", 403)
-        : new Response(null, { status: 302, headers: { Location: new URL("/?error=forbidden", url.origin).toString() } });
+        : htmlErrorRedirect(403);
     }
 
-    // ── 7. Content-Type validation ────────────────────────────────
+    // ── 8. Content-Type validation ────────────────────────────────
     if (REQUIRED_CT_METHODS.has(method) && isApiRoute) {
         const ct      = request.headers.get("content-type") ?? "";
         const validCT = ct.includes("application/json") ||
@@ -592,29 +617,35 @@ export const onRequest = defineMiddleware(async (context, next) => {
         if (!validCT) return jsonError("Content-Type tidak valid", 415);
     }
 
-    // ── 8. Rate limit login ───────────────────────────────────────
+    // ── 9. Rate limit login ───────────────────────────────────────
     if (pathname === "/api/auth/login" && method === "POST") {
         const { allowed, retryAfter } = checkRateLimit(ip, "login");
         if (!allowed) {
             const mnt = retryAfter === 9999 ? "sementara" : `${Math.ceil(retryAfter / 60)} menit`;
             console.warn(`[Middleware] Login rate limit — IP: ${ip}`);
-            return jsonError(`Terlalu banyak percobaan. Coba lagi dalam ${mnt}.`, 429, retryAfter);
+            return isApiRoute
+            ? jsonError(`Terlalu banyak percobaan. Coba lagi dalam ${mnt}.`, 429, retryAfter)
+            : htmlErrorRedirect(429, `retry=${retryAfter}`);
         }
     }
 
-    // ── 9. Rate limit API umum ────────────────────────────────────
+    // ── 10. Rate limit API umum ───────────────────────────────────
     if (isApiRoute && method !== "GET") {
         const { allowed, retryAfter } = checkRateLimit(ip, "api");
-        if (!allowed) return jsonError("Terlalu banyak request. Coba lagi sebentar.", 429, retryAfter);
+        if (!allowed) {
+            return isApiRoute
+            ? jsonError("Terlalu banyak request. Coba lagi sebentar.", 429, retryAfter)
+            : htmlErrorRedirect(429, `retry=${retryAfter}`);
+        }
     }
 
-    // ── 10. Route publik ──────────────────────────────────────────
+    // ── 11. Route publik ──────────────────────────────────────────
     if (PUBLIC_ROUTES.has(pathname)) {
         const response = await next();
         return applySecurityHeaders(response, nonce, isApiRoute);
     }
 
-    // ── 11. Route terproteksi — validasi session ──────────────────
+    // ── 12. Route terproteksi — validasi session ──────────────────
     if (isProtectedRoute(pathname)) {
         const accessToken  = cookies.get("sb-access-token")?.value  ?? "";
         const refreshToken = cookies.get("sb-refresh-token")?.value ?? "";
@@ -623,7 +654,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
             clearAuthCookies(cookies);
             return isApiRoute
             ? jsonError("Autentikasi diperlukan.", 401)
-            : new Response(null, { status: 302, headers: { Location: new URL("/?error=session_expired", url.origin).toString() } });
+            : htmlErrorRedirect(401);
         }
 
         const session = await validateSession(accessToken, refreshToken);
@@ -633,7 +664,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
             clearAuthCookies(cookies);
             return isApiRoute
             ? jsonError("Sesi tidak valid.", 401)
-            : new Response(null, { status: 302, headers: { Location: new URL("/?error=session_expired", url.origin).toString() } });
+            : htmlErrorRedirect(401);
         }
 
         if (!session.isAdmin) {
@@ -641,7 +672,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
             clearAuthCookies(cookies);
             return isApiRoute
             ? jsonError("Akses ditolak.", 403)
-            : new Response(null, { status: 302, headers: { Location: new URL("/?error=unauthorized", url.origin).toString() } });
+            : htmlErrorRedirect(403);
         }
 
         (locals as App.Locals).user = { email: session.email ?? "", isAdmin: true };
@@ -658,7 +689,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         return applySecurityHeaders(response, nonce, isApiRoute);
     }
 
-    // ── 12. Fallback ──────────────────────────────────────────────
+    // ── 13. Fallback ──────────────────────────────────────────────
     const response = await next();
     return applySecurityHeaders(response, nonce, isApiRoute);
 });

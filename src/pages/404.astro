@@ -1,0 +1,280 @@
+---
+// src/pages/404.astro
+import Layoutc from "../layouts/Layoutc.astro";
+---
+
+<Layoutc title="404 — Halaman Tidak Ditemukan">
+  <div class="err-wrap">
+
+    <!-- Decorative grid background -->
+    <div class="err-grid" aria-hidden="true">
+      {Array.from({length: 64}).map(() => <div class="err-cell"></div>)}
+    </div>
+
+    <div class="err-content">
+      <!-- Big number -->
+      <div class="err-code" aria-hidden="true">
+        <span class="err-digit">4</span>
+        <span class="err-zero">
+          <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="42" stroke="currentColor" stroke-width="8"/>
+            <circle cx="50" cy="50" r="22" fill="currentColor" opacity="0.12"/>
+            <line x1="50" y1="8" x2="50" y2="92" stroke="currentColor" stroke-width="3" stroke-dasharray="4 6"/>
+          </svg>
+        </span>
+        <span class="err-digit">4</span>
+      </div>
+
+      <!-- Receipt-style card -->
+      <div class="err-receipt">
+        <div class="err-receipt-top">
+          <div class="err-receipt-dots">
+            {Array.from({length: 18}).map(() => <span></span>)}
+          </div>
+        </div>
+
+        <div class="err-receipt-body">
+          <div class="err-receipt-row header">
+            <span>KASIR</span>
+            <span>ERROR REPORT</span>
+          </div>
+          <div class="err-receipt-divider"></div>
+          <div class="err-receipt-row">
+            <span>Kode</span>
+            <span class="err-receipt-val accent">404</span>
+          </div>
+          <div class="err-receipt-row">
+            <span>Status</span>
+            <span class="err-receipt-val">Not Found</span>
+          </div>
+          <div class="err-receipt-row">
+            <span>Pesan</span>
+            <span class="err-receipt-val">Halaman hilang</span>
+          </div>
+          <div class="err-receipt-divider"></div>
+          <p class="err-receipt-desc">
+            Halaman yang kamu cari tidak ada, mungkin sudah dipindah atau URL-nya salah ketik.
+          </p>
+        </div>
+
+        <div class="err-receipt-bottom">
+          <div class="err-receipt-dots">
+            {Array.from({length: 18}).map(() => <span></span>)}
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="err-actions">
+        <a href="/" class="err-btn primary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          Kembali ke Beranda
+        </a>
+        <button onclick="history.back()" class="err-btn secondary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          Halaman Sebelumnya
+        </button>
+      </div>
+    </div>
+
+  </div>
+</Layoutc>
+
+<style>
+  .err-wrap {
+    position: relative;
+    min-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  /* Decorative grid */
+  .err-grid {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    pointer-events: none;
+    opacity: 0.4;
+  }
+  .err-cell {
+    border: 1px solid var(--border);
+    animation: cellFade 4s ease-in-out infinite;
+  }
+  .err-cell:nth-child(3n)  { animation-delay: 0.5s; }
+  .err-cell:nth-child(5n)  { animation-delay: 1.2s; }
+  .err-cell:nth-child(7n)  { animation-delay: 2s; }
+  .err-cell:nth-child(11n) { animation-delay: 0.8s; opacity: 0.6; background: rgba(200,75,31,.03); }
+  @keyframes cellFade {
+    0%,100% { opacity: 0.5; }
+    50%      { opacity: 1; }
+  }
+
+  /* Content */
+  .err-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+    max-width: 400px;
+    width: 100%;
+    animation: contentIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes contentIn {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Big error code */
+  .err-code {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-family: 'DM Serif Display', Georgia, serif;
+    line-height: 1;
+    user-select: none;
+  }
+  .err-digit {
+    font-size: clamp(5rem, 18vw, 8rem);
+    color: var(--dark);
+    font-weight: 400;
+    letter-spacing: -0.04em;
+    animation: digitWobble 6s ease-in-out infinite;
+  }
+  .err-digit:last-child { animation-delay: 0.3s; }
+  @keyframes digitWobble {
+    0%,100% { transform: translateY(0) rotate(0deg); }
+    25%      { transform: translateY(-4px) rotate(-1deg); }
+    75%      { transform: translateY(2px) rotate(0.5deg); }
+  }
+  .err-zero {
+    width: clamp(4.5rem, 16vw, 7rem);
+    color: var(--accent);
+    display: flex;
+    animation: zeroSpin 12s linear infinite;
+  }
+  .err-zero svg { width: 100%; height: 100%; }
+  @keyframes zeroSpin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+
+  /* Receipt card */
+  .err-receipt {
+    width: 100%;
+    background: var(--card);
+    box-shadow: 0 4px 32px rgba(17,17,16,.08), 0 1px 4px rgba(17,17,16,.06);
+    animation: contentIn 0.6s 0.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .err-receipt-top,
+  .err-receipt-bottom {
+    display: flex;
+    gap: 0;
+    padding: 0 4px;
+  }
+  .err-receipt-top  { margin-top: -1px; }
+  .err-receipt-bottom { margin-bottom: -1px; }
+  .err-receipt-dots {
+    display: flex;
+    gap: 0;
+    width: 100%;
+    justify-content: space-around;
+  }
+  .err-receipt-dots span {
+    width: 10px; height: 10px;
+    background: var(--bg);
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+    margin: -5px 0;
+  }
+
+  .err-receipt-body {
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .err-receipt-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.73rem;
+    color: var(--sub);
+    font-family: 'DM Sans', system-ui, sans-serif;
+  }
+  .err-receipt-row.header {
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--muted);
+  }
+  .err-receipt-val {
+    font-weight: 700;
+    color: var(--dark);
+    font-size: 0.75rem;
+  }
+  .err-receipt-val.accent { color: var(--accent); }
+  .err-receipt-divider {
+    border: none;
+    border-top: 1px dashed var(--border);
+    margin: 4px 0;
+  }
+  .err-receipt-desc {
+    font-size: 0.72rem;
+    color: var(--muted);
+    line-height: 1.6;
+    margin: 4px 0 0;
+    text-align: center;
+  }
+
+  /* Actions */
+  .err-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    animation: contentIn 0.6s 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .err-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 20px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    cursor: pointer;
+    text-decoration: none;
+    border: none;
+    transition: all 0.15s;
+  }
+  .err-btn.primary {
+    background: var(--dark);
+    color: #fff;
+  }
+  .err-btn.primary:hover { background: var(--accent); }
+  .err-btn.secondary {
+    background: transparent;
+    color: var(--dark);
+    border: 2px solid var(--border);
+  }
+  .err-btn.secondary:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+</style>

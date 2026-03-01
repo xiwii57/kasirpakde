@@ -23,8 +23,6 @@ const quickCashProduk = produk.filter((p) => p.quick_cash);
 const PUBLIC_SUPABASE_URL      = import.meta.env.PUBLIC_SUPABASE_URL;
 const PUBLIC_SUPABASE_ANON_KEY = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
 
-// URL foto QRIS statis dari Supabase Storage
-// Simpan file qris.webp / qris.png di bucket "qris" di Supabase Storage
 const QRIS_IMAGE_URL = '/qris.jpeg';
 
 function rp(n: number) {
@@ -92,8 +90,10 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
           <button class="qc-item" type="button"
             data-id={p.id} data-nama={p.nama_produk}
             data-jual={p.harga_jual} data-beli={p.harga_beli}>
-            {p.nama_produk}
-            <small>{rp(p.harga_jual)}</small>
+            <div class="qc-item-inner">
+              <span>{p.nama_produk}</span>
+              <small>{rp(p.harga_jual)}</small>
+            </div>
           </button>
         ))}
       </div>
@@ -282,10 +282,11 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
   </div>
 </div>
 
-<!-- ══ MODAL: QRIS Statis ══ -->
+<!-- ══ MODAL: QRIS ══ -->
 <div id="modal-qris" class="modal-wrap" role="dialog" aria-modal="true" aria-labelledby="mq-h">
-  <div class="modal-box" style="max-width:400px">
-    <div class="modal-head">
+  <div class="modal-box flex flex-col max-h-[90vh] overflow-hidden !p-0" style="max-width:400px">
+
+    <div class="modal-head !shrink-0 !static border-b border-gray-100" style="padding: 16px 20px;">
       <h2 id="mq-h">Pembayaran QRIS</h2>
       <button id="close-qris" class="modal-close-btn" aria-label="Tutup">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -294,45 +295,51 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
       </button>
     </div>
 
-    <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 20px">
-      <!-- Total tagihan -->
-      <div style="width:100%;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;text-align:center">
-        <div style="font-size:.7rem;color:#16a34a;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Total Tagihan</div>
-        <div id="qris-total-disp" style="font-size:1.4rem;font-weight:700;color:#15803d"></div>
-      </div>
+    <div class="flex-1 overflow-y-auto px-5 py-4 custom-scrollbar">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
 
-      <!-- QR Code statis -->
-      <img
-          id="qris-img"
-          src={QRIS_IMAGE_URL}
-          alt="QR Code QRIS"
-          style="width:100%;max-width:280px;border-radius:10px;border:1px solid #e5e7eb;object-fit:contain;cursor:zoom-in;"
-          onclick="document.getElementById('qris-lightbox').classList.add('open')"
-          onerror="this.style.display='none';document.getElementById('qris-no-img').style.display=''"
-        />
-      <!-- Fallback jika gambar tidak ditemukan -->
-      <div id="qris-no-img" style="display:none;padding:24px;text-align:center;color:#9ca3af;font-size:.8rem;border:1px dashed #d1d5db;border-radius:10px;width:100%;max-width:280px">
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin:0 auto 8px;display:block" aria-hidden="true">
-          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-          <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-        </svg>
-        <p style="margin:0 0 4px;font-weight:600;color:#6b7280">Foto QRIS belum tersedia</p>
-        <p style="margin:0;font-size:.72rem">Upload foto QRIS ke Supabase Storage<br/>bucket <code>qris</code> dengan nama <code>qris.png</code></p>
-      </div>
+        <div style="width:100%;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 14px;text-align:center">
+          <div style="font-size:.7rem;color:#16a34a;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">
+            Total Tagihan
+          </div>
+          <div id="qris-total-disp" style="font-size:1.5rem;font-weight:800;color:#15803d"></div>
+        </div>
 
-      <p style="font-size:.73rem;color:#6b7280;text-align:center;margin:0">
-        Scan QR di atas dengan aplikasi e-wallet atau m-banking.<br/>
-        Konfirmasi setelah pembayaran diterima.
-      </p>
+        <img
+            id="qris-img"
+            src={QRIS_IMAGE_URL}
+            alt="QR Code QRIS"
+            style="width:100%;max-width:280px;border-radius:10px;border:1px solid #e5e7eb;object-fit:contain;cursor:zoom-in;"
+            onclick="document.getElementById('qris-lightbox').classList.add('open')"
+            onerror="this.style.display='none';document.getElementById('qris-no-img').style.display='flex'"
+          />
+
+        <div id="qris-no-img" style="display:none;flex-direction:column;padding:24px;text-align:center;color:#9ca3af;font-size:.8rem;border:1px dashed #d1d5db;border-radius:10px;width:100%;max-width:280px">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin:0 auto 8px;display:block" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+          </svg>
+          <p style="margin:0 0 4px;font-weight:600;color:#6b7280">Foto QRIS belum tersedia</p>
+          <p style="margin:0;font-size:.72rem">Simpan file di folder <code>public/qris.jpeg</code></p>
+        </div>
+
+        <div class="text-center space-y-2 pb-2">
+          <p style="font-size:.75rem;color:#6b7280;line-height:1.4">
+            1. Buka aplikasi e-wallet (Gopay/OVO/Dana) atau M-Banking.<br/>
+            2. Scan QR di atas dan selesaikan pembayaran.<br/>
+            3. Jika sudah, klik tombol konfirmasi di bawah.
+          </p>
+        </div>
+      </div>
     </div>
 
-    <div style="padding:0 16px 16px;display:flex;gap:8px">
+    <div class="!shrink-0 border-t border-gray-100 bg-gray-50/50" style="padding:16px; display:flex; gap:8px;">
       <button id="qris-confirm-btn"
-        style="flex:1; padding:11px; background:#000000; color:#ffffff; border:1px solid #000000; border-radius:7px; font-size:.85rem; font-weight:600; cursor:pointer; transition: 0.2s;">
+        style="flex:1; padding:12px; background:#000000; color:#ffffff; border:none; border-radius:8px; font-size:.85rem; font-weight:700; cursor:pointer; transition: 0.2s;">
         ✓ Konfirmasi Sudah Bayar
       </button>
       <button id="close-qris-bottom"
-        style="flex:1;padding:11px;background:#f3f4f6;color:#374151;border:none;border-radius:7px;font-size:.85rem;font-weight:600;cursor:pointer">
+        style="flex:1; padding:12px; background:#f3f4f6; color:#374151; border:none; border-radius:8px; font-size:.85rem; font-weight:600; cursor:pointer;">
         Batal
       </button>
     </div>
@@ -411,16 +418,15 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
 window.__playSuccess = function() {
   try {
     var ctx = new (window.AudioContext || window.webkitAudioContext)();
-    // E5, G#5, B5 — chord E mayor, lebih cerah dari C mayor
     [659.25, 830.61, 987.77].forEach(function(f, i) {
       var o = ctx.createOscillator(), g = ctx.createGain();
       o.connect(g); g.connect(ctx.destination);
       o.frequency.value = f;
-      o.type = 'triangle'; // triangle lebih hangat dari sine, tidak terlalu elektronik
+      o.type = 'triangle';
       var t = ctx.currentTime + i * 0.13;
       g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.35, t + 0.02); // volume dari 0.13 → 0.35
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.4); // sustain lebih panjang
+      g.gain.linearRampToValueAtTime(0.35, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
       o.start(t); o.stop(t + 0.42);
     });
   } catch(e) {}
@@ -436,17 +442,37 @@ document.addEventListener('keydown', function(e) {
 (function() {
   var bar = document.getElementById('qc-bar');
   if (!bar) return;
+
   function updateFade() {
     var atEnd = bar.scrollLeft + bar.clientWidth >= bar.scrollWidth - 4;
+    // Kalau sudah di ujung kanan, hilangkan mask sepenuhnya — tidak ada warna putih menggantung
     bar.style.webkitMaskImage = atEnd
       ? 'none'
-      : 'linear-gradient(to right, black 85%, transparent 100%)';
+      : 'linear-gradient(to right, black 0%, black 85%, transparent 100%)';
     bar.style.maskImage = bar.style.webkitMaskImage;
   }
   bar.addEventListener('scroll', updateFade, { passive: true });
   updateFade();
-})();
 
+  // Mouse drag scroll (desktop)
+  var isDown = false, startX, scrollLeft;
+  bar.addEventListener('mousedown', function(e) {
+    isDown = true;
+    startX = e.pageX - bar.offsetLeft;
+    scrollLeft = bar.scrollLeft;
+    bar.style.cursor = 'grabbing';
+  });
+  document.addEventListener('mouseup', function() {
+    isDown = false;
+    bar.style.cursor = '';
+  });
+  bar.addEventListener('mousemove', function(e) {
+    if (!isDown) return;
+    e.preventDefault();
+    var x = e.pageX - bar.offsetLeft;
+    bar.scrollLeft = scrollLeft - (x - startX) * 1.2;
+  });
+})();
 </script>
 
 <script is:inline define:vars={{ produk, PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY }}>
@@ -462,7 +488,6 @@ var activeKat = 'semua';
 var searchQ   = '';
 var sheetOpen = false;
 
-/* total QRIS yang sedang menunggu konfirmasi */
 var _qrisTotal = 0;
 
 /* ── FORMAT ─────────────────────────────────────────────────────────────── */
@@ -510,27 +535,25 @@ var _imgLoaded = new Set();
 function loadImages() {
   document.querySelectorAll('.prod-card:not(.card-hidden)').forEach(function(card) {
     var id = card.dataset.id;
-    if (_imgLoaded.has(id)) return; // sudah di-load, skip
+    if (_imgLoaded.has(id)) return;
 
     var thumb = card.querySelector('.prod-thumb');
     if (!thumb) return;
-
-    // Cek apakah img sudah ada di DOM — jangan buat duplikat
     if (thumb.querySelector('img')) return;
 
-    _imgLoaded.add(id); // tandai SEBELUM fetch, bukan setelah
+    _imgLoaded.add(id);
 
     var img = document.createElement('img');
-    img.alt     = card.dataset.namaAsli || '';
-    img.loading = 'lazy';
-    img.decoding = 'async'; // tambah ini — non-blocking
+    img.alt      = card.dataset.namaAsli || '';
+    img.loading  = 'lazy';
+    img.decoding = 'async';
     img.onload  = function() {
       img.classList.add('loaded');
       var ph = thumb.querySelector('.prod-thumb-icon');
       if (ph) ph.style.display = 'none';
     };
     img.onerror = function() {
-      _imgLoaded.delete(id); // boleh retry kalau gagal beneran
+      _imgLoaded.delete(id);
     };
     img.src = SUPABASE_URL + '/storage/v1/object/public/' + BUCKET + '/' + id + '.webp';
     thumb.insertBefore(img, thumb.querySelector('.prod-qty-badge'));
@@ -799,7 +822,6 @@ function doQris() {
 document.getElementById('d-qris').addEventListener('click', doQris);
 document.getElementById('m-qris').addEventListener('click', doQris);
 
-/* Tutup modal QRIS */
 function handleCloseQris() {
   closeModal('qris');
   _qrisTotal = 0;
@@ -807,7 +829,6 @@ function handleCloseQris() {
 document.getElementById('close-qris').addEventListener('click', handleCloseQris);
 document.getElementById('close-qris-bottom').addEventListener('click', handleCloseQris);
 
-/* Konfirmasi sudah bayar QRIS */
 document.getElementById('qris-confirm-btn').addEventListener('click', async function() {
   if (!_qrisTotal) return;
   this.disabled = true;

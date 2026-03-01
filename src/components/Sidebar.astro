@@ -40,130 +40,255 @@ const navItems = [
 <!-- ── Overlay ─────────────────────────────────────────────────────────────── -->
 <div
   id="sidebar-overlay"
-  class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden"
+  class="fixed inset-0 bg-black/60 z-40 hidden lg:hidden"
   aria-hidden="true"
-  style="opacity:0; transition: opacity 220ms ease; backdrop-filter: blur(2px);"
+  style="opacity:0; transition: opacity 220ms ease; backdrop-filter: blur(3px);"
 ></div>
 
 <!-- ── Sidebar ─────────────────────────────────────────────────────────────── -->
 <aside
   id="sidebar"
-  class="w-56 bg-[#0f0d0b] flex flex-col flex-shrink-0 h-[100dvh] overflow-y-auto
-         fixed lg:sticky top-0 left-0 z-50
-         lg:translate-x-0
-         shadow-2xl lg:shadow-none"
-  style="transform: translateX(-100%); transition: transform 240ms cubic-bezier(0.4,0,0.2,1);"
   aria-label="Navigasi utama"
+  style="
+    width: 220px;
+    background: #141210;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    height: 100dvh;
+    overflow-y: auto;
+    position: fixed;
+    top: 0; left: 0;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 240ms cubic-bezier(0.4,0,0.2,1);
+    border-right: 1px solid rgba(255,255,255,0.055);
+    box-shadow: 4px 0 24px rgba(0,0,0,0.4);
+  "
 >
 
-  <!-- Logo + tombol tutup -->
-  <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between flex-shrink-0">
-    <a href="/dashboard" class="flex items-center gap-2.5 min-w-0" aria-label="Kasir Warung — Beranda">
-      <div class="w-7 h-7 bg-[#c84b1f] rounded-[4px] flex items-center justify-center flex-shrink-0" aria-hidden="true">
-        <svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <!-- ── Logo ── -->
+  <div style="
+    padding: 1.125rem 1.25rem 1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  ">
+    <a href="/dashboard" style="display:flex; align-items:center; gap:0.625rem; min-width:0; text-decoration:none;" aria-label="Kasir Warung — Beranda">
+      <!-- Logo mark -->
+      <div style="
+        width: 30px; height: 30px;
+        background: linear-gradient(135deg, #c84b1f 0%, #a83818 100%);
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+        box-shadow: 0 2px 8px rgba(200,75,31,0.35);
+      " aria-hidden="true">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
           <line x1="3" y1="6" x2="21" y2="6"/>
           <path d="M16 10a4 4 0 0 1-8 0"/>
         </svg>
       </div>
-      <div class="min-w-0">
-        <div class="text-white text-[0.9rem] leading-none truncate" style="font-family:'DM Serif Display',Georgia,serif">Kasir</div>
-        <div class="text-[0.58rem] text-white/35 uppercase tracking-[0.15em] mt-0.5">Warung</div>
+      <div style="min-width:0;">
+        <div style="color:#fff; font-size:0.875rem; font-weight:600; letter-spacing:-0.02em; line-height:1.1; font-family:'DM Sans',sans-serif;">Kasir Warung</div>
+        <div style="font-size:0.6rem; color:rgba(255,255,255,0.28); letter-spacing:0.1em; text-transform:uppercase; margin-top:2px; font-family:'DM Mono',monospace;">Admin Portal</div>
       </div>
     </a>
 
-    <!-- Tombol tutup — hanya mobile -->
+    <!-- Tombol tutup mobile -->
     <button
       id="close-sidebar"
-      class="lg:hidden w-7 h-7 flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/[0.07] rounded-[3px] transition-colors flex-shrink-0"
       aria-label="Tutup menu"
+      style="
+        display: none;
+        width: 28px; height: 28px;
+        align-items: center; justify-content: center;
+        color: rgba(255,255,255,0.35);
+        background: none;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: color 0.15s, background 0.15s;
+        flex-shrink: 0;
+      "
+      class="sidebar-close-btn"
     >
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
       </svg>
     </button>
   </div>
 
-  <!-- Nav -->
-  <nav class="flex-1 px-2.5 py-3 space-y-0.5 overflow-y-auto" aria-label="Menu halaman">
+  <!-- ── Nav ── -->
+  <nav style="flex:1; padding: 0.875rem 0.75rem; overflow-y:auto;" aria-label="Menu halaman">
 
-    <p class="px-2.5 pt-1 pb-2 text-[0.58rem] font-semibold text-white/25 uppercase tracking-[0.14em]">Menu</p>
+    <!-- Section label -->
+    <p style="
+      padding: 0 0.625rem 0.5rem;
+      font-size: 0.6rem;
+      font-weight: 700;
+      color: rgba(255,255,255,0.2);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-family: 'DM Mono', monospace;
+    ">Menu</p>
 
-    {navItems.map(item => (
-      <a
-        href={item.href}
-        class:list={[
-          "nav-link group flex items-center gap-2.5 px-2.5 py-2 rounded-[4px] text-[0.8rem] font-medium transition-all",
-          active === item.key
-            ? "is-active text-white"
-            : "text-white/45 hover:text-white/80 hover:bg-white/[0.05]",
-        ]}
-        aria-current={active === item.key ? "page" : undefined}
-      >
-        <svg
-          class:list={[
-            "w-3.5 h-3.5 flex-shrink-0 transition-colors",
-            active === item.key ? "text-[#c84b1f]" : "text-white/30 group-hover:text-white/60",
-          ]}
-          viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-          aria-hidden="true" set:html={item.icon}
-        />
-        <span class="truncate">{item.label}</span>
-        {active === item.key && (
-          <span class="ml-auto w-1.5 h-1.5 rounded-full bg-[#c84b1f] flex-shrink-0" aria-hidden="true"></span>
-        )}
-      </a>
-    ))}
+    <div style="display:flex; flex-direction:column; gap:2px;">
+      {navItems.map(item => (
+        <a
+          href={item.href}
+          class={`sidebar-nav-link ${active === item.key ? "is-active" : ""}`}
+          aria-current={active === item.key ? "page" : undefined}
+          style={`
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            padding: 0.5rem 0.625rem;
+            border-radius: 6px;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.15s ease;
+            letter-spacing: -0.01em;
+            color: ${active === item.key ? "#ffffff" : "rgba(255,255,255,0.4)"};
+            background: ${active === item.key ? "rgba(200,75,31,0.14)" : "transparent"};
+            box-shadow: ${active === item.key ? "inset 2.5px 0 0 #c84b1f" : "none"};
+          `}
+        >
+          <svg
+            width="14" height="14"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            aria-hidden="true"
+            style={`flex-shrink:0; color:${active === item.key ? "#c84b1f" : "rgba(255,255,255,0.28)"};`}
+            set:html={item.icon}
+          />
+          <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{item.label}</span>
+          {active === item.key && (
+            <span style="width:5px; height:5px; border-radius:50%; background:#c84b1f; flex-shrink:0;" aria-hidden="true"></span>
+          )}
+        </a>
+      ))}
+    </div>
 
-    <div class="pt-4 pb-2 px-2.5" aria-hidden="true">
-      <div class="h-px bg-white/[0.06] mb-3"></div>
-      <p class="text-[0.58rem] font-semibold text-white/25 uppercase tracking-[0.14em]">Sistem</p>
+    <!-- Divider + Sistem -->
+    <div style="padding: 1rem 0.625rem 0.5rem;" aria-hidden="true">
+      <div style="height:1px; background:rgba(255,255,255,0.06); margin-bottom:0.75rem;"></div>
+      <p style="
+        font-size: 0.6rem;
+        font-weight: 700;
+        color: rgba(255,255,255,0.2);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-family: 'DM Mono', monospace;
+      ">Sistem</p>
     </div>
 
     <a
       href="/dashboard/kasir"
-      class:list={[
-        "nav-link group flex items-center gap-2.5 px-2.5 py-2 rounded-[4px] text-[0.8rem] font-medium transition-all",
-        active === "kasir"
-          ? "is-active text-white"
-          : "text-white/45 hover:text-white/80 hover:bg-white/[0.05]",
-      ]}
+      class={`sidebar-nav-link ${active === "kasir" ? "is-active" : ""}`}
       aria-current={active === "kasir" ? "page" : undefined}
+      style={`
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        padding: 0.5rem 0.625rem;
+        border-radius: 6px;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        text-decoration: none;
+        transition: all 0.15s ease;
+        letter-spacing: -0.01em;
+        color: ${active === "kasir" ? "#ffffff" : "rgba(255,255,255,0.4)"};
+        background: ${active === "kasir" ? "rgba(200,75,31,0.14)" : "transparent"};
+        box-shadow: ${active === "kasir" ? "inset 2.5px 0 0 #c84b1f" : "none"};
+      `}
     >
       <svg
-        class:list={[
-          "w-3.5 h-3.5 flex-shrink-0 transition-colors",
-          active === "kasir" ? "text-[#c84b1f]" : "text-white/30 group-hover:text-white/60",
-        ]}
+        width="14" height="14"
         viewBox="0 0 24 24" fill="none" stroke="currentColor"
         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
         aria-hidden="true"
+        style={`flex-shrink:0; color:${active === "kasir" ? "#c84b1f" : "rgba(255,255,255,0.28)"};`}
       >
         <rect x="2" y="3" width="20" height="14" rx="2"/>
         <line x1="8" y1="21" x2="16" y2="21"/>
         <line x1="12" y1="17" x2="12" y2="21"/>
       </svg>
-      <span class="truncate">Halaman Kasir</span>
+      <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Halaman Kasir</span>
+      {active === "kasir" && (
+        <span style="width:5px; height:5px; border-radius:50%; background:#c84b1f; flex-shrink:0;" aria-hidden="true"></span>
+      )}
     </a>
 
   </nav>
 
-  <!-- User + Logout -->
-  <div class="px-2.5 py-3 border-t border-white/[0.07] flex-shrink-0">
+  <!-- ── User + Logout ── -->
+  <div style="
+    padding: 0.75rem;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    flex-shrink: 0;
+  ">
     {userEmail && (
-      <div class="px-2.5 py-2 mb-1.5 rounded-[4px] bg-white/[0.04]">
-        <p class="text-[0.63rem] font-semibold text-white/55 truncate">{shortName}</p>
-        <p class="text-[0.58rem] text-white/25 truncate">{userEmail}</p>
+      <div style="
+        padding: 0.5rem 0.625rem;
+        margin-bottom: 0.375rem;
+        border-radius: 6px;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.06);
+      ">
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <!-- Avatar inisial -->
+          <div style="
+            width: 24px; height: 24px;
+            border-radius: 5px;
+            background: rgba(200,75,31,0.2);
+            border: 1px solid rgba(200,75,31,0.3);
+            display: grid;
+            place-items: center;
+            flex-shrink: 0;
+          ">
+            <span style="font-size:0.6rem; font-weight:700; color:#c84b1f; text-transform:uppercase;">
+              {shortName.charAt(0)}
+            </span>
+          </div>
+          <div style="min-width:0; flex:1;">
+            <p style="font-size:0.7rem; font-weight:600; color:rgba(255,255,255,0.6); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{shortName}</p>
+            <p style="font-size:0.6rem; color:rgba(255,255,255,0.22); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{userEmail}</p>
+          </div>
+        </div>
       </div>
     )}
+
     <form action="/api/auth/logout" method="POST">
       <button
         type="submit"
-        class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[4px] text-[0.78rem] text-white/35 hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer group"
+        class="sidebar-logout-btn"
         aria-label="Keluar dari akun"
+        style="
+          width: 100%;
+          display: flex;
+          align-items: center;
+          gap: 0.625rem;
+          padding: 0.5rem 0.625rem;
+          border-radius: 6px;
+          font-size: 0.8rem;
+          font-weight: 500;
+          color: rgba(255,255,255,0.3);
+          background: none;
+          border: none;
+          cursor: pointer;
+          transition: color 0.15s, background 0.15s;
+          text-align: left;
+          letter-spacing: -0.01em;
+          font-family: 'DM Sans', sans-serif;
+        "
       >
-        <svg class="w-3.5 h-3.5 flex-shrink-0 text-white/25 group-hover:text-red-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0; color:rgba(255,255,255,0.2);">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
           <polyline points="16 17 21 12 16 7"/>
           <line x1="21" y1="12" x2="9" y2="12"/>
@@ -176,15 +301,45 @@ const navItems = [
 </aside>
 
 <style is:inline>
-  /* Aktif: glow inset kiri */
-  .nav-link.is-active {
-    background: rgba(200, 75, 31, 0.12);
-    box-shadow: inset 3px 0 0 #c84b1f;
+  /* Hover state nav link */
+  .sidebar-nav-link:not(.is-active):hover {
+    color: rgba(255,255,255,0.8) !important;
+    background: rgba(255,255,255,0.05) !important;
   }
 
+  .sidebar-nav-link:not(.is-active):hover svg {
+    color: rgba(255,255,255,0.55) !important;
+  }
+
+  /* Logout hover */
+  .sidebar-logout-btn:hover {
+    color: #f87171 !important;
+    background: rgba(239,68,68,0.08) !important;
+  }
+
+  .sidebar-logout-btn:hover svg {
+    color: #f87171 !important;
+  }
+
+  /* Close btn mobile */
+  .sidebar-close-btn:hover {
+    color: rgba(255,255,255,0.8) !important;
+    background: rgba(255,255,255,0.07) !important;
+  }
+
+  /* Desktop: selalu tampil, mobile: toggle */
   @media (min-width: 1024px) {
-    #sidebar { transform: translateX(0) !important; }
+    #sidebar {
+      transform: translateX(0) !important;
+      position: sticky !important;
+      box-shadow: none !important;
+    }
     #sidebar-overlay { display: none !important; }
+    .sidebar-close-btn { display: none !important; }
+  }
+
+  @media (max-width: 1023px) {
+    .sidebar-close-btn { display: flex !important; }
   }
 </style>
 
@@ -199,9 +354,7 @@ const navItems = [
     window.openSidebar = function () {
       sidebar.style.transform = 'translateX(0)';
       overlay.classList.remove('hidden');
-      requestAnimationFrame(function () {
-        overlay.style.opacity = '1';
-      });
+      requestAnimationFrame(function () { overlay.style.opacity = '1'; });
       document.body.style.overflow = 'hidden';
       var first = sidebar.querySelector('a[href]');
       if (first) setTimeout(function () { first.focus(); }, 250);
@@ -214,7 +367,8 @@ const navItems = [
       document.body.style.overflow = '';
     };
 
-    window.closeSidebar();
+    // Hanya close di mobile
+    if (window.innerWidth < 1024) window.closeSidebar();
 
     if (closeBtn) {
       closeBtn.removeEventListener('click', window.closeSidebar);
@@ -231,7 +385,6 @@ const navItems = [
     }
   });
 
-  // Reset saat resize ke desktop
   window.addEventListener('resize', function () {
     if (window.innerWidth >= 1024) {
       var overlay = document.getElementById('sidebar-overlay');
@@ -241,7 +394,6 @@ const navItems = [
   });
 
   initSidebar();
-
   document.addEventListener('astro:page-load', initSidebar);
 }());
 </script>

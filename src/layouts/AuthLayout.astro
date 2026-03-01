@@ -1,6 +1,5 @@
 ---
 import "../styles/global.css";
-
 interface Props {
   title: string;
   nonce?: string;
@@ -15,13 +14,13 @@ const { title, nonce = "" } = Astro.props;
   <meta name="robots" content="noindex, nofollow" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="referrer" content="no-referrer" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23c84b1f'/><text x='50%' y='56%' dominant-baseline='middle' text-anchor='middle' font-size='20' font-family='Georgia,serif' fill='white'>K</text></svg>" />
   <title>{title} — Kasir Warung</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <slot name="head" />
 </head>
-<bodya class="min-h-screen bg-[#f5f0e8]">
+<body class="min-h-screen">
   <slot />
 </body>
 </html>

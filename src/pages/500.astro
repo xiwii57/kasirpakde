@@ -1,0 +1,284 @@
+---
+// src/pages/500.astro
+import Layoutc from "../layouts/Layoutc.astro";
+---
+
+<Layoutc title="500 — Server Error">
+  <div class="err-wrap">
+
+    <!-- Glitch bars -->
+    <div class="glitch-bars" aria-hidden="true">
+      {Array.from({length: 6}).map((_, i) => (
+        <div class="glitch-bar" style={`--i:${i}`}></div>
+      ))}
+    </div>
+
+    <div class="err-content">
+
+      <!-- Terminal window -->
+      <div class="err-terminal">
+        <div class="err-terminal-bar">
+          <div class="t-dots">
+            <span class="t-dot red"></span>
+            <span class="t-dot yellow"></span>
+            <span class="t-dot green"></span>
+          </div>
+          <span class="t-title">server.log</span>
+          <span class="t-time" id="t-time"></span>
+        </div>
+        <div class="err-terminal-body">
+          <div class="t-line">
+            <span class="t-prompt">$</span>
+            <span class="t-cmd">GET /request HTTP/1.1</span>
+          </div>
+          <div class="t-line error">
+            <span class="t-tag">[ERROR]</span>
+            <span>Internal Server Error — kode 500</span>
+          </div>
+          <div class="t-line warn">
+            <span class="t-tag">[WARN]</span>
+            <span>Server sedang tidak bisa merespons</span>
+          </div>
+          <div class="t-line">
+            <span class="t-tag muted">[INFO]</span>
+            <span>Tim kami sudah diberitahu otomatis</span>
+          </div>
+          <div class="t-line">
+            <span class="t-prompt">$</span>
+            <span class="t-cursor">█</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Heading -->
+      <div class="err-heading">
+        <div class="err-code-badge">500</div>
+        <div>
+          <h1 class="err-title">Server Sedang Bermasalah</h1>
+          <p class="err-subtitle">Ini bukan salah kamu — server kami yang sedang ngambek. Coba lagi beberapa saat.</p>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="err-actions">
+        <button onclick="location.reload()" class="err-btn primary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+          Coba Lagi
+        </button>
+        <a href="/" class="err-btn secondary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          Ke Beranda
+        </a>
+      </div>
+
+      <!-- Countdown -->
+      <p class="err-auto-reload">
+        Otomatis reload dalam <strong id="countdown">30</strong> detik
+      </p>
+
+    </div>
+  </div>
+</Layoutc>
+
+<script is:inline>
+  // Countdown + auto reload
+  var n = 30;
+  var el = document.getElementById('countdown');
+  var iv = setInterval(function() {
+    n--;
+    if (el) el.textContent = n;
+    if (n <= 0) { clearInterval(iv); location.reload(); }
+  }, 1000);
+
+  // Update time
+  var te = document.getElementById('t-time');
+  if (te) te.textContent = new Date().toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+</script>
+
+<style>
+  .err-wrap {
+    position: relative;
+    min-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  /* Glitch bars */
+  .glitch-bars {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .glitch-bar {
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    opacity: 0;
+    animation: glitchBar 5s ease-in-out infinite;
+    animation-delay: calc(var(--i) * 0.9s);
+    top: calc(var(--i) * 17% + 8%);
+  }
+  @keyframes glitchBar {
+    0%,90%,100% { opacity: 0; transform: scaleX(0) translateX(0); }
+    92%          { opacity: 0.08; transform: scaleX(1) translateX(0); }
+    95%          { opacity: 0.04; transform: scaleX(0.6) translateX(20%); }
+    97%          { opacity: 0.08; transform: scaleX(1) translateX(-5%); }
+  }
+
+  /* Content */
+  .err-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 22px;
+    max-width: 440px;
+    width: 100%;
+    animation: slideUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Terminal */
+  .err-terminal {
+    width: 100%;
+    background: #1a1816;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 8px 40px rgba(17,17,16,.2);
+    animation: slideUp 0.55s 0.05s cubic-bezier(0.16, 1, 0.3, 1) both;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  }
+  .err-terminal-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: #111010;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  .t-dots { display: flex; gap: 5px; }
+  .t-dot { width: 11px; height: 11px; border-radius: 50%; }
+  .t-dot.red    { background: #ef4444; }
+  .t-dot.yellow { background: #f59e0b; }
+  .t-dot.green  { background: #22c55e; }
+  .t-title { font-size: 0.67rem; color: rgba(255,255,255,.35); margin-left: 4px; }
+  .t-time  { margin-left: auto; font-size: 0.6rem; color: rgba(255,255,255,.2); }
+
+  .err-terminal-body {
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .t-line {
+    display: flex;
+    gap: 8px;
+    font-size: 0.72rem;
+    color: rgba(255,255,255,.5);
+    line-height: 1.5;
+  }
+  .t-line.error { color: #fca5a5; }
+  .t-line.warn  { color: #fcd34d; }
+  .t-prompt { color: #4ade80; flex-shrink: 0; }
+  .t-cmd    { color: rgba(255,255,255,.8); }
+  .t-tag {
+    flex-shrink: 0;
+    font-weight: 700;
+    min-width: 52px;
+  }
+  .t-tag.muted { color: rgba(255,255,255,.3); }
+  .t-cursor {
+    color: rgba(255,255,255,.7);
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+  /* Heading */
+  .err-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    width: 100%;
+    animation: slideUp 0.55s 0.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .err-code-badge {
+    background: #0f0f0f0f;
+    color: #000;
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 1.6rem;
+    line-height: 1;
+    padding: 8px 12px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    box-shadow: 0 4px 16px rgba(200,75,31,.3);
+  }
+  .err-title {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 1.3rem;
+    color: var(--dark);
+    margin: 0 0 6px;
+    line-height: 1.2;
+  }
+  .err-subtitle {
+    font-size: 0.77rem;
+    color: var(--sub);
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  /* Actions */
+  .err-actions {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    animation: slideUp 0.55s 0.15s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .err-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 16px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    cursor: pointer;
+    text-decoration: none;
+    border: none;
+    transition: all 0.15s;
+  }
+  .err-btn.primary  { background: var(--dark); color: #fff; }
+  .err-btn.primary:hover { background: var(--accent); }
+  .err-btn.secondary {
+    background: transparent;
+    color: var(--dark);
+    border: 2px solid var(--border);
+  }
+  .err-btn.secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Countdown */
+  .err-auto-reload {
+    font-size: 0.68rem;
+    color: var(--muted);
+    margin: 0;
+    animation: slideUp 0.55s 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .err-auto-reload strong { color: var(--accent); }
+</style>
