@@ -5,7 +5,7 @@ import { createServiceClient } from "../../lib/supabase";
 import "../../styles/global.css";
 import "../../styles/dashboard.css";
 
-// Auth guard
+// Auth guard — middleware sudah handle redirect, ini double-check
 const accessToken = Astro.cookies.get("sb-access-token");
 if (!accessToken?.value) return Astro.redirect("/");
 
@@ -109,7 +109,6 @@ const maxOmset7  = Math.max(...days7.map(d => d.omset), 1);
 const omsetWeek  = days7.reduce((s, d) => s + d.omset, 0);
 const todayKey   = `${nowWIB.getFullYear()}-${pad2(nowWIB.getMonth() + 1)}-${pad2(nowWIB.getDate())}`;
 
-// Kemarin untuk perbandingan
 const kemarinKey = (() => {
   const k = new Date(todayStart); k.setDate(k.getDate() - 1);
   const w = new Date(k.getTime() + 7 * 60 * 60 * 1000);
@@ -153,13 +152,131 @@ const katBreakdown = ["Minuman","Snack","Rokok","Sembako","Lainnya"].map(kat => 
   return { kat, count: items.length, avgM, colorKey: katColors[kat] ?? "kat-gray" };
 });
 
-const userEmail = (Astro.locals as App.Locals).user?.email ?? "admin";
-const hour  = new Date().getHours();
-const salam = hour < 11 ? "Selamat pagi" : hour < 15 ? "Selamat siang" : hour < 18 ? "Selamat sore" : "Selamat malam";
+const userEmail  = (Astro.locals as App.Locals).user?.email ?? "admin";
+const hour       = new Date().getHours();
+const salam      = hour < 11 ? "Selamat pagi" : hour < 15 ? "Selamat siang" : hour < 18 ? "Selamat sore" : "Selamat malam";
 const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 ---
 
 <Layout title="Dashboard" active="dashboard" nonce={nonce}>
+
+<!-- ── Modal Hapus Histori ────────────────────────────────────────────────── -->
+<div id="modalHapus"
+  style="display:none;position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);backdrop-filter:blur(2px)"
+  role="dialog" aria-modal="true" aria-labelledby="modalHapusTitle">
+
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+              background:#fff;border-radius:10px;width:min(440px,calc(100vw - 2rem));
+              box-shadow:0 20px 60px rgba(0,0,0,.18);overflow:hidden">
+
+    <!-- Header -->
+    <div style="padding:1.25rem 1.5rem;border-bottom:1px solid rgba(15,13,11,.07);display:flex;align-items:center;gap:.75rem">
+      <div style="width:32px;height:32px;border-radius:8px;background:#fef2f2;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+          <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        </svg>
+      </div>
+      <div>
+        <h3 id="modalHapusTitle" style="font-size:.9rem;font-weight:700;color:#0f0d0b;margin:0">Hapus Histori</h3>
+        <p style="font-size:.68rem;color:#9ca3af;margin:1px 0 0">Data yang dihapus tidak dapat dipulihkan</p>
+      </div>
+      <button id="modalHapusClose" aria-label="Tutup"
+        style="margin-left:auto;width:28px;height:28px;border:none;background:none;cursor:pointer;
+               color:#9ca3af;display:flex;align-items:center;justify-content:center;border-radius:6px"
+        onmouseenter="this.style.background='#f3f4f6';this.style.color='#374151'"
+        onmouseleave="this.style.background='none';this.style.color='#9ca3af'">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:1.375rem 1.5rem;display:flex;flex-direction:column;gap:1rem">
+
+      <!-- Pilih tipe -->
+      <div>
+        <label style="font-size:.7rem;font-weight:600;color:#374151;display:block;margin-bottom:.5rem">Hapus data apa?</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+          <label id="lbl-transaksi" style="display:flex;align-items:center;gap:.5rem;padding:.6rem .75rem;border:1.5px solid #e5e7eb;border-radius:7px;cursor:pointer;transition:all .12s">
+            <input type="radio" name="hapusType" value="transaksi" style="accent-color:#c84b1f" checked>
+            <span style="font-size:.75rem;font-weight:600;color:#0f0d0b">Histori Transaksi</span>
+          </label>
+          <label id="lbl-harga_log" style="display:flex;align-items:center;gap:.5rem;padding:.6rem .75rem;border:1.5px solid #e5e7eb;border-radius:7px;cursor:pointer;transition:all .12s">
+            <input type="radio" name="hapusType" value="harga_log" style="accent-color:#c84b1f">
+            <span style="font-size:.75rem;font-weight:600;color:#0f0d0b">Log Perubahan Harga</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Pilih range -->
+      <div>
+        <label style="font-size:.7rem;font-weight:600;color:#374151;display:block;margin-bottom:.5rem">Rentang waktu</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+          {[
+            { val: "hari_ini", label: "Hari Ini" },
+            { val: "7_hari",   label: "7 Hari Terakhir" },
+            { val: "30_hari",  label: "30 Hari Terakhir" },
+            { val: "semua",    label: "Semua Waktu" },
+          ].map(r => (
+            <label style="display:flex;align-items:center;gap:.5rem;padding:.6rem .75rem;border:1.5px solid #e5e7eb;border-radius:7px;cursor:pointer;transition:all .12s"
+              class="range-lbl">
+              <input type="radio" name="hapusRange" value={r.val} style="accent-color:#c84b1f" checked={r.val === "hari_ini"}>
+              <span style="font-size:.75rem;font-weight:500;color:#374151">{r.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <!-- Warning box -->
+      <div id="hapusWarning" style="background:#fef2f2;border:1px solid #fecaca;border-radius:7px;padding:.75rem 1rem;display:flex;gap:.5rem;align-items:flex-start">
+        <svg style="flex-shrink:0;margin-top:1px" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <p id="hapusWarningText" style="font-size:.7rem;color:#dc2626;margin:0;line-height:1.5">
+          Histori transaksi hari ini akan dihapus permanen, termasuk seluruh item transaksi terkait.
+        </p>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:1rem 1.5rem;border-top:1px solid rgba(15,13,11,.07);display:flex;gap:.625rem;justify-content:flex-end">
+      <button id="hapusCancelBtn"
+        style="padding:.5rem 1rem;font-size:.78rem;font-weight:600;border:1.5px solid #e5e7eb;
+               background:#fff;color:#374151;border-radius:7px;cursor:pointer;transition:all .12s"
+        onmouseenter="this.style.background='#f9fafb'"
+        onmouseleave="this.style.background='#fff'">
+        Batal
+      </button>
+      <button id="hapusKonfirmasiBtn"
+        style="padding:.5rem 1.25rem;font-size:.78rem;font-weight:700;border:none;
+               background:#dc2626;color:#fff;border-radius:7px;cursor:pointer;
+               display:flex;align-items:center;gap:.4rem;transition:background .12s"
+        onmouseenter="this.style.background='#b91c1c'"
+        onmouseleave="this.style.background='#dc2626'">
+        <svg id="hapusSpinner" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none" aria-hidden="true">
+          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+        </svg>
+        <span id="hapusBtnLabel">Hapus Sekarang</span>
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Toast Notifikasi ───────────────────────────────────────────────────── -->
+<div id="toastNotif"
+  style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:100;display:none;
+         padding:.75rem 1.125rem;border-radius:8px;font-size:.78rem;font-weight:600;
+         box-shadow:0 8px 24px rgba(0,0,0,.15);display:flex;align-items:center;gap:.5rem;
+         transition:opacity .2s;opacity:0;pointer-events:none"
+  role="status" aria-live="polite">
+  <span id="toastIcon"></span>
+  <span id="toastText"></span>
+</div>
 
 <!-- ── Sticky Header ────────────────────────────────────────────────────────── -->
 <div class="bg-white border-b border-black/[0.07] px-4 sm:px-6 lg:px-8 py-4
@@ -182,26 +299,38 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
       </p>
     </div>
   </div>
-  <a href="/dashboard/produk?modal=tambah"
-    class="flex items-center gap-1.5 px-3.5 py-2 bg-[#0f0d0b] hover:bg-[#c84b1f]
-           text-white text-[.78rem] font-semibold rounded transition-colors">
-    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-    </svg>
-    <span class="hidden sm:inline">Tambah Produk</span>
-    <span class="sm:hidden">Tambah</span>
-  </a>
+  <div class="flex items-center gap-2">
+    <!-- Tombol Hapus Histori -->
+    <button id="btnHapusHistori"
+      class="flex items-center gap-1.5 px-3.5 py-2 border border-red-200 hover:border-red-400
+             text-red-500 hover:text-red-700 hover:bg-red-50 text-[.78rem] font-semibold
+             rounded transition-colors"
+      aria-label="Hapus histori data">
+      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+        <path d="M10 11v6"/><path d="M14 11v6"/>
+      </svg>
+      <span class="hidden sm:inline">Hapus Histori</span>
+    </button>
+    <a href="/dashboard/produk?modal=tambah"
+      class="flex items-center gap-1.5 px-3.5 py-2 bg-[#0f0d0b] hover:bg-[#c84b1f]
+             text-white text-[.78rem] font-semibold rounded transition-colors">
+      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      <span class="hidden sm:inline">Tambah Produk</span>
+      <span class="sm:hidden">Tambah</span>
+    </a>
+  </div>
 </div>
 
 <!-- ── Konten ────────────────────────────────────────────────────────────────── -->
 <div class="page-pad p-5 lg:p-7 space-y-5 max-w-[1400px] mx-auto">
 
-  <!-- ①  HARI INI — 4 highlight cards ──────────────────────────────────────── -->
+  <!-- ①  HARI INI -->
   <div class="fade-up d1">
     <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Hari Ini</p>
     <div class="today-grid grid grid-cols-4 gap-3">
-
-      <!-- Omset hari ini -->
       <div class="today-card dark">
         <p style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;opacity:.45;margin-bottom:5px">Omset</p>
         <p style="font-size:1.45rem;font-weight:800;line-height:1.1">{rp(omsetHari)}</p>
@@ -214,22 +343,16 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
           )}
         </div>
       </div>
-
-      <!-- Cash -->
       <div class="today-card green">
         <p style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#15803d;margin-bottom:5px">Cash / Manual</p>
         <p style="font-size:1.35rem;font-weight:800;color:#14532d;line-height:1.1">{rp(cashHari)}</p>
         <p style="font-size:.65rem;color:#16a34a;margin-top:5px">{hari.filter(t=>t.metode_bayar!=="qris").length} transaksi</p>
       </div>
-
-      <!-- QRIS -->
       <div class="today-card blue">
         <p style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#1d4ed8;margin-bottom:5px">QRIS · Duitku</p>
         <p style="font-size:1.35rem;font-weight:800;color:#1e3a8a;line-height:1.1">{rp(qrisHari)}</p>
         <p style="font-size:.65rem;color:#2563eb;margin-top:5px">{hari.filter(t=>t.metode_bayar==="qris").length} transaksi</p>
       </div>
-
-      <!-- Item terjual -->
       <div class="today-card amber">
         <p style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#b45309;margin-bottom:5px">Item Terjual</p>
         <p style="font-size:1.35rem;font-weight:800;color:#78350f;line-height:1.1">{itemHari}</p>
@@ -237,14 +360,11 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
           {hari.length > 0 ? `~${(itemHari / hari.length).toFixed(1)} item/trx` : "belum ada transaksi"}
         </p>
       </div>
-
     </div>
   </div>
 
-  <!-- ② TREN 7 HARI + TRANSAKSI TERBARU ────────────────────────────────────── -->
+  <!-- ② TREN 7 HARI + TRANSAKSI TERBARU -->
   <div class="trx-chart-grid grid grid-cols-5 gap-4 fade-up d2">
-
-    <!-- Grafik 7 hari -->
     <div class="col-span-3 section-card">
       <div class="section-head">
         <div>
@@ -263,9 +383,7 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
             const isToday = d.date === todayKey;
             return (
               <div class={`mc-col${isToday ? " today" : ""}`} data-lbl={d.label}>
-                <div class="mc-tip">
-                  {rp(d.omset)}<br/>{d.trx} trx
-                </div>
+                <div class="mc-tip">{rp(d.omset)}<br/>{d.trx} trx</div>
                 <div class="mc-bar"
                   style={`height:${pct > 0 ? Math.max(pct, 4) : 0}%;background:${isToday ? "#c84b1f" : "#f3d5cc"}`}>
                 </div>
@@ -275,8 +393,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         </div>
       </div>
     </div>
-
-    <!-- Transaksi terbaru hari ini -->
     <div class="col-span-2 section-card" style="display:flex;flex-direction:column">
       <div class="section-head">
         <div>
@@ -302,22 +418,17 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         ))
       }
     </div>
-
   </div>
 
-  <!-- ③  RINGKASAN PEMBAYARAN 30 HARI ──────────────────────────────────────── -->
+  <!-- ③  RINGKASAN PEMBAYARAN 30 HARI -->
   <div class="fade-up d3">
     <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Ringkasan Pembayaran · 30 Hari Terakhir</p>
     <div class="pay-grid grid grid-cols-2 gap-4">
-
-      <!-- Per metode -->
       <div class="section-card">
         <div class="section-head">
           <div><h2>Total per Metode Bayar</h2></div>
           <span style="font-size:.67rem;color:#9ca3af">{trx30.length} transaksi</span>
         </div>
-
-        <!-- Cash row -->
         <div style="display:flex;align-items:center;gap:12px;padding:.85rem 1.375rem;border-bottom:1px solid rgba(15,13,11,.05)">
           <div style="width:30px;height:30px;border-radius:6px;background:#dcfce7;display:flex;align-items:center;justify-content:center;flex-shrink:0">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5" aria-hidden="true">
@@ -335,8 +446,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
             <p style="font-size:.62rem;color:#9ca3af;margin-top:3px">{cashCnt30} transaksi · {omset30 > 0 ? Math.round((cash30/omset30)*100) : 0}%</p>
           </div>
         </div>
-
-        <!-- QRIS row -->
         <div style="display:flex;align-items:center;gap:12px;padding:.85rem 1.375rem;border-bottom:1px solid rgba(15,13,11,.05)">
           <div style="width:30px;height:30px;border-radius:6px;background:#dbeafe;display:flex;align-items:center;justify-content:center;flex-shrink:0">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2.5" aria-hidden="true">
@@ -355,23 +464,19 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
             <p style="font-size:.62rem;color:#9ca3af;margin-top:3px">{qrisCnt30} transaksi · {omset30 > 0 ? Math.round((qris30/omset30)*100) : 0}%</p>
           </div>
         </div>
-
-        <!-- Total footer -->
         <div style="padding:.8rem 1.375rem;background:#fdf9f6;display:flex;justify-content:space-between;align-items:center">
           <span style="font-size:.72rem;color:#6b7280;font-weight:500">Total Omset 30 Hari</span>
           <span style="font-size:.95rem;font-weight:800;color:#0f0d0b">{rp(omset30)}</span>
         </div>
       </div>
-
-      <!-- 4 mini stats -->
       <div class="section-card" style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr">
         {[
-          { lbl:"Total Transaksi",  val: String(trx30.length),                            sub:"30 hari",            color:"#0f0d0b" },
-          { lbl:"Omset / Hari",     val: rp(Math.round(omset30 / 30)),                    sub:"rata-rata harian",   color:"#c84b1f" },
-          { lbl:"Nilai / Transaksi",val: trx30.length > 0 ? rp(Math.round(omset30/trx30.length)) : "Rp 0",
-                                                                                           sub:"rata-rata per trx",  color:"#0f0d0b" },
-          { lbl:"Metode Dominan",   val: cashCnt30 >= qrisCnt30 ? "Cash" : "QRIS",        sub: cashCnt30 >= qrisCnt30 ? `${cashCnt30} dari ${trx30.length} trx` : `${qrisCnt30} dari ${trx30.length} trx`,
-                                                                                                                       color: cashCnt30 >= qrisCnt30 ? "#15803d" : "#1d4ed8" },
+          { lbl:"Total Transaksi",   val: String(trx30.length),                                                           sub:"30 hari",           color:"#0f0d0b" },
+          { lbl:"Omset / Hari",      val: rp(Math.round(omset30 / 30)),                                                   sub:"rata-rata harian",  color:"#c84b1f" },
+          { lbl:"Nilai / Transaksi", val: trx30.length > 0 ? rp(Math.round(omset30/trx30.length)) : "Rp 0",              sub:"rata-rata per trx", color:"#0f0d0b" },
+          { lbl:"Metode Dominan",    val: cashCnt30 >= qrisCnt30 ? "Cash" : "QRIS",
+            sub: cashCnt30 >= qrisCnt30 ? `${cashCnt30} dari ${trx30.length} trx` : `${qrisCnt30} dari ${trx30.length} trx`,
+            color: cashCnt30 >= qrisCnt30 ? "#15803d" : "#1d4ed8" },
         ].map((s, i) => (
           <div style={[
             "padding:1.1rem 1.375rem",
@@ -384,11 +489,10 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
           </div>
         ))}
       </div>
-
     </div>
   </div>
 
-  <!-- ④  STAT CARDS PRODUK ────────────────────────────────────────────────── -->
+  <!-- ④  STAT CARDS PRODUK -->
   <div class="stats-grid grid grid-cols-4 gap-3 fade-up d4">
     <div class="stat-card">
       <div class="flex items-start justify-between gap-3">
@@ -453,9 +557,8 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
     </div>
   </div>
 
-  <!-- ⑤  TABEL PRODUK + KOLOM KANAN ────────────────────────────────────────── -->
+  <!-- ⑤  TABEL PRODUK + KOLOM KANAN -->
   <div class="grid-main grid grid-cols-3 gap-5 fade-up d5">
-
     <div class="col-span-2 section-card">
       <div class="section-head">
         <div><h2>Daftar Produk</h2></div>
@@ -509,10 +612,7 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         </table>
       </div>
     </div>
-
-    <!-- Kolom kanan -->
     <div class="col-right space-y-4">
-      <!-- Top Seller -->
       <div class="section-card">
         <div class="section-head" style="flex-direction:column;align-items:flex-start;gap:1px">
           <h2>Top Seller</h2>
@@ -536,8 +636,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
           }
         </div>
       </div>
-
-      <!-- Log Perubahan Harga -->
       <div class="section-card">
         <div class="section-head" style="flex-direction:column;align-items:flex-start;gap:1px">
           <h2>Log Perubahan Harga</h2>
@@ -565,7 +663,7 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
     </div>
   </div>
 
-  <!-- ⑥  BREAKDOWN KATEGORI ──────────────────────────────────────────────── -->
+  <!-- ⑥  BREAKDOWN KATEGORI -->
   <div class="section-card fade-up d6">
     <div class="section-head">
       <div><h2>Breakdown per Kategori</h2></div>
@@ -589,4 +687,183 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
   </div>
 
 </div>
+
+<!-- ── Script Modal Hapus Histori ─────────────────────────────────────────── -->
+<script nonce={nonce} is:inline>
+(function () {
+  "use strict";
+
+  var modal      = document.getElementById("modalHapus");
+  var btnBuka    = document.getElementById("btnHapusHistori");
+  var btnTutup   = document.getElementById("modalHapusClose");
+  var btnBatal   = document.getElementById("hapusCancelBtn");
+  var btnKonfirm = document.getElementById("hapusKonfirmasiBtn");
+  var spinner    = document.getElementById("hapusSpinner");
+  var btnLabel   = document.getElementById("hapusBtnLabel");
+  var warnText   = document.getElementById("hapusWarningText");
+  var toast      = document.getElementById("toastNotif");
+  var toastTxt   = document.getElementById("toastText");
+  var toastIco   = document.getElementById("toastIcon");
+
+  if (!modal || !btnBuka) return;
+
+  // ── Warning messages ─────────────────────────────────────────────
+  var WARN = {
+    transaksi: {
+      hari_ini:  "Histori transaksi hari ini akan dihapus permanen, termasuk seluruh item transaksi terkait.",
+      "7_hari":  "Histori transaksi 7 hari terakhir akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.",
+      "30_hari": "Histori transaksi 30 hari terakhir akan dihapus permanen. Pastikan data sudah dicatat sebelum melanjutkan.",
+      semua:     "⚠️ SELURUH histori transaksi akan dihapus permanen. Data tidak dapat dipulihkan sama sekali!",
+    },
+    harga_log: {
+      hari_ini:  "Log perubahan harga hari ini akan dihapus permanen.",
+      "7_hari":  "Log perubahan harga 7 hari terakhir akan dihapus permanen.",
+      "30_hari": "Log perubahan harga 30 hari terakhir akan dihapus permanen.",
+      semua:     "⚠️ SELURUH log perubahan harga akan dihapus permanen. Riwayat harga tidak dapat dipulihkan!",
+    },
+  };
+
+  function getSelected(name) {
+    var el = document.querySelector('[name="' + name + '"]:checked');
+    return el ? el.value : null;
+  }
+
+  function updateWarning() {
+    var type  = getSelected("hapusType")  || "transaksi";
+    var range = getSelected("hapusRange") || "hari_ini";
+    if (warnText && WARN[type] && WARN[type][range]) {
+      warnText.textContent = WARN[type][range];
+      // Lebih merah dan bold jika "semua"
+      warnText.style.fontWeight = range === "semua" ? "700" : "400";
+    }
+  }
+
+  // Update border radio saat berubah
+  function syncRadioStyles() {
+    document.querySelectorAll('[name="hapusType"]').forEach(function (radio) {
+      var lbl = radio.closest("label");
+      if (!lbl) return;
+      lbl.style.borderColor   = radio.checked ? "#c84b1f" : "#e5e7eb";
+      lbl.style.background    = radio.checked ? "#fdf6f3" : "#fff";
+    });
+    document.querySelectorAll('[name="hapusRange"]').forEach(function (radio) {
+      var lbl = radio.closest("label");
+      if (!lbl) return;
+      lbl.style.borderColor   = radio.checked ? "#c84b1f" : "#e5e7eb";
+      lbl.style.background    = radio.checked ? "#fdf6f3" : "#fff";
+    });
+    updateWarning();
+  }
+
+  // ── Toast helper ─────────────────────────────────────────────────
+  var toastTimer = null;
+  function showToast(msg, ok) {
+    if (!toast || !toastTxt || !toastIco) return;
+    toastTxt.textContent  = msg;
+    toastIco.textContent  = ok ? "✓" : "✕";
+    toast.style.background = ok ? "#0f0d0b" : "#dc2626";
+    toast.style.color      = "#fff";
+    toast.style.display    = "flex";
+    // Force reflow agar transisi berjalan
+    toast.offsetHeight; // eslint-disable-line
+    toast.style.opacity    = "1";
+    toast.style.pointerEvents = "auto";
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () {
+      toast.style.opacity = "0";
+      toast.style.pointerEvents = "none";
+      setTimeout(function () { toast.style.display = "none"; }, 220);
+    }, 3500);
+  }
+
+  // ── Buka / tutup modal ───────────────────────────────────────────
+  function bukaModal() {
+    modal.style.display = "block";
+    syncRadioStyles();
+    document.addEventListener("keydown", onEsc);
+    // Focus ke tombol batal untuk aksesibilitas
+    setTimeout(function () { if (btnBatal) btnBatal.focus(); }, 50);
+  }
+
+  function tutupModal() {
+    modal.style.display = "none";
+    document.removeEventListener("keydown", onEsc);
+  }
+
+  function onEsc(e) {
+    if (e.key === "Escape") tutupModal();
+  }
+
+  btnBuka.addEventListener("click",  bukaModal);
+  btnTutup.addEventListener("click", tutupModal);
+  btnBatal.addEventListener("click", tutupModal);
+
+  // Tutup modal saat klik backdrop
+  modal.addEventListener("click", function (e) {
+    if (e.target === modal) tutupModal();
+  });
+
+  // Sync radio
+  document.querySelectorAll('[name="hapusType"],[name="hapusRange"]').forEach(function (el) {
+    el.addEventListener("change", syncRadioStyles);
+  });
+
+  // ── Eksekusi hapus ───────────────────────────────────────────────
+  btnKonfirm.addEventListener("click", function () {
+    var type  = getSelected("hapusType");
+    var range = getSelected("hapusRange");
+
+    if (!type || !range) return;
+
+    // Konfirmasi ekstra untuk "semua"
+    if (range === "semua") {
+      var label = type === "transaksi" ? "SELURUH histori transaksi" : "SELURUH log perubahan harga";
+      if (!window.confirm("⚠️ Yakin ingin menghapus " + label + "?\n\nData tidak dapat dipulihkan!")) return;
+    }
+
+    // Loading state
+    btnKonfirm.disabled      = true;
+    btnBatal.disabled        = true;
+    spinner.style.display    = "block";
+    btnLabel.textContent     = "Menghapus...";
+
+    /*
+     * Gunakan fetch DELETE dengan credentials: "same-origin"
+     * agar cookie dikirim dan CSRF middleware tidak memblokir.
+     * Content-Type: application/json wajib — middleware validasi CT.
+     */
+    fetch("/api/admin/hapus-histori", {
+      method:      "DELETE",
+      credentials: "same-origin",
+      headers:     { "Content-Type": "application/json" },
+      body:        JSON.stringify({ type: type, range: range }),
+    })
+    .then(function (res) {
+      return res.json().then(function (data) {
+        if (res.ok && data.ok) {
+          tutupModal();
+          var deleted = data.deleted || 0;
+          var typeLabel = type === "transaksi" ? "transaksi" : "log harga";
+          showToast("✓ " + deleted + " " + typeLabel + " berhasil dihapus", true);
+          // Reload halaman setelah 1.5 detik agar statistik terupdate
+          setTimeout(function () { window.location.reload(); }, 1500);
+        } else {
+          showToast((data.error || "Gagal menghapus data."), false);
+        }
+      });
+    })
+    .catch(function () {
+      showToast("Gagal terhubung ke server.", false);
+    })
+    .finally(function () {
+      btnKonfirm.disabled   = false;
+      btnBatal.disabled     = false;
+      spinner.style.display = "none";
+      btnLabel.textContent  = "Hapus Sekarang";
+    });
+  });
+
+})();
+</script>
+
 </Layout>

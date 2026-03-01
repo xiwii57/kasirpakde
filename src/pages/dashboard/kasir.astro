@@ -88,26 +88,25 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
       <div class="qc-bar" id="qc-bar">
         <span class="qc-tag">⚡ Quick</span>
         <div class="qc-sep"></div>
-
-        {/* Wrapper scroll — hanya tombol yang scroll, label tetap */}
-        <div class="qc-items-scroll">
-          {quickCashProduk.map(p => (
-            <button class="qc-item" type="button"
-              data-id={p.id} data-nama={p.nama_produk}
-              data-jual={p.harga_jual} data-beli={p.harga_beli}>
-              {p.nama_produk}
-              <small>{rp(p.harga_jual)}</small>
-            </button>
-          ))}
-        </div>
+        {quickCashProduk.map(p => (
+          <button class="qc-item" type="button"
+            data-id={p.id} data-nama={p.nama_produk}
+            data-jual={p.harga_jual} data-beli={p.harga_beli}>
+            {p.nama_produk}
+            <small>{rp(p.harga_jual)}</small>
+          </button>
+        ))}
       </div>
     )}
+
     <!-- Category -->
     <div class="kat-bar" id="kat-bar" role="tablist">
-      <button class="kat-btn on" data-kat="semua" role="tab" aria-selected="true">Semua</button>
-      {kategoriList.map(k => (
-        <button class="kat-btn" data-kat={k} role="tab" aria-selected="false">{k}</button>
-      ))}
+      <div class="kat-items-scroll">
+        <button class="kat-btn on" data-kat="semua" role="tab" aria-selected="true">Semua</button>
+        {kategoriList.map(k => (
+          <button class="kat-btn" data-kat={k} role="tab" aria-selected="false">{k}</button>
+        ))}
+      </div>
     </div>
 
     <!-- Products -->
@@ -432,6 +431,21 @@ document.addEventListener('keydown', function(e) {
     document.getElementById('qris-lightbox').classList.remove('open');
   }
 });
+
+/* ── QC Bar scroll hint ─────────────────────────────────────────── */
+(function() {
+  var bar = document.getElementById('qc-bar');
+  if (!bar) return;
+  function updateFade() {
+    var atEnd = bar.scrollLeft + bar.clientWidth >= bar.scrollWidth - 4;
+    bar.style.webkitMaskImage = atEnd
+      ? 'none'
+      : 'linear-gradient(to right, black 85%, transparent 100%)';
+    bar.style.maskImage = bar.style.webkitMaskImage;
+  }
+  bar.addEventListener('scroll', updateFade, { passive: true });
+  updateFade();
+})();
 
 </script>
 

@@ -9,16 +9,17 @@ import type { AstroCookies } from "astro";
 const ADMIN_EMAIL           = import.meta.env.ADMIN_EMAIL               as string;
 const SUPABASE_URL          = import.meta.env.PUBLIC_SUPABASE_URL       as string;
 const SUPABASE_ANON_KEY     = import.meta.env.PUBLIC_SUPABASE_ANON_KEY  as string;
-const SUPABASE_SERVICE_ROLE = import.meta.env.SUPABASE_SERVICE_ROLE     as string;
 const IS_PROD               = import.meta.env.PROD                      as boolean;
 const CANONICAL_DOMAIN      = (import.meta.env.CANONICAL_DOMAIN as string)?.trim() ?? "";
 
 // ── Validasi env wajib saat startup ──────────────────────────────
+// ✅ FIX #5: SUPABASE_SERVICE_ROLE dihapus dari validasi — tidak dipakai
+// di middleware. Memvalidasi env yang tidak dipakai menyebabkan app crash
+// jika env tersebut tidak di-set di Vercel, padahal tidak diperlukan.
 for (const [key, val] of Object.entries({
     ADMIN_EMAIL,
     PUBLIC_SUPABASE_URL:      SUPABASE_URL,
     PUBLIC_SUPABASE_ANON_KEY: SUPABASE_ANON_KEY,
-    SUPABASE_SERVICE_ROLE,
 })) {
     if (!val || typeof val !== "string" || val.trim() === "") {
         throw new Error(`[Middleware] Env var wajib tidak ditemukan atau kosong: ${key}`);
@@ -40,8 +41,24 @@ const COOKIE_OPTIONS = {
     secure:   IS_PROD,
 } as const;
 
-// ── Route classification ──────────────────────────────────────────
-const PUBLIC_ROUTES = new Set(["/", "/api/auth/login", "/api/auth/logout"]);
+// ══════════════════════════════════════════════════════════════════
+// ROUTE CLASSIFICATION
+//
+// ✅ FIX #7: Gabung PUBLIC_ROUTES dan AUTH_FORM_ROUTES menjadi satu
+// source of truth (ROUTE_CONFIG) agar tidak ada desync di masa depan.
+// AUTH_FORM_ROUTES harus selalu subset dari public.
+// ══════════════════════════════════════════════════════════════════
+
+const ROUTE_CONFIG = {
+    // Route yang bisa diakses tanpa login
+    public:    ["/", "/api/auth/login", "/api/auth/logout"] as const,
+        // Subset dari public: route yang disubmit via <form> HTML biasa
+        // (bukan fetch/XHR). Browser bisa kirim Origin: null untuk ini.
+        authForms: ["/api/auth/login"] as const,
+} as const;
+
+const PUBLIC_ROUTES    = new Set<string>(ROUTE_CONFIG.public);
+const AUTH_FORM_ROUTES = new Set<string>(ROUTE_CONFIG.authForms);
 
 const PROTECTED_PREFIXES = [
     "/dashboard",
@@ -52,14 +69,10 @@ const PROTECTED_PREFIXES = [
 "/api/produk",
 ];
 
-// Auth routes yang dipanggil dari form HTML biasa (bukan fetch/XHR)
-// Browser bisa kirim Origin: null untuk ini — tangani secara khusus
-const AUTH_FORM_ROUTES = new Set(["/api/auth/login"]);
-
-const STATIC_EXTS     = /\.(ico|png|jpg|jpeg|webp|svg|gif|woff2?|ttf|otf|css|js|map|txt|xml|json)$/i;
-const MAX_BODY_BYTES  = 512 * 1024;
-const ALLOWED_METHODS = new Set(["GET", "POST", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
-const REQUIRED_CT_METHODS = new Set(["POST", "PATCH"]);
+const STATIC_EXTS         = /\.(ico|png|jpg|jpeg|webp|svg|gif|woff2?|ttf|otf|css|js|map|txt|xml|json)$/i;
+const MAX_BODY_BYTES       = 512 * 1024;
+const ALLOWED_METHODS      = new Set(["GET", "POST", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
+const REQUIRED_CT_METHODS  = new Set(["POST", "PATCH"]);
 
 // ══════════════════════════════════════════════════════════════════
 // NONCE
@@ -76,6 +89,12 @@ function generateNonce(): string {
 
 // ══════════════════════════════════════════════════════════════════
 // RATE LIMITER (In-Memory)
+//
+// ⚠️  CATATAN PENTING — KETERBATASAN SERVERLESS:
+// rateStore bersifat in-memory dan akan reset pada setiap cold start
+// Vercel. Artinya rate limiter tidak persisten antar instance.
+// Untuk kasus single-admin dengan Turnstile sebagai gate utama,
+// ini sudah cukup. Jika perlu rate limit persisten, gunakan Upstash Redis.
 // ══════════════════════════════════════════════════════════════════
 
 interface RateRecord {
@@ -111,6 +130,18 @@ function checkRateLimit(ip: string, category: RateCategory): { allowed: boolean;
     const cfg = RATE_CONFIG[category];
     const key = `${category}:${ip.replace(/[^a-fA-F0-9.:]/g, "").slice(0, 45)}`;
     const now = Date.now();
+
+    // ✅ FIX #3: Cleanup opportunistik — ganti setInterval module-level
+    // yang tidak aman di serverless. Cleanup hanya berjalan jika store
+    // mulai membesar (> 500 entri) agar tidak overhead setiap request.
+    if (rateStore.size > 500) {
+        for (const [k, r] of rateStore.entries()) {
+            if (now > r.resetAt && (!r.blocked || now > r.blockUntil)) {
+                rateStore.delete(k);
+            }
+        }
+    }
+
     const rec = rateStore.get(key);
 
     if (!rec || now > rec.resetAt) {
@@ -143,15 +174,6 @@ function resetLoginRateLimit(ip: string): void {
     rateStore.delete(`login:${ip.replace(/[^a-fA-F0-9.:]/g, "").slice(0, 45)}`);
 }
 
-if (typeof setInterval !== "undefined") {
-    setInterval(() => {
-        const now = Date.now();
-        for (const [key, rec] of rateStore.entries()) {
-            if (now > rec.resetAt && (!rec.blocked || now > rec.blockUntil)) rateStore.delete(key);
-        }
-    }, 60 * 60 * 1000);
-}
-
 // ══════════════════════════════════════════════════════════════════
 // HELPERS
 // ══════════════════════════════════════════════════════════════════
@@ -182,7 +204,6 @@ function safeCompare(a: string, b: string): boolean {
     return diff === 0;
 }
 
-// Hapus auth cookie via Astro cookies API — konsisten path+options
 function clearAuthCookies(cookies: AstroCookies): void {
     cookies.delete("sb-access-token",  COOKIE_OPTIONS);
     cookies.delete("sb-refresh-token", COOKIE_OPTIONS);
@@ -214,9 +235,9 @@ function isValidJwtStructure(token: string): boolean {
         const padded  = parts[1].replace(/-/g, "+").replace(/_/g, "/");
         const decoded = atob(padded);
         const payload = JSON.parse(decoded) as Record<string, unknown>;
-        if (typeof payload.exp !== "number")                            return false;
-        if (payload.exp * 1000 < Date.now())                           return false;
-        if (typeof payload.sub !== "string" || !payload.sub.trim())    return false;
+        if (typeof payload.exp !== "number")                         return false;
+        if (payload.exp * 1000 < Date.now())                        return false;
+        if (typeof payload.sub !== "string" || !payload.sub.trim()) return false;
         return true;
     } catch {
         return false;
@@ -237,6 +258,11 @@ interface SupabaseUser {
 }
 
 async function getUserFromToken(accessToken: string): Promise<{ user: SupabaseUser | null; error: string | null }> {
+    // ✅ FIX #1: Ganti AbortSignal.timeout() → AbortController manual
+    // AbortSignal.timeout() tidak tersedia di Node.js < 17.3 dan beberapa
+    // edge runtime. AbortController manual lebih compatible dan tidak memory leak.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
     try {
         const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
             method:  "GET",
@@ -245,7 +271,7 @@ async function getUserFromToken(accessToken: string): Promise<{ user: SupabaseUs
                 "apikey":        SUPABASE_ANON_KEY,
                 "Content-Type":  "application/json",
             },
-            signal: AbortSignal.timeout(5000),
+            signal: controller.signal,
         });
         if (!res.ok) {
             const body = await res.json().catch(() => ({})) as { message?: string };
@@ -254,6 +280,9 @@ async function getUserFromToken(accessToken: string): Promise<{ user: SupabaseUs
         return { user: await res.json() as SupabaseUser, error: null };
     } catch (err) {
         return { user: null, error: err instanceof Error ? err.message : "fetch error" };
+    } finally {
+        // ✅ Selalu bersihkan timer agar tidak ada memory leak
+        clearTimeout(timer);
     }
 }
 
@@ -261,12 +290,15 @@ async function refreshSessionFromToken(refreshToken: string): Promise<{
     data: { accessToken: string; refreshToken: string; expiresIn: number; user: SupabaseUser } | null;
     error: string | null;
 }> {
+    // ✅ FIX #1: Ganti AbortSignal.timeout() → AbortController manual
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
     try {
         const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
             method:  "POST",
             headers: { "apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json" },
             body:    JSON.stringify({ refresh_token: refreshToken }),
-                                signal:  AbortSignal.timeout(5000),
+                                signal:  controller.signal,
         });
         if (!res.ok) {
             const body = await res.json().catch(() => ({})) as { message?: string };
@@ -286,11 +318,20 @@ async function refreshSessionFromToken(refreshToken: string): Promise<{
         };
     } catch (err) {
         return { data: null, error: err instanceof Error ? err.message : "fetch error" };
+    } finally {
+        // ✅ Selalu bersihkan timer
+        clearTimeout(timer);
     }
 }
 
 // ══════════════════════════════════════════════════════════════════
 // SESSION CACHE (30 detik)
+//
+// ⚠️  CATATAN PENTING — KETERBATASAN SERVERLESS:
+// sessionCache bersifat in-memory dan akan reset pada setiap cold start
+// Vercel. Cache hanya efektif jika instance tetap "warm" (ada traffic
+// berkelanjutan). Pada cold start, setiap request akan hit Supabase API.
+// Untuk kasus single-admin ini tidak masalah — hanya sedikit lebih lambat.
 // ══════════════════════════════════════════════════════════════════
 
 interface SessionResult {
@@ -314,11 +355,20 @@ export function invalidateSessionCache(accessToken: string): void {
 }
 
 async function validateSession(accessToken: string, refreshToken: string): Promise<SessionResult> {
-    if (!accessToken || !refreshToken)      return { valid: false, isAdmin: false };
-    if (!isValidJwtStructure(accessToken))  return { valid: false, isAdmin: false };
+    if (!accessToken || !refreshToken)     return { valid: false, isAdmin: false };
+    if (!isValidJwtStructure(accessToken)) return { valid: false, isAdmin: false };
 
     const cacheKey = getSessionCacheKey(accessToken);
-    const cached   = sessionCache.get(cacheKey);
+
+    // ✅ Cleanup opportunistik session cache — ganti setInterval module-level
+    if (sessionCache.size > 200) {
+        const now = Date.now();
+        for (const [k, entry] of sessionCache.entries()) {
+            if (now > entry.expiresAt) sessionCache.delete(k);
+        }
+    }
+
+    const cached = sessionCache.get(cacheKey);
     if (cached && Date.now() < cached.expiresAt && cached.result.valid) return cached.result;
     if (cached) sessionCache.delete(cacheKey);
 
@@ -350,15 +400,6 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
     }
 }
 
-if (typeof setInterval !== "undefined") {
-    setInterval(() => {
-        const now = Date.now();
-        for (const [key, entry] of sessionCache.entries()) {
-            if (now > entry.expiresAt) sessionCache.delete(key);
-        }
-    }, 5 * 60 * 1000);
-}
-
 // ══════════════════════════════════════════════════════════════════
 // CSP BUILDER
 // ══════════════════════════════════════════════════════════════════
@@ -386,7 +427,7 @@ function buildCSP(nonce: string): string {
     return [
         "default-src 'none'",
         `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' https://challenges.cloudflare.com`,
-        `style-src 'self' 'nonce-${nonce}' https://fonts.googleapis.com`,
+        `style-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://fonts.googleapis.com`,
         "font-src 'self' https://fonts.gstatic.com",
         "frame-src https://challenges.cloudflare.com",
         `connect-src 'self' ${supabaseOrigin} wss://*.supabase.co https://challenges.cloudflare.com`,
@@ -408,7 +449,6 @@ function buildCSP(nonce: string): string {
 // FIX UTAMA: Modifikasi response.headers langsung — JANGAN buat
 // Response baru. Cara ini menjamin Set-Cookie dari login.ts tidak
 // pernah hilang karena tidak ada proses copy headers manual.
-// Ini adalah pola yang sama dengan projek raehan yang berfungsi.
 // ══════════════════════════════════════════════════════════════════
 
 function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boolean): Response {
@@ -420,10 +460,9 @@ function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boo
     h.set("X-XSS-Protection",        "0");
     h.set("X-DNS-Prefetch-Control",  "off");
 
-    // FIX: "no-referrer" menyebabkan browser kirim Origin: null saat
-    // form submit → CSRF check gagal → cookie tidak pernah di-set.
     // "strict-origin-when-cross-origin" mengirim origin pada same-origin
-    // POST sehingga form login berfungsi. Ini juga yang dipakai raehan.
+    // POST sehingga form login bisa kirim Origin header yang valid.
+    // "no-referrer" menyebabkan Origin: null → CSRF check gagal.
     h.set("Referrer-Policy", "strict-origin-when-cross-origin");
 
     h.set("Permissions-Policy", [
@@ -460,6 +499,7 @@ function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boo
 // ══════════════════════════════════════════════════════════════════
 
 function checkOrigin(request: Request, url: URL): boolean {
+    // Hanya POST dan PATCH yang perlu dicek — GET tidak membawa state
     if (!REQUIRED_CT_METHODS.has(request.method)) return true;
 
     const origin  = request.headers.get("origin");
@@ -494,13 +534,16 @@ function checkOrigin(request: Request, url: URL): boolean {
         catch { return false; }
     }
 
-    // Halaman biasa: jika ada origin, harus cocok
+    // ✅ FIX #8: Halaman biasa — hanya izinkan fallback tanpa origin untuk GET.
+    // POST ke halaman non-API tanpa origin ditolak agar tidak ada celah masa depan.
     if (!origin || origin === "null") {
+        if (request.method === "GET") return true;
         if (referer) {
             try { return allowedOrigins.has(new URL(referer).origin); }
             catch { return false; }
         }
-        return true;
+        // POST tanpa origin dan tanpa referer → tolak
+        return false;
     }
 
     try { return allowedOrigins.has(new URL(origin).origin); }
@@ -649,7 +692,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
         const response = await next();
 
         // Token direfresh — update cookie via Astro cookies API.
-        // Astro menangani Set-Cookie secara internal, tidak ada risiko hilang.
         if (session.newAccessToken && session.newRefreshToken) {
             const expiresIn = session.newExpiresIn ?? 3600;
             cookies.set("sb-access-token",  session.newAccessToken,  { ...COOKIE_OPTIONS, maxAge: expiresIn });

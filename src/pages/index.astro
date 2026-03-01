@@ -47,7 +47,6 @@ const errorMsg  = safeError ? errorMessages[safeError] : null;
 // ── CSP nonce untuk script & style inline ────────────────────────────────────
 const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
 ---
-
 <AuthLayout title="Masuk" nonce={nonce}>
 
   <!-- Turnstile script di head slot -->
@@ -269,24 +268,21 @@ const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
 
     if (pwToggle && pwInput) {
       pwToggle.addEventListener("click", function () {
-        // DIUBAH: getAttribute/setAttribute — lebih reliable dari .type = "..."
         var isHidden = pwInput.getAttribute("type") === "password";
         pwInput.setAttribute("type", isHidden ? "text" : "password");
-        eyeOpen.style.display             = isHidden ? "none" : "";
-        eyeOpen.setAttribute("aria-hidden", isHidden ? "true" : "false");
-        eyeClosed.style.display           = isHidden ? "" : "none";
+        eyeOpen.style.display              = isHidden ? "none" : "";
+        eyeOpen.setAttribute("aria-hidden",  isHidden ? "true" : "false");
+        eyeClosed.style.display            = isHidden ? "" : "none";
         eyeClosed.setAttribute("aria-hidden", isHidden ? "false" : "true");
         pwToggle.setAttribute("aria-label",   isHidden ? "Sembunyikan password" : "Tampilkan password");
-        pwToggle.setAttribute("aria-pressed", isHidden ? "true"  : "false");
+        pwToggle.setAttribute("aria-pressed", isHidden ? "true" : "false");
       });
     }
 
     /* ── State Turnstile ─────────────────────────────────── */
-    var tsReady = false;
-
-    window.onTurnstileSuccess = function () { tsReady = true; };
-    window.onTurnstileError   = function () { tsReady = false; };
-    window.onTurnstileExpired = function () { tsReady = false; };
+    window.onTurnstileSuccess = function () { window._tsReady = true; };
+    window.onTurnstileError   = function () { window._tsReady = false; };
+    window.onTurnstileExpired = function () { window._tsReady = false; };
 
     /* ── Validasi email sederhana ────────────────────────── */
     function isValidEmail(val) {
@@ -320,6 +316,13 @@ const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
         });
       }
     });
+
+    /* ── Helper: reset state tombol ─────────────────────── */
+    function resetBtn(btn) {
+      btn.disabled = false;
+      btn.classList.remove("btn-loading");
+      btn.setAttribute("aria-busy", "false");
+    }
 
     /* ── Validasi & submit ───────────────────────────────── */
     var form      = document.getElementById("loginForm");
@@ -360,18 +363,16 @@ const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
         /* Validasi Turnstile */
         if (!tsRes || !tsRes.value) {
           valid = false;
-          /* Tampilkan pesan yang tidak mengganggu */
-          var alertBox = document.createElement("div");
-          alertBox.setAttribute("role", "alert");
-          alertBox.setAttribute("aria-live", "assertive");
-          alertBox.className = "error-alert";
-          alertBox.style.marginTop = "0.75rem";
-          alertBox.innerHTML =
-            '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
-            '<span>Selesaikan verifikasi keamanan terlebih dahulu.</span>';
           var existing = form.querySelector(".turnstile-err");
           if (!existing) {
-            alertBox.classList.add("turnstile-err");
+            var alertBox = document.createElement("div");
+            alertBox.setAttribute("role", "alert");
+            alertBox.setAttribute("aria-live", "assertive");
+            alertBox.className = "error-alert turnstile-err";
+            alertBox.style.marginTop = "0.75rem";
+            alertBox.innerHTML =
+              '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+              '<span>Selesaikan verifikasi keamanan terlebih dahulu.</span>';
             form.appendChild(alertBox);
             setTimeout(function () { alertBox.remove(); }, 5000);
           }
@@ -384,8 +385,45 @@ const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
         submitBtn.classList.add("btn-loading");
         submitBtn.setAttribute("aria-busy", "true");
 
-        /* Submit form secara manual setelah validasi lulus */
-        form.submit();
+        /*
+         * ✅ FIX #1: Submit via fetch dengan credentials: "same-origin"
+         *
+         * Kenapa tidak pakai form.submit() biasa:
+         * - form.submit() bypass event handler → Astro CSRF check gagal (error awal)
+         *
+         * Kenapa tidak pakai fetch lalu ikuti redirect 302 dari API:
+         * - fetch() mengikuti redirect secara internal (opaque redirect)
+         * - Browser tidak memproses Set-Cookie dari response chain redirect
+         * - Cookie login tidak pernah tersimpan → middleware selalu reject
+         *
+         * Solusi: API return JSON 200 + set cookie, lalu redirect manual di sini.
+         * credentials: "same-origin" wajib agar cookie dikirim dan diterima.
+         */
+        var formData = new FormData(form);
+        fetch("/api/auth/login", {
+          method:      "POST",
+          body:        formData,
+          credentials: "same-origin",
+        })
+        .then(function (res) {
+          return res.json().then(function (data) {
+            if (res.ok && data.ok) {
+              /* Login sukses — cookie sudah di-set, redirect ke dashboard */
+              window.location.href = data.redirect || "/dashboard";
+            } else {
+              /* Login gagal — redirect ke halaman error */
+              var errParam = data.error || "server_error";
+              window.location.href = "/?error=" + encodeURIComponent(errParam);
+            }
+          });
+        })
+        .catch(function () {
+          /* Network error atau JSON parse gagal */
+          window.location.href = "/?error=server_error";
+        })
+        .finally(function () {
+          resetBtn(submitBtn);
+        });
       });
     }
   })();
