@@ -6,16 +6,16 @@ import type { AstroCookies } from "astro";
 // KONSTANTA & ENV
 // ══════════════════════════════════════════════════════════════════
 
-const ADMIN_EMAIL           = import.meta.env.ADMIN_EMAIL               as string;
-const SUPABASE_URL          = import.meta.env.PUBLIC_SUPABASE_URL       as string;
-const SUPABASE_ANON_KEY     = import.meta.env.PUBLIC_SUPABASE_ANON_KEY  as string;
-const IS_PROD               = import.meta.env.PROD                      as boolean;
-const CANONICAL_DOMAIN      = (import.meta.env.CANONICAL_DOMAIN as string)?.trim() ?? "";
+const ADMIN_EMAIL       = import.meta.env.ADMIN_EMAIL               as string;
+const SUPABASE_URL      = import.meta.env.PUBLIC_SUPABASE_URL       as string;
+const SUPABASE_ANON_KEY = import.meta.env.PUBLIC_SUPABASE_ANON_KEY  as string;
+const IS_PROD           = import.meta.env.PROD                      as boolean;
+
+// Domain hardcode — tambah/kurangi sesuai kebutuhan
+const ALLOWED_DOMAINS  = new Set(["karsip.my.id", "www.karsip.my.id"]);
+const CANONICAL_DOMAIN = "www.karsip.my.id"; // domain utama untuk redirect
 
 // ── Validasi env wajib saat startup ──────────────────────────────
-// ✅ FIX #5: SUPABASE_SERVICE_ROLE dihapus dari validasi — tidak dipakai
-// di middleware. Memvalidasi env yang tidak dipakai menyebabkan app crash
-// jika env tersebut tidak di-set di Vercel, padahal tidak diperlukan.
 for (const [key, val] of Object.entries({
     ADMIN_EMAIL,
     PUBLIC_SUPABASE_URL:      SUPABASE_URL,
@@ -33,7 +33,6 @@ if (!SUPABASE_URL.startsWith("https://")) {
 const ADMIN_EMAIL_NORMALIZED = ADMIN_EMAIL.toLowerCase().trim();
 
 // ── Cookie options — wajib konsisten antara set dan delete ───────
-// Browser mencocokkan path+secure+sameSite saat menghapus cookie.
 const COOKIE_OPTIONS = {
     path:     "/",
     httpOnly: true,
@@ -43,17 +42,10 @@ const COOKIE_OPTIONS = {
 
 // ══════════════════════════════════════════════════════════════════
 // ROUTE CLASSIFICATION
-//
-// ✅ FIX #7: Gabung PUBLIC_ROUTES dan AUTH_FORM_ROUTES menjadi satu
-// source of truth (ROUTE_CONFIG) agar tidak ada desync di masa depan.
-// AUTH_FORM_ROUTES harus selalu subset dari public.
 // ══════════════════════════════════════════════════════════════════
 
 const ROUTE_CONFIG = {
-    // Route yang bisa diakses tanpa login
     public:    ["/", "/api/auth/login", "/api/auth/logout"] as const,
-        // Subset dari public: route yang disubmit via <form> HTML biasa
-        // (bukan fetch/XHR). Browser bisa kirim Origin: null untuk ini.
         authForms: ["/api/auth/login"] as const,
 } as const;
 
@@ -69,10 +61,10 @@ const PROTECTED_PREFIXES = [
 "/api/produk",
 ];
 
-const STATIC_EXTS         = /\.(ico|png|jpg|jpeg|webp|svg|gif|woff2?|ttf|otf|css|js|map|txt|xml|json)$/i;
-const MAX_BODY_BYTES       = 512 * 1024;
-const ALLOWED_METHODS      = new Set(["GET", "POST", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
-const REQUIRED_CT_METHODS  = new Set(["POST", "PATCH"]);
+const STATIC_EXTS        = /\.(ico|png|jpg|jpeg|webp|svg|gif|woff2?|ttf|otf|css|js|map|txt|xml|json)$/i;
+const MAX_BODY_BYTES      = 512 * 1024;
+const ALLOWED_METHODS     = new Set(["GET", "POST", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
+const REQUIRED_CT_METHODS = new Set(["POST", "PATCH"]);
 
 // ══════════════════════════════════════════════════════════════════
 // NONCE
@@ -90,11 +82,8 @@ function generateNonce(): string {
 // ══════════════════════════════════════════════════════════════════
 // RATE LIMITER (In-Memory)
 //
-// ⚠️  CATATAN PENTING — KETERBATASAN SERVERLESS:
-// rateStore bersifat in-memory dan akan reset pada setiap cold start
-// Vercel. Artinya rate limiter tidak persisten antar instance.
-// Untuk kasus single-admin dengan Turnstile sebagai gate utama,
-// ini sudah cukup. Jika perlu rate limit persisten, gunakan Upstash Redis.
+// ⚠️  CATATAN: rateStore bersifat in-memory dan reset setiap cold
+// start Vercel. Untuk single-admin + Turnstile ini sudah cukup.
 // ══════════════════════════════════════════════════════════════════
 
 interface RateRecord {
@@ -131,9 +120,7 @@ function checkRateLimit(ip: string, category: RateCategory): { allowed: boolean;
     const key = `${category}:${ip.replace(/[^a-fA-F0-9.:]/g, "").slice(0, 45)}`;
     const now = Date.now();
 
-    // ✅ FIX #3: Cleanup opportunistik — ganti setInterval module-level
-    // yang tidak aman di serverless. Cleanup hanya berjalan jika store
-    // mulai membesar (> 500 entri) agar tidak overhead setiap request.
+    // Cleanup opportunistik
     if (rateStore.size > 500) {
         for (const [k, r] of rateStore.entries()) {
             if (now > r.resetAt && (!r.blocked || now > r.blockUntil)) {
@@ -220,7 +207,6 @@ function jsonError(message: string, status: number, retryAfter?: number): Respon
 
 // ══════════════════════════════════════════════════════════════════
 // JWT STRUCTURE VALIDATOR
-// Early-reject token rusak sebelum hit Supabase API.
 // ══════════════════════════════════════════════════════════════════
 
 function isValidJwtStructure(token: string): boolean {
@@ -246,8 +232,6 @@ function isValidJwtStructure(token: string): boolean {
 
 // ══════════════════════════════════════════════════════════════════
 // SUPABASE REST API — NO WASM
-// Vercel Serverless memblokir WebAssembly yang dipakai oleh
-// supabase.auth.getUser(). Solusi: panggil REST API langsung.
 // ══════════════════════════════════════════════════════════════════
 
 interface SupabaseUser {
@@ -258,9 +242,6 @@ interface SupabaseUser {
 }
 
 async function getUserFromToken(accessToken: string): Promise<{ user: SupabaseUser | null; error: string | null }> {
-    // ✅ FIX #1: Ganti AbortSignal.timeout() → AbortController manual
-    // AbortSignal.timeout() tidak tersedia di Node.js < 17.3 dan beberapa
-    // edge runtime. AbortController manual lebih compatible dan tidak memory leak.
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
@@ -281,7 +262,6 @@ async function getUserFromToken(accessToken: string): Promise<{ user: SupabaseUs
     } catch (err) {
         return { user: null, error: err instanceof Error ? err.message : "fetch error" };
     } finally {
-        // ✅ Selalu bersihkan timer agar tidak ada memory leak
         clearTimeout(timer);
     }
 }
@@ -290,7 +270,6 @@ async function refreshSessionFromToken(refreshToken: string): Promise<{
     data: { accessToken: string; refreshToken: string; expiresIn: number; user: SupabaseUser } | null;
     error: string | null;
 }> {
-    // ✅ FIX #1: Ganti AbortSignal.timeout() → AbortController manual
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
@@ -319,7 +298,6 @@ async function refreshSessionFromToken(refreshToken: string): Promise<{
     } catch (err) {
         return { data: null, error: err instanceof Error ? err.message : "fetch error" };
     } finally {
-        // ✅ Selalu bersihkan timer
         clearTimeout(timer);
     }
 }
@@ -327,11 +305,8 @@ async function refreshSessionFromToken(refreshToken: string): Promise<{
 // ══════════════════════════════════════════════════════════════════
 // SESSION CACHE (30 detik)
 //
-// ⚠️  CATATAN PENTING — KETERBATASAN SERVERLESS:
-// sessionCache bersifat in-memory dan akan reset pada setiap cold start
-// Vercel. Cache hanya efektif jika instance tetap "warm" (ada traffic
-// berkelanjutan). Pada cold start, setiap request akan hit Supabase API.
-// Untuk kasus single-admin ini tidak masalah — hanya sedikit lebih lambat.
+// ⚠️  CATATAN: sessionCache reset setiap cold start Vercel.
+// Untuk single-admin ini tidak masalah.
 // ══════════════════════════════════════════════════════════════════
 
 interface SessionResult {
@@ -360,7 +335,7 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
 
     const cacheKey = getSessionCacheKey(accessToken);
 
-    // ✅ Cleanup opportunistik session cache — ganti setInterval module-level
+    // Cleanup opportunistik
     if (sessionCache.size > 200) {
         const now = Date.now();
         for (const [k, entry] of sessionCache.entries()) {
@@ -381,7 +356,6 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
             return result;
         }
 
-        // Access token expired → coba refresh
         const { data: rd, error: re } = await refreshSessionFromToken(refreshToken);
         if (re || !rd) return { valid: false, isAdmin: false };
 
@@ -445,10 +419,6 @@ function buildCSP(nonce: string): string {
 
 // ══════════════════════════════════════════════════════════════════
 // SECURITY HEADERS
-//
-// FIX UTAMA: Modifikasi response.headers langsung — JANGAN buat
-// Response baru. Cara ini menjamin Set-Cookie dari login.ts tidak
-// pernah hilang karena tidak ada proses copy headers manual.
 // ══════════════════════════════════════════════════════════════════
 
 function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boolean): Response {
@@ -459,11 +429,7 @@ function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boo
     h.set("X-Content-Type-Options",  "nosniff");
     h.set("X-XSS-Protection",        "0");
     h.set("X-DNS-Prefetch-Control",  "off");
-
-    // "strict-origin-when-cross-origin" mengirim origin pada same-origin
-    // POST sehingga form login bisa kirim Origin header yang valid.
-    // "no-referrer" menyebabkan Origin: null → CSRF check gagal.
-    h.set("Referrer-Policy", "strict-origin-when-cross-origin");
+    h.set("Referrer-Policy",         "strict-origin-when-cross-origin");
 
     h.set("Permissions-Policy", [
         "camera=()", "microphone=()", "geolocation=()", "payment=()", "usb=()",
@@ -499,33 +465,28 @@ function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boo
 // ══════════════════════════════════════════════════════════════════
 
 function checkOrigin(request: Request, url: URL): boolean {
-    // Hanya POST dan PATCH yang perlu dicek — GET tidak membawa state
     if (!REQUIRED_CT_METHODS.has(request.method)) return true;
 
     const origin  = request.headers.get("origin");
     const referer = request.headers.get("referer");
     const isApi   = url.pathname.startsWith("/api/");
 
+    // ✅ Hardcode allowed origins — www dan non-www keduanya diizinkan
     const allowedOrigins = new Set([
         url.origin,
-        ...(CANONICAL_DOMAIN ? [`https://${CANONICAL_DOMAIN}`] : []),
+        ...([...ALLOWED_DOMAINS].map(d => `https://${d}`)),
     ]);
 
     if (isApi) {
-        // AUTH_FORM_ROUTES dipanggil dari <form> HTML biasa.
-        // Browser bisa kirim Origin: null — validasi via Host header sebagai gantinya.
         const isFormRoute = AUTH_FORM_ROUTES.has(url.pathname);
 
         if (!origin || origin === "null") {
             if (isFormRoute) {
                 const host = request.headers.get("host") ?? "";
-                const expectedHosts = new Set([
-                    url.host,
-                    ...(CANONICAL_DOMAIN ? [CANONICAL_DOMAIN] : []),
-                ]);
+                // ✅ Hardcode expected hosts — www dan non-www
+                const expectedHosts = new Set([url.host, ...ALLOWED_DOMAINS]);
                 return expectedHosts.has(host.split(":")[0]) || expectedHosts.has(host);
             }
-            // API non-form (fetch/XHR): origin wajib ada
             console.warn(`[Middleware] CSRF: origin tidak ada untuk ${url.pathname}`);
             return false;
         }
@@ -534,15 +495,12 @@ function checkOrigin(request: Request, url: URL): boolean {
         catch { return false; }
     }
 
-    // ✅ FIX #8: Halaman biasa — hanya izinkan fallback tanpa origin untuk GET.
-    // POST ke halaman non-API tanpa origin ditolak agar tidak ada celah masa depan.
     if (!origin || origin === "null") {
         if (request.method === "GET") return true;
         if (referer) {
             try { return allowedOrigins.has(new URL(referer).origin); }
             catch { return false; }
         }
-        // POST tanpa origin dan tanpa referer → tolak
         return false;
     }
 
@@ -586,7 +544,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     if (isStaticAsset(pathname)) return next();
 
     // ── 2. Canonical domain redirect ─────────────────────────────
-    if (IS_PROD && CANONICAL_DOMAIN) {
+    if (IS_PROD) {
         const host = (request.headers.get("host") ?? url.hostname).split(":")[0].toLowerCase();
         if (host !== CANONICAL_DOMAIN) {
             const canonical = new URL(url.pathname + url.search, `https://${CANONICAL_DOMAIN}`);
@@ -691,7 +649,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
         const response = await next();
 
-        // Token direfresh — update cookie via Astro cookies API.
         if (session.newAccessToken && session.newRefreshToken) {
             const expiresIn = session.newExpiresIn ?? 3600;
             cookies.set("sb-access-token",  session.newAccessToken,  { ...COOKIE_OPTIONS, maxAge: expiresIn });
