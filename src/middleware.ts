@@ -1,7 +1,10 @@
 // src/middleware.ts
 import { defineMiddleware } from "astro:middleware";
+import type { AstroCookies } from "astro";
 
-// ─── Konstanta ────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+// KONSTANTA & ENV
+// ══════════════════════════════════════════════════════════════════
 
 const ADMIN_EMAIL           = import.meta.env.ADMIN_EMAIL               as string;
 const SUPABASE_URL          = import.meta.env.PUBLIC_SUPABASE_URL       as string;
@@ -10,26 +13,7 @@ const SUPABASE_SERVICE_ROLE = import.meta.env.SUPABASE_SERVICE_ROLE     as strin
 const IS_PROD               = import.meta.env.PROD                      as boolean;
 const CANONICAL_DOMAIN      = (import.meta.env.CANONICAL_DOMAIN as string)?.trim() ?? "";
 
-// ─── Domain Redirect ──────────────────────────────────────────────────────────
-
-function redirectToCanonical(request: Request, url: URL): Response | null {
-    if (!IS_PROD || !CANONICAL_DOMAIN) return null;
-
-    const host = (request.headers.get("host") ?? url.hostname).split(":")[0].toLowerCase();
-    if (host === CANONICAL_DOMAIN) return null;
-
-    const canonical = new URL(url.pathname + url.search, `https://${CANONICAL_DOMAIN}`);
-    return new Response(null, {
-        status: request.method === "GET" ? 301 : 308,
-        headers: {
-            "Location":      canonical.toString(),
-                        "Cache-Control": "public, max-age=31536000, immutable",
-        },
-    });
-}
-
-// ─── Validasi env kritis saat startup ────────────────────────────────────────
-
+// ── Validasi env wajib saat startup ──────────────────────────────
 for (const [key, val] of Object.entries({
     ADMIN_EMAIL,
     PUBLIC_SUPABASE_URL:      SUPABASE_URL,
@@ -47,13 +31,17 @@ if (!SUPABASE_URL.startsWith("https://")) {
 
 const ADMIN_EMAIL_NORMALIZED = ADMIN_EMAIL.toLowerCase().trim();
 
-const PUBLIC_ROUTES = new Set(["/", "/api/auth/login", "/api/auth/logout", "/api/auth/callback"]);
+// ── Cookie options — wajib konsisten antara set dan delete ───────
+// Browser mencocokkan path+secure+sameSite saat menghapus cookie.
+const COOKIE_OPTIONS = {
+    path:     "/",
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure:   IS_PROD,
+} as const;
 
-// ─── Route auth yang set cookie — bypass applySecurityHeaders ─────────────────
-// FIX: applySecurityHeaders menggunakan getSetCookie() yang tidak tersedia
-// di semua Vercel runtime. Daripada merusak Set-Cookie, biarkan response
-// auth melewati middleware tanpa diproses ulang headernya.
-const AUTH_COOKIE_ROUTES = new Set(["/api/auth/login", "/api/auth/callback"]);
+// ── Route classification ──────────────────────────────────────────
+const PUBLIC_ROUTES = new Set(["/", "/api/auth/login", "/api/auth/logout", "/api/auth/callback"]);
 
 const PROTECTED_PREFIXES = [
     "/dashboard",
@@ -64,12 +52,18 @@ const PROTECTED_PREFIXES = [
 "/api/produk",
 ];
 
-const STATIC_EXTS = /\.(ico|png|jpg|jpeg|webp|svg|gif|woff2?|ttf|otf|css|js|map|txt|xml|json)$/i;
-const MAX_BODY_BYTES = 512 * 1024;
-const ALLOWED_METHODS = new Set(["GET", "POST", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
-const REQUIRED_CONTENT_TYPE_METHODS = new Set(["POST", "PATCH"]);
+// Auth routes yang dipanggil dari form HTML biasa (bukan fetch/XHR)
+// Browser bisa kirim Origin: null untuk ini — tangani secara khusus
+const AUTH_FORM_ROUTES = new Set(["/api/auth/login", "/api/auth/callback"]);
 
-// ─── Nonce ────────────────────────────────────────────────────────────────────
+const STATIC_EXTS     = /\.(ico|png|jpg|jpeg|webp|svg|gif|woff2?|ttf|otf|css|js|map|txt|xml|json)$/i;
+const MAX_BODY_BYTES  = 512 * 1024;
+const ALLOWED_METHODS = new Set(["GET", "POST", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
+const REQUIRED_CT_METHODS = new Set(["POST", "PATCH"]);
+
+// ══════════════════════════════════════════════════════════════════
+// NONCE
+// ══════════════════════════════════════════════════════════════════
 
 function generateNonce(): string {
     const arr = new Uint8Array(24);
@@ -80,7 +74,9 @@ function generateNonce(): string {
     .replace(/=/g,  "");
 }
 
-// ─── Rate Limiter ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+// RATE LIMITER (In-Memory)
+// ══════════════════════════════════════════════════════════════════
 
 interface RateRecord {
     count:      number;
@@ -111,36 +107,22 @@ const RATE_CONFIG = {
 
 type RateCategory = keyof typeof RATE_CONFIG;
 
-function makeRateKey(ip: string, category: RateCategory): string {
-    const safeIp = ip.replace(/[^a-fA-F0-9.:]/g, "").slice(0, 45);
-    return `${category}:${safeIp}`;
-}
-
 function checkRateLimit(ip: string, category: RateCategory): { allowed: boolean; retryAfter: number } {
     const cfg = RATE_CONFIG[category];
-    const key  = makeRateKey(ip, category);
-    const now  = Date.now();
-    const rec  = rateStore.get(key);
+    const key = `${category}:${ip.replace(/[^a-fA-F0-9.:]/g, "").slice(0, 45)}`;
+    const now = Date.now();
+    const rec = rateStore.get(key);
 
     if (!rec || now > rec.resetAt) {
-        rateStore.set(key, {
-            count: 1, resetAt: now + cfg.windowMs,
-            blocked: false, blockUntil: 0, strikes: rec?.strikes ?? 0,
-        });
+        rateStore.set(key, { count: 1, resetAt: now + cfg.windowMs, blocked: false, blockUntil: 0, strikes: rec?.strikes ?? 0 });
         return { allowed: true, retryAfter: 0 };
     }
-    if (rec.strikes >= cfg.maxStrikes) {
-        console.warn(`[Middleware] Blokir permanen IP: ${ip} (${category})`);
-        return { allowed: false, retryAfter: 9999 };
-    }
+    if (rec.strikes >= cfg.maxStrikes) return { allowed: false, retryAfter: 9999 };
     if (rec.blocked && now < rec.blockUntil) {
         return { allowed: false, retryAfter: Math.ceil((rec.blockUntil - now) / 1000) };
     }
     if (rec.blocked && now >= rec.blockUntil) {
-        rateStore.set(key, {
-            count: 1, resetAt: now + cfg.windowMs,
-            blocked: false, blockUntil: 0, strikes: rec.strikes,
-        });
+        rateStore.set(key, { count: 1, resetAt: now + cfg.windowMs, blocked: false, blockUntil: 0, strikes: rec.strikes });
         return { allowed: true, retryAfter: 0 };
     }
     rec.count++;
@@ -158,21 +140,21 @@ function checkRateLimit(ip: string, category: RateCategory): { allowed: boolean;
 }
 
 function resetLoginRateLimit(ip: string): void {
-    rateStore.delete(makeRateKey(ip, "login"));
+    rateStore.delete(`login:${ip.replace(/[^a-fA-F0-9.:]/g, "").slice(0, 45)}`);
 }
 
 if (typeof setInterval !== "undefined") {
     setInterval(() => {
         const now = Date.now();
         for (const [key, rec] of rateStore.entries()) {
-            if (now > rec.resetAt && (!rec.blocked || now > rec.blockUntil)) {
-                rateStore.delete(key);
-            }
+            if (now > rec.resetAt && (!rec.blocked || now > rec.blockUntil)) rateStore.delete(key);
         }
     }, 60 * 60 * 1000);
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════════════════
 
 function getClientIp(request: Request): string {
     const cfIp = request.headers.get("cf-connecting-ip");
@@ -190,40 +172,62 @@ function isStaticAsset(pathname: string): boolean {
     return pathname.startsWith("/_astro/") || STATIC_EXTS.test(pathname);
 }
 
-function redirectRes(url: URL, path: string): Response {
-    return new Response(null, {
-        status:  302,
-        headers: {
-            "Location":      new URL(path, url.origin).toString(),
-                        "Cache-Control": "no-store, no-cache, must-revalidate, private",
-                        "Pragma":        "no-cache",
-        },
-    });
-}
-
-function jsonError(message: string, status: number): Response {
-    return new Response(JSON.stringify({ error: message }), {
-        status,
-        headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
-    });
-}
-
-function clearSessionCookies(): string[] {
-    const base = `Path=/; Max-Age=0; HttpOnly; SameSite=Lax${IS_PROD ? "; Secure" : ""}`;
-    return [`sb-access-token=; ${base}`, `sb-refresh-token=; ${base}`];
-}
-
 function safeCompare(a: string, b: string): boolean {
     if (a.length !== b.length) return false;
-    const enc    = new TextEncoder();
-    const aBytes = enc.encode(a);
-    const bBytes = enc.encode(b);
-    let diff = 0;
-    for (let i = 0; i < aBytes.length; i++) diff |= aBytes[i] ^ bBytes[i];
+    const enc = new TextEncoder();
+    const aB  = enc.encode(a);
+    const bB  = enc.encode(b);
+    let diff  = 0;
+    for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i];
     return diff === 0;
 }
 
-// ─── GET USER VIA REST API (NO WASM) ─────────────────────────────────────────
+// Hapus auth cookie via Astro cookies API — konsisten path+options
+function clearAuthCookies(cookies: AstroCookies): void {
+    cookies.delete("sb-access-token",  COOKIE_OPTIONS);
+    cookies.delete("sb-refresh-token", COOKIE_OPTIONS);
+}
+
+function jsonError(message: string, status: number, retryAfter?: number): Response {
+    const headers: Record<string, string> = {
+        "Content-Type":  "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+    };
+    if (retryAfter) headers["Retry-After"] = String(retryAfter);
+    return new Response(JSON.stringify({ error: message }), { status, headers });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// JWT STRUCTURE VALIDATOR
+// Early-reject token rusak sebelum hit Supabase API.
+// ══════════════════════════════════════════════════════════════════
+
+function isValidJwtStructure(token: string): boolean {
+    if (!token || typeof token !== "string") return false;
+    const parts = token.split(".");
+    if (parts.length !== 3) return false;
+
+    const b64url = /^[A-Za-z0-9_-]+$/;
+    if (!parts.every((p) => p.length > 0 && b64url.test(p))) return false;
+
+    try {
+        const padded  = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+        const decoded = atob(padded);
+        const payload = JSON.parse(decoded) as Record<string, unknown>;
+        if (typeof payload.exp !== "number")                            return false;
+        if (payload.exp * 1000 < Date.now())                           return false;
+        if (typeof payload.sub !== "string" || !payload.sub.trim())    return false;
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SUPABASE REST API — NO WASM
+// Vercel Serverless memblokir WebAssembly yang dipakai oleh
+// supabase.auth.getUser(). Solusi: panggil REST API langsung.
+// ══════════════════════════════════════════════════════════════════
 
 interface SupabaseUser {
     id:                  string;
@@ -232,10 +236,7 @@ interface SupabaseUser {
     [key: string]:       unknown;
 }
 
-async function getUserFromToken(accessToken: string): Promise<{
-    user:  SupabaseUser | null;
-    error: string | null;
-}> {
+async function getUserFromToken(accessToken: string): Promise<{ user: SupabaseUser | null; error: string | null }> {
     try {
         const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
             method:  "GET",
@@ -246,56 +247,34 @@ async function getUserFromToken(accessToken: string): Promise<{
             },
             signal: AbortSignal.timeout(5000),
         });
-
         if (!res.ok) {
             const body = await res.json().catch(() => ({})) as { message?: string };
             return { user: null, error: body.message ?? `HTTP ${res.status}` };
         }
-
-        const user = await res.json() as SupabaseUser;
-        return { user, error: null };
-
+        return { user: await res.json() as SupabaseUser, error: null };
     } catch (err) {
         return { user: null, error: err instanceof Error ? err.message : "fetch error" };
     }
 }
 
-// ─── REFRESH TOKEN VIA REST API (NO WASM) ────────────────────────────────────
-
-interface RefreshResult {
-    accessToken:  string;
-    refreshToken: string;
-    expiresIn:    number;
-    user:         SupabaseUser;
-}
-
 async function refreshSessionFromToken(refreshToken: string): Promise<{
-    data:  RefreshResult | null;
+    data: { accessToken: string; refreshToken: string; expiresIn: number; user: SupabaseUser } | null;
     error: string | null;
 }> {
     try {
         const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
             method:  "POST",
-            headers: {
-                "apikey":       SUPABASE_ANON_KEY,
-                "Content-Type": "application/json",
-            },
-            body:   JSON.stringify({ refresh_token: refreshToken }),
-                                signal: AbortSignal.timeout(5000),
+            headers: { "apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+            body:    JSON.stringify({ refresh_token: refreshToken }),
+                                signal:  AbortSignal.timeout(5000),
         });
-
         if (!res.ok) {
             const body = await res.json().catch(() => ({})) as { message?: string };
             return { data: null, error: body.message ?? `HTTP ${res.status}` };
         }
-
         const body = await res.json() as {
-            access_token:  string;
-            refresh_token: string;
-            expires_in:    number;
-            user:          SupabaseUser;
+            access_token: string; refresh_token: string; expires_in: number; user: SupabaseUser;
         };
-
         return {
             data: {
                 accessToken:  body.access_token,
@@ -305,13 +284,84 @@ async function refreshSessionFromToken(refreshToken: string): Promise<{
             },
             error: null,
         };
-
     } catch (err) {
         return { data: null, error: err instanceof Error ? err.message : "fetch error" };
     }
 }
 
-// ─── CSP & Security Headers ───────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+// SESSION CACHE (30 detik)
+// ══════════════════════════════════════════════════════════════════
+
+interface SessionResult {
+    valid:            boolean;
+    isAdmin:          boolean;
+    email?:           string;
+    newAccessToken?:  string;
+    newRefreshToken?: string;
+    newExpiresIn?:    number;
+}
+
+const sessionCache = new Map<string, { result: SessionResult; expiresAt: number }>();
+const SESSION_CACHE_TTL = 30_000;
+
+function getSessionCacheKey(token: string): string {
+    return `sc:${token.slice(0, 16)}:${token.slice(-16)}`;
+}
+
+export function invalidateSessionCache(accessToken: string): void {
+    if (accessToken) sessionCache.delete(getSessionCacheKey(accessToken));
+}
+
+async function validateSession(accessToken: string, refreshToken: string): Promise<SessionResult> {
+    if (!accessToken || !refreshToken)      return { valid: false, isAdmin: false };
+    if (!isValidJwtStructure(accessToken))  return { valid: false, isAdmin: false };
+
+    const cacheKey = getSessionCacheKey(accessToken);
+    const cached   = sessionCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt && cached.result.valid) return cached.result;
+    if (cached) sessionCache.delete(cacheKey);
+
+    try {
+        const { user, error } = await getUserFromToken(accessToken);
+        if (!error && user) {
+            const isAdmin = safeCompare((user.email ?? "").toLowerCase().trim(), ADMIN_EMAIL_NORMALIZED);
+            const result: SessionResult = { valid: true, isAdmin, email: user.email };
+            sessionCache.set(cacheKey, { result, expiresAt: Date.now() + SESSION_CACHE_TTL });
+            return result;
+        }
+
+        // Access token expired → coba refresh
+        const { data: rd, error: re } = await refreshSessionFromToken(refreshToken);
+        if (re || !rd) return { valid: false, isAdmin: false };
+
+        const isAdmin = safeCompare((rd.user.email ?? "").toLowerCase().trim(), ADMIN_EMAIL_NORMALIZED);
+        return {
+            valid:           true,
+            isAdmin,
+            email:           rd.user.email,
+            newAccessToken:  rd.accessToken,
+            newRefreshToken: rd.refreshToken,
+            newExpiresIn:    rd.expiresIn,
+        };
+    } catch (err) {
+        console.error("[Middleware] validateSession error:", err instanceof Error ? err.message : err);
+        return { valid: false, isAdmin: false };
+    }
+}
+
+if (typeof setInterval !== "undefined") {
+    setInterval(() => {
+        const now = Date.now();
+        for (const [key, entry] of sessionCache.entries()) {
+            if (now > entry.expiresAt) sessionCache.delete(key);
+        }
+    }, 5 * 60 * 1000);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CSP BUILDER
+// ══════════════════════════════════════════════════════════════════
 
 function buildCSP(nonce: string): string {
     const supabaseOrigin = new URL(SUPABASE_URL).origin;
@@ -352,240 +402,132 @@ function buildCSP(nonce: string): string {
     ].join("; ");
 }
 
-// ─── FIX: Cookie-safe security headers ───────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+// SECURITY HEADERS
 //
-// ROOT CAUSE: getSetCookie() tidak tersedia di semua Vercel Node.js runtime.
-// Ketika tidak tersedia, existingCookies = [] dan Set-Cookie terhapus tanpa
-// pernah di-append ulang → cookie login hilang → redirect loop.
-//
-// FIX: Gunakan extractSetCookies() yang kompatibel dengan berbagai runtime:
-// 1. Coba getSetCookie() (standar, tersedia di modern runtime)
-// 2. Fallback ke iterasi manual via headers.entries() untuk mengambil
-//    SEMUA nilai Set-Cookie (Node.js menyimpan multiple headers sebagai
-//    array internal yang bisa diakses via for...of pada headers)
-//
-function extractSetCookies(headers: Headers): string[] {
-    // Metode 1: getSetCookie() — standar WinterCG, tersedia di Vercel Edge & Node 18+
-    if (typeof (headers as any).getSetCookie === "function") {
-        const cookies = (headers as any).getSetCookie() as string[];
-        if (cookies.length > 0) return cookies;
-    }
-
-    // Metode 2: iterasi semua entries — beberapa runtime expose multiple
-    // Set-Cookie sebagai entri terpisah saat di-iterate
-    const cookies: string[] = [];
-    headers.forEach((value, key) => {
-        if (key.toLowerCase() === "set-cookie") {
-            // Nilai bisa berupa satu cookie atau multiple yang digabung dengan newline
-            // tergantung implementasi runtime
-            value.split("\n").forEach((v) => {
-                const trimmed = v.trim();
-                if (trimmed) cookies.push(trimmed);
-            });
-        }
-    });
-
-    return cookies;
-}
+// FIX UTAMA: Modifikasi response.headers langsung — JANGAN buat
+// Response baru. Cara ini menjamin Set-Cookie dari login.ts tidak
+// pernah hilang karena tidak ada proses copy headers manual.
+// Ini adalah pola yang sama dengan projek raehan yang berfungsi.
+// ══════════════════════════════════════════════════════════════════
 
 function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boolean): Response {
-    // Simpan semua Set-Cookie sebelum headers diproses ulang
-    const existingCookies = extractSetCookies(response.headers);
+    const h = response.headers;
 
-    const h = new Headers(response.headers);
-    h.delete("Set-Cookie"); // hapus dari Headers object (yang mungkin terdeduplikasi)
+    h.set("Content-Security-Policy", buildCSP(nonce));
+    h.set("X-Frame-Options",         "DENY");
+    h.set("X-Content-Type-Options",  "nosniff");
+    h.set("X-XSS-Protection",        "0");
+    h.set("X-DNS-Prefetch-Control",  "off");
 
-    h.set("Content-Security-Policy",   buildCSP(nonce));
-    h.set("X-Frame-Options",           "DENY");
-    h.set("X-Content-Type-Options",    "nosniff");
-    h.set("Referrer-Policy",           "no-referrer");
-    h.set("X-XSS-Protection",          "0");
+    // FIX: "no-referrer" menyebabkan browser kirim Origin: null saat
+    // form submit → CSRF check gagal → cookie tidak pernah di-set.
+    // "strict-origin-when-cross-origin" mengirim origin pada same-origin
+    // POST sehingga form login berfungsi. Ini juga yang dipakai raehan.
+    h.set("Referrer-Policy", "strict-origin-when-cross-origin");
+
     h.set("Permissions-Policy", [
         "camera=()", "microphone=()", "geolocation=()", "payment=()", "usb=()",
           "bluetooth=()", "accelerometer=()", "gyroscope=()", "magnetometer=()",
           "interest-cohort=()", "browsing-topics=()",
     ].join(", "));
 
-    if (!h.has("Cache-Control") || h.get("Cache-Control") === "") {
-        h.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    if (IS_PROD) {
+        h.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
     }
-    h.set("Pragma",  "no-cache");
-    h.set("Expires", "0");
-    h.set("Vary",    "Cookie");
+
+    h.set("Cross-Origin-Opener-Policy",   "same-origin");
+    h.set("Cross-Origin-Embedder-Policy", "unsafe-none");
+    h.set("Cross-Origin-Resource-Policy", isApiRoute ? "same-site" : "same-origin");
 
     h.delete("Server");
     h.delete("X-Powered-By");
     h.delete("X-Runtime");
     h.delete("X-AspNet-Version");
 
-    if (IS_PROD) {
-        h.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
-    }
-    if (!isApiRoute) {
-        h.set("Cross-Origin-Opener-Policy",   "same-origin");
-        h.set("Cross-Origin-Embedder-Policy", "unsafe-none");
-        h.set("Cross-Origin-Resource-Policy", "same-origin");
-    }
     if (isApiRoute) {
-        h.set("X-Content-Type-Options",       "nosniff");
-        h.set("Cross-Origin-Resource-Policy", "same-site");
+        h.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+        h.set("Pragma",        "no-cache");
+        h.set("Expires",       "0");
+        h.set("Vary",          "Cookie");
     }
 
-    // Append ulang semua cookie yang sudah diselamatkan
-    existingCookies.forEach((c: string) => h.append("Set-Cookie", c));
-
-    return new Response(response.body, {
-        status:     response.status,
-        statusText: response.statusText,
-        headers:    h,
-    });
+    return response;
 }
 
-// ─── CSRF Protection ──────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+// CSRF PROTECTION
+// ══════════════════════════════════════════════════════════════════
 
 function checkOrigin(request: Request, url: URL): boolean {
-    if (!REQUIRED_CONTENT_TYPE_METHODS.has(request.method)) return true;
+    if (!REQUIRED_CT_METHODS.has(request.method)) return true;
 
     const origin  = request.headers.get("origin");
     const referer = request.headers.get("referer");
+    const isApi   = url.pathname.startsWith("/api/");
 
     const allowedOrigins = new Set([
         url.origin,
         ...(CANONICAL_DOMAIN ? [`https://${CANONICAL_DOMAIN}`] : []),
     ]);
 
-    if (origin && origin !== "null") {
+    if (isApi) {
+        // AUTH_FORM_ROUTES dipanggil dari <form> HTML biasa.
+        // Browser bisa kirim Origin: null — validasi via Host header sebagai gantinya.
+        const isFormRoute = AUTH_FORM_ROUTES.has(url.pathname);
+
+        if (!origin || origin === "null") {
+            if (isFormRoute) {
+                const host = request.headers.get("host") ?? "";
+                const expectedHosts = new Set([
+                    url.host,
+                    ...(CANONICAL_DOMAIN ? [CANONICAL_DOMAIN] : []),
+                ]);
+                return expectedHosts.has(host.split(":")[0]) || expectedHosts.has(host);
+            }
+            // API non-form (fetch/XHR): origin wajib ada
+            console.warn(`[Middleware] CSRF: origin tidak ada untuk ${url.pathname}`);
+            return false;
+        }
+
         try { return allowedOrigins.has(new URL(origin).origin); }
         catch { return false; }
     }
 
-    if (origin === "null") {
-        // Origin: null terjadi pada form HTML biasa di beberapa browser (Firefox, Chrome).
-        // Validasi lewat Host header sebagai gantinya.
-        const host          = request.headers.get("host") ?? "";
-        const expectedHosts = new Set([
-            url.host,
-            ...(CANONICAL_DOMAIN ? [CANONICAL_DOMAIN] : []),
-        ]);
-        return expectedHosts.has(host.split(":")[0]) || expectedHosts.has(host);
+    // Halaman biasa: jika ada origin, harus cocok
+    if (!origin || origin === "null") {
+        if (referer) {
+            try { return allowedOrigins.has(new URL(referer).origin); }
+            catch { return false; }
+        }
+        return true;
     }
 
-    if (referer) {
-        try { return allowedOrigins.has(new URL(referer).origin); }
-        catch { return false; }
-    }
-
-    if (IS_PROD) {
-        console.warn(`[Middleware] CSRF: tidak ada origin/referer valid di production`);
-        return false;
-    }
-    return true;
+    try { return allowedOrigins.has(new URL(origin).origin); }
+    catch { return false; }
 }
 
-// ─── Suspicious Request Detection ────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+// SUSPICIOUS REQUEST DETECTION
+// ══════════════════════════════════════════════════════════════════
 
 function isSuspiciousRequest(request: Request, pathname: string): boolean {
     const ua = request.headers.get("user-agent") ?? "";
     if (pathname.includes("../") || pathname.includes("..\\")) return true;
-    if (pathname.includes("\0")) return true;
+    if (pathname.includes("\0"))                               return true;
     if (/%[0-9a-f]{2}/i.test(pathname)) {
         const decoded = decodeURIComponent(pathname);
         if (decoded.includes("../") || decoded.includes("<script") || decoded.includes("javascript:")) return true;
     }
-    if (!ua && pathname.startsWith("/api/")) return true;
-    if (ua.toLowerCase().includes("sqlmap") || ua.toLowerCase().includes("nikto") || ua.toLowerCase().includes("masscan")) return true;
+    if (!ua && pathname.startsWith("/api/"))                   return true;
+    const badUa = ["sqlmap", "nikto", "masscan", "zgrab", "nuclei"];
+    if (badUa.some((b) => ua.toLowerCase().includes(b)))      return true;
     return false;
 }
 
-// ─── Session Validator ────────────────────────────────────────────────────────
-
-interface SessionResult {
-    valid:           boolean;
-    isAdmin:         boolean;
-    email?:          string;
-    newAccessToken?: string;
-    newExpiresIn?:   number;
-}
-
-const sessionCache = new Map<string, { result: SessionResult; expiresAt: number }>();
-const SESSION_CACHE_TTL_MS = 30_000;
-
-function getSessionCacheKey(accessToken: string): string {
-    return `sc:${accessToken.slice(0, 16)}:${accessToken.slice(-16)}`;
-}
-
-export function invalidateSessionCache(accessToken: string): void {
-    if (!accessToken) return;
-    sessionCache.delete(getSessionCacheKey(accessToken));
-}
-
-async function validateSession(accessToken: string, refreshToken: string): Promise<SessionResult> {
-    if (!accessToken || !refreshToken) return { valid: false, isAdmin: false };
-
-    const jwtPattern = /^[\w-]+\.[\w-]+\.[\w-]+$/;
-    if (!jwtPattern.test(accessToken)) return { valid: false, isAdmin: false };
-
-    const cacheKey = getSessionCacheKey(accessToken);
-    const cached   = sessionCache.get(cacheKey);
-
-    if (cached && Date.now() < cached.expiresAt && cached.result.valid) {
-        return cached.result;
-    }
-    if (cached) sessionCache.delete(cacheKey);
-
-    const store = (result: SessionResult) => {
-        if (result.valid) {
-            sessionCache.set(cacheKey, { result, expiresAt: Date.now() + SESSION_CACHE_TTL_MS });
-        }
-        return result;
-    };
-
-    try {
-        const { user, error } = await getUserFromToken(accessToken);
-
-        if (!error && user) {
-            const isAdmin = safeCompare(
-                (user.email ?? "").toLowerCase().trim(),
-                                        ADMIN_EMAIL_NORMALIZED,
-            );
-            return store({ valid: true, isAdmin, email: user.email });
-        }
-
-        const { data: rd, error: re } = await refreshSessionFromToken(refreshToken);
-
-        if (re || !rd) {
-            return { valid: false, isAdmin: false };
-        }
-
-        const isAdmin = safeCompare(
-            (rd.user.email ?? "").toLowerCase().trim(),
-                                    ADMIN_EMAIL_NORMALIZED,
-        );
-
-        return {
-            valid:           true,
-            isAdmin,
-            email:           rd.user.email,
-            newAccessToken:  rd.accessToken,
-            newExpiresIn:    rd.expiresIn,
-        };
-
-    } catch (err) {
-        console.error("[Middleware] Session validation error:", err instanceof Error ? err.message : "unknown");
-        return { valid: false, isAdmin: false };
-    }
-}
-
-if (typeof setInterval !== "undefined") {
-    setInterval(() => {
-        const now = Date.now();
-        for (const [key, entry] of sessionCache.entries()) {
-            if (now > entry.expiresAt) sessionCache.delete(key);
-        }
-    }, 5 * 60 * 1000);
-}
-
-// ─── Middleware Utama ─────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+// MIDDLEWARE UTAMA
+// ══════════════════════════════════════════════════════════════════
 
 export const onRequest = defineMiddleware(async (context, next) => {
     const { request, cookies, url, locals } = context;
@@ -597,123 +539,108 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const nonce = generateNonce();
     (locals as App.Locals).nonce = nonce;
 
-    // ── 1. Aset statis ────────────────────────────────────────────────────────
+    // ── 1. Aset statis ────────────────────────────────────────────
     if (isStaticAsset(pathname)) return next();
 
-    // ── 1b. Canonical domain redirect ─────────────────────────────────────────
-    const domainRedirect = redirectToCanonical(request, url);
-    if (domainRedirect) return domainRedirect;
+    // ── 2. Canonical domain redirect ─────────────────────────────
+    if (IS_PROD && CANONICAL_DOMAIN) {
+        const host = (request.headers.get("host") ?? url.hostname).split(":")[0].toLowerCase();
+        if (host !== CANONICAL_DOMAIN) {
+            const canonical = new URL(url.pathname + url.search, `https://${CANONICAL_DOMAIN}`);
+            return new Response(null, {
+                status:  method === "GET" ? 301 : 308,
+                headers: { "Location": canonical.toString(), "Cache-Control": "public, max-age=31536000, immutable" },
+            });
+        }
+    }
 
-    // ── 2. Deteksi request mencurigakan ───────────────────────────────────────
+    // ── 3. Deteksi request mencurigakan ───────────────────────────
     if (isSuspiciousRequest(request, pathname)) {
-        console.warn(`[Middleware] Request mencurigakan dari IP: ${ip}, path: ${pathname}`);
-        return applySecurityHeaders(new Response("Bad Request", { status: 400 }), nonce, isApiRoute);
+        console.warn(`[Middleware] Request mencurigakan — IP: ${ip}, path: ${pathname}`);
+        return new Response("Bad Request", { status: 400 });
     }
 
-    // ── 3. Blokir method berbahaya ────────────────────────────────────────────
+    // ── 4. Blokir HTTP method tidak diizinkan ─────────────────────
     if (!ALLOWED_METHODS.has(method)) {
-        return applySecurityHeaders(
-            new Response("Method Not Allowed", { status: 405, headers: { Allow: [...ALLOWED_METHODS].join(", ") } }),
-                                    nonce, isApiRoute,
-        );
+        return new Response("Method Not Allowed", {
+            status:  405,
+            headers: { Allow: [...ALLOWED_METHODS].join(", ") },
+        });
     }
 
-    // ── 4. Cegah body terlalu besar ───────────────────────────────────────────
+    // ── 5. Cegah body terlalu besar ───────────────────────────────
     const contentLength = parseInt(request.headers.get("content-length") ?? "0", 10);
     if (Number.isNaN(contentLength) || contentLength > MAX_BODY_BYTES) {
-        return applySecurityHeaders(jsonError("Payload terlalu besar", 413), nonce, isApiRoute);
+        return jsonError("Payload terlalu besar", 413);
     }
 
-    // ── 5. CSRF check ─────────────────────────────────────────────────────────
+    // ── 6. CSRF check ─────────────────────────────────────────────
     if (!checkOrigin(request, url)) {
-        console.warn(`[Middleware] CSRF check gagal — IP: ${ip}, path: ${pathname}, method: ${method}`);
-        return applySecurityHeaders(jsonError("Forbidden: origin tidak valid", 403), nonce, isApiRoute);
+        console.warn(`[Middleware] CSRF gagal — IP: ${ip}, path: ${pathname}, method: ${method}`);
+        return isApiRoute
+        ? jsonError("Forbidden: origin tidak valid", 403)
+        : new Response(null, { status: 302, headers: { Location: new URL("/?error=forbidden", url.origin).toString() } });
     }
 
-    // ── 6. Content-Type validation ────────────────────────────────────────────
-    if (REQUIRED_CONTENT_TYPE_METHODS.has(method) && isApiRoute) {
-        const ct = request.headers.get("content-type") ?? "";
+    // ── 7. Content-Type validation ────────────────────────────────
+    if (REQUIRED_CT_METHODS.has(method) && isApiRoute) {
+        const ct      = request.headers.get("content-type") ?? "";
         const validCT = ct.includes("application/json") ||
         ct.includes("application/x-www-form-urlencoded") ||
         ct.includes("multipart/form-data");
-        if (!validCT) {
-            return applySecurityHeaders(jsonError("Content-Type tidak valid", 415), nonce, isApiRoute);
-        }
+        if (!validCT) return jsonError("Content-Type tidak valid", 415);
     }
 
-    // ── 7. Rate limit login ───────────────────────────────────────────────────
+    // ── 8. Rate limit login ───────────────────────────────────────
     if (pathname === "/api/auth/login" && method === "POST") {
         const { allowed, retryAfter } = checkRateLimit(ip, "login");
         if (!allowed) {
-            const minutes = retryAfter === 9999 ? "sementara" : `${Math.ceil(retryAfter / 60)} menit`;
-            console.warn(`[Middleware] Login rate limit: ${ip}`);
-            return applySecurityHeaders(
-                new Response(
-                    JSON.stringify({ error: `Terlalu banyak percobaan. Coba lagi dalam ${minutes}.` }),
-                             { status: 429, headers: { "Content-Type": "application/json; charset=utf-8", "Retry-After": String(retryAfter), "Cache-Control": "no-store" } },
-                ),
-                nonce, isApiRoute,
-            );
+            const mnt = retryAfter === 9999 ? "sementara" : `${Math.ceil(retryAfter / 60)} menit`;
+            console.warn(`[Middleware] Login rate limit — IP: ${ip}`);
+            return jsonError(`Terlalu banyak percobaan. Coba lagi dalam ${mnt}.`, 429, retryAfter);
         }
     }
 
-    // ── 8. Rate limit API umum ────────────────────────────────────────────────
+    // ── 9. Rate limit API umum ────────────────────────────────────
     if (isApiRoute && method !== "GET") {
         const { allowed, retryAfter } = checkRateLimit(ip, "api");
-        if (!allowed) {
-            return applySecurityHeaders(
-                new Response(
-                    JSON.stringify({ error: "Terlalu banyak request. Coba lagi sebentar." }),
-                             { status: 429, headers: { "Content-Type": "application/json; charset=utf-8", "Retry-After": String(retryAfter), "Cache-Control": "no-store" } },
-                ),
-                nonce, isApiRoute,
-            );
-        }
+        if (!allowed) return jsonError("Terlalu banyak request. Coba lagi sebentar.", 429, retryAfter);
     }
 
-    // ── 9. Route publik ───────────────────────────────────────────────────────
+    // ── 10. Route publik ──────────────────────────────────────────
     if (PUBLIC_ROUTES.has(pathname)) {
         const response = await next();
-
-        // ⚠️ FIX KRITIS: Auth routes yang men-set cookie (login/callback) harus
-        // di-bypass dari applySecurityHeaders karena fungsi tersebut bisa
-        // menghapus Set-Cookie jika getSetCookie() tidak tersedia di runtime.
-        // Security headers sudah di-set langsung di login.ts (SECURITY_HEADERS).
-        if (AUTH_COOKIE_ROUTES.has(pathname) && method === "POST") {
-            return response;
-        }
-
         return applySecurityHeaders(response, nonce, isApiRoute);
     }
 
-    // ── 10. Route terproteksi — validasi session ──────────────────────────────
+    // ── 11. Route terproteksi — validasi session ──────────────────
     if (isProtectedRoute(pathname)) {
         const accessToken  = cookies.get("sb-access-token")?.value  ?? "";
         const refreshToken = cookies.get("sb-refresh-token")?.value ?? "";
 
         if (!accessToken || !refreshToken) {
-            const fail    = isApiRoute ? jsonError("Autentikasi diperlukan.", 401) : redirectRes(url, "/?error=session_expired");
-            const headers = new Headers(fail.headers);
-            clearSessionCookies().forEach((c) => headers.append("Set-Cookie", c));
-            return applySecurityHeaders(new Response(fail.body, { status: fail.status, headers }), nonce, isApiRoute);
+            clearAuthCookies(cookies);
+            return isApiRoute
+            ? jsonError("Autentikasi diperlukan.", 401)
+            : new Response(null, { status: 302, headers: { Location: new URL("/?error=session_expired", url.origin).toString() } });
         }
 
         const session = await validateSession(accessToken, refreshToken);
 
         if (!session.valid) {
             console.warn(`[Middleware] Sesi tidak valid — IP: ${ip}, path: ${pathname}`);
-            const fail    = isApiRoute ? jsonError("Sesi tidak valid.", 401) : redirectRes(url, "/?error=session_expired");
-            const headers = new Headers(fail.headers);
-            clearSessionCookies().forEach((c) => headers.append("Set-Cookie", c));
-            return applySecurityHeaders(new Response(fail.body, { status: fail.status, headers }), nonce, isApiRoute);
+            clearAuthCookies(cookies);
+            return isApiRoute
+            ? jsonError("Sesi tidak valid.", 401)
+            : new Response(null, { status: 302, headers: { Location: new URL("/?error=session_expired", url.origin).toString() } });
         }
 
         if (!session.isAdmin) {
             console.warn(`[Middleware] Non-admin ditolak: ${session.email} — IP: ${ip}`);
-            const fail    = isApiRoute ? jsonError("Akses ditolak.", 403) : redirectRes(url, "/?error=unauthorized");
-            const headers = new Headers(fail.headers);
-            clearSessionCookies().forEach((c) => headers.append("Set-Cookie", c));
-            return applySecurityHeaders(new Response(fail.body, { status: fail.status, headers }), nonce, isApiRoute);
+            clearAuthCookies(cookies);
+            return isApiRoute
+            ? jsonError("Akses ditolak.", 403)
+            : new Response(null, { status: 302, headers: { Location: new URL("/?error=unauthorized", url.origin).toString() } });
         }
 
         (locals as App.Locals).user = { email: session.email ?? "", isAdmin: true };
@@ -721,19 +648,18 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
         const response = await next();
 
-        // Token direfresh — update cookie sb-access-token dengan token baru
-        if (session.newAccessToken) {
-            const expiresIn  = session.newExpiresIn ?? 3600;
-            const cookieOpts = `Path=/; HttpOnly; SameSite=Lax; Max-Age=${expiresIn}${IS_PROD ? "; Secure" : ""}`;
-            const headers    = new Headers(response.headers);
-            headers.append("Set-Cookie", `sb-access-token=${session.newAccessToken}; ${cookieOpts}`);
-            return applySecurityHeaders(new Response(response.body, { status: response.status, headers }), nonce, isApiRoute);
+        // Token direfresh — update cookie via Astro cookies API.
+        // Astro menangani Set-Cookie secara internal, tidak ada risiko hilang.
+        if (session.newAccessToken && session.newRefreshToken) {
+            const expiresIn = session.newExpiresIn ?? 3600;
+            cookies.set("sb-access-token",  session.newAccessToken,  { ...COOKIE_OPTIONS, maxAge: expiresIn });
+            cookies.set("sb-refresh-token", session.newRefreshToken, { ...COOKIE_OPTIONS, maxAge: 60 * 60 * 24 * 7 });
         }
 
         return applySecurityHeaders(response, nonce, isApiRoute);
     }
 
-    // ── 11. Route lainnya (fallback) ──────────────────────────────────────────
+    // ── 12. Fallback ──────────────────────────────────────────────
     const response = await next();
     return applySecurityHeaders(response, nonce, isApiRoute);
 });
