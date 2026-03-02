@@ -459,7 +459,9 @@ function buildCSP(nonce: string): string {
         return [
             "default-src 'self'",
             "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com ws://localhost:* http://localhost:*",
+            "script-src-attr 'unsafe-inline'",
             "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'",
+            "style-src-attr 'unsafe-inline'",
             "font-src 'self' https://fonts.gstatic.com data:",
             "frame-src https://challenges.cloudflare.com",
             `connect-src 'self' ${supabaseOrigin} wss://*.supabase.co https://challenges.cloudflare.com ws://localhost:* http://localhost:*`,
@@ -472,10 +474,13 @@ function buildCSP(nonce: string): string {
         ].join("; ");
     }
 
+    // BAGIAN PRODUCTION
     return [
         "default-src 'self'",
         `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' 'wasm-unsafe-eval' https://challenges.cloudflare.com`,
-        `style-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://fonts.googleapis.com`,
+        "script-src-attr 'unsafe-inline'", // Mengizinkan onerror, onclick, dll
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", // Hapus nonce di sini agar style="..." jalan
+        "style-src-attr 'unsafe-inline'", // Mengizinkan atribut style di HTML
         "font-src 'self' https://fonts.gstatic.com data:",
         "frame-src https://challenges.cloudflare.com",
         `connect-src 'self' ${supabaseOrigin} wss://*.supabase.co https://challenges.cloudflare.com`,
