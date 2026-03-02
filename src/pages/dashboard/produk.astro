@@ -101,7 +101,7 @@ function fmtDate(s: string) {
         <button type="button" class="kat-pill" data-kat={k}>{k}</button>
       ))}
     </div>
-    <div style="margin-left:auto" class="view-toggle" role="group" aria-label="Tampilan">
+    <div class="view-toggle" role="group" aria-label="Tampilan">
       <button type="button" class="view-btn active" id="btn-table" aria-label="Tampilan tabel" aria-pressed="true">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       </button>
@@ -672,702 +672,720 @@ function fmtDate(s: string) {
     <span id="t-msg"></span>
   </div>
 
-</Layout>
+  <script define:vars={{ KATEGORI_LIST }} nonce={nonce}>
+  'use strict';
 
-<script define:vars={{ nonce, KATEGORI_LIST }}>
-'use strict';
-
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
-function rp(n){ return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n); }
-function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function fmtDate(s){
-  if(!s)return '—';
-  try{ return new Date(s).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}); }
-  catch{ return '—'; }
-}
-
-// ─── TOAST ────────────────────────────────────────────────────────────────────
-var _tt;
-function toast(msg, ok){
-  var t=document.getElementById('toast'), ic=document.getElementById('t-icon');
-  document.getElementById('t-msg').textContent=msg;
-  ic.style.color = ok===false?'#f87171':'#4ade80';
-  ic.innerHTML   = ok===false ? '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' : '<polyline points="20 6 9 17 4 12"/>';
-  t.classList.add('show'); clearTimeout(_tt);
-  _tt=setTimeout(function(){ t.classList.remove('show'); },3200);
-}
-
-// ─── API JSON ─────────────────────────────────────────────────────────────────
-async function api(method,path,body){
-  // Selalu kirim Content-Type: application/json agar middleware tidak reject dengan 415
-  // DELETE tanpa payload tetap kirim body kosong '{}'
-  var opts={
-    method:method,
-    credentials:'same-origin',
-    headers:{'Content-Type':'application/json'},
-    body: body!==undefined ? JSON.stringify(body) : '{}'
-  };
-  var r=await fetch(path,opts);
-  var d=await r.json().catch(function(){return{};});
-  if(!r.ok) throw new Error(d.error||r.statusText);
-  return d;
-}
-
-// ─── MODAL ────────────────────────────────────────────────────────────────────
-var _pf=null;
-var FOCUSABLE='button:not([disabled]),[href],input:not([disabled]),select,[tabindex]:not([tabindex="-1"])';
-var ALL_MODALS=['detail','tambah','import','mass','hapus','hapus-massal','foto'];
-
-function openM(id){
-  _pf=document.activeElement;
-  var m=document.getElementById('m-'+id);
-  if(!m)return;
-  m.classList.add('open'); document.body.style.overflow='hidden';
-  var els=Array.from(m.querySelectorAll(FOCUSABLE));
-  if(els.length) setTimeout(function(){els[0].focus();},40);
-  m._kt=function(e){
-    if(e.key!=='Tab'||!els.length)return;
-    var f=els[0],l=els[els.length-1];
-    if(e.shiftKey){if(document.activeElement===f){e.preventDefault();l.focus();}}
-    else{if(document.activeElement===l){e.preventDefault();f.focus();}}
-  };
-  m.addEventListener('keydown',m._kt);
-}
-function closeM(id){
-  var m=document.getElementById('m-'+id);
-  if(!m)return;
-  m.classList.remove('open'); document.body.style.overflow='';
-  if(m._kt){m.removeEventListener('keydown',m._kt);m._kt=null;}
-  if(_pf){_pf.focus();_pf=null;}
-  if(id==='tambah') resetForm();
-  if(id==='foto')   resetFotoModal();
-  if(id==='hapus-massal') resetHapusMassal();
-}
-document.addEventListener('keydown',function(e){
-  if(e.key!=='Escape')return;
-  for(var i=0;i<ALL_MODALS.length;i++){
-    var m=document.getElementById('m-'+ALL_MODALS[i]);
-    if(m&&m.classList.contains('open')){ closeM(ALL_MODALS[i]); return; }
+  // ─── HELPERS ──────────────────────────────────────────────────────────────────
+  function rp(n){ return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n); }
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function fmtDate(s){
+    if(!s)return '—';
+    try{ return new Date(s).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}); }
+    catch{ return '—'; }
   }
-});
-ALL_MODALS.forEach(function(id){
-  var m=document.getElementById('m-'+id);
-  if(!m)return;
-  m.addEventListener('click',function(e){ if(e.target===this) closeM(id); });
-});
-document.querySelectorAll('.close-modal').forEach(function(b){
-  b.addEventListener('click',function(){ closeM(this.dataset.m); });
-});
 
-// ─── OPEN MODAL BUTTONS ───────────────────────────────────────────────────────
-document.getElementById('btn-tambah').onclick=function(){openM('tambah');};
-document.getElementById('btn-import').onclick=function(){openM('import');};
-document.getElementById('btn-mass').onclick=function(){openM('mass');};
-document.getElementById('btn-hapus-massal').onclick=function(){
-  resetHapusMassal();
-  updateHmInfo();
-  openM('hapus-massal');
-};
+  // ─── TOAST ────────────────────────────────────────────────────────────────────
+  var _tt;
+  function toast(msg, ok){
+    var t=document.getElementById('toast'), ic=document.getElementById('t-icon');
+    document.getElementById('t-msg').textContent=msg;
+    ic.style.color = ok===false?'#f87171':'#4ade80';
+    ic.innerHTML   = ok===false ? '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' : '<polyline points="20 6 9 17 4 12"/>';
+    t.classList.add('show'); clearTimeout(_tt);
+    _tt=setTimeout(function(){ t.classList.remove('show'); },3200);
+  }
 
-// ─── MODAL DETAIL ─────────────────────────────────────────────────────────────
-var _detailId='', _detailData={};
-
-function openDetail(data){
-  _detailId  = data.id;
-  _detailData = data;
-  var dImg = document.getElementById('d-img');
-  var dPh  = document.getElementById('d-img-placeholder');
-  if(data.img){
-    dImg.src = data.img; dImg.alt = data.nama; dImg.style.display = ''; dPh.style.display = 'none';
-  } else { dImg.style.display = 'none'; dPh.style.display = 'flex'; }
-  document.getElementById('m-detail-title').textContent = data.nama;
-  var m     = data.beli > 0 ? Math.round(((data.jual - data.beli) / data.beli) * 100) : null;
-  var bdg   = document.getElementById('d-badges');
-  bdg.innerHTML = '<span class="badge badge-k">'+esc(data.kat)+'</span>'
-    + (data.qc ? '<span class="badge badge-qc">Quick Cash</span>' : '');
-  var untung = data.jual - data.beli;
-  document.getElementById('d-jual').textContent  = rp(data.jual);
-  document.getElementById('d-beli').textContent  = rp(data.beli);
-  document.getElementById('d-untung').textContent = rp(untung);
-  document.getElementById('d-untung').style.color = untung > 0 ? '#15803d' : 'var(--muted)';
-  var mEl = document.getElementById('d-margin-val');
-  if(m !== null){
-    mEl.textContent = m + '%';
-    mEl.style.color = m >= 20 ? '#15803d' : m >= 10 ? '#92400e' : '#991b1b';
-  } else { mEl.textContent = '—'; mEl.style.color = 'var(--muted)'; }
-  document.getElementById('d-created').textContent = fmtDate(data.created);
-  document.getElementById('d-updated').textContent = fmtDate(data.updated);
-  document.getElementById('d-qc').textContent = data.qc ? 'Aktif ✓' : 'Tidak aktif';
-  document.getElementById('d-qc').style.color = data.qc ? '#15803d' : 'var(--muted)';
-  openM('detail');
-}
-
-document.getElementById('d-btn-edit').addEventListener('click',function(){
-  closeM('detail');
-  var editBtn = document.querySelector('.icon-btn.edit[data-id="'+_detailId+'"]');
-  if(editBtn){ editBtn.click(); }
-});
-document.getElementById('d-btn-hapus').addEventListener('click',function(){
-  closeM('detail');
-  var delBtn = document.querySelector('.icon-btn.del[data-id="'+_detailId+'"]');
-  if(delBtn){ delBtn.click(); }
-});
-
-document.addEventListener('click',function(e){
-  var cell = e.target.closest('.name-clickable'); if(!cell) return;
-  var row = cell.closest('tr.data-row'); if(!row) return;
-  openDetail({ id:row.dataset.id, nama:row.dataset.namaAsli, kat:row.dataset.kat,
-    beli:parseInt(row.dataset.beli)||0, jual:parseInt(row.dataset.jual)||0,
-    qc:row.dataset.quick==='true', created:row.dataset.created, updated:row.dataset.updated, img:row.dataset.img });
-});
-document.addEventListener('keydown',function(e){
-  if(e.key!=='Enter'&&e.key!==' ')return;
-  var cell = e.target.closest('.name-clickable'); if(!cell)return;
-  var row = cell.closest('tr.data-row'); if(!row)return;
-  e.preventDefault();
-  openDetail({ id:row.dataset.id, nama:row.dataset.namaAsli, kat:row.dataset.kat,
-    beli:parseInt(row.dataset.beli)||0, jual:parseInt(row.dataset.jual)||0,
-    qc:row.dataset.quick==='true', created:row.dataset.created, updated:row.dataset.updated, img:row.dataset.img });
-});
-document.addEventListener('click',function(e){
-  var body = e.target.closest('.card-body-clickable'); if(!body)return;
-  var card = body.closest('.prod-card'); if(!card)return;
-  openDetail({ id:card.dataset.id, nama:card.dataset.namaAsli, kat:card.dataset.kat,
-    beli:parseInt(card.dataset.beli)||0, jual:parseInt(card.dataset.jual)||0,
-    qc:card.dataset.quick==='true', created:card.dataset.created, updated:card.dataset.updated, img:card.dataset.img });
-});
-document.addEventListener('keydown',function(e){
-  if(e.key!=='Enter'&&e.key!==' ')return;
-  var body = e.target.closest('.card-body-clickable'); if(!body)return;
-  var card = body.closest('.prod-card'); if(!card)return;
-  e.preventDefault();
-  openDetail({ id:card.dataset.id, nama:card.dataset.namaAsli, kat:card.dataset.kat,
-    beli:parseInt(card.dataset.beli)||0, jual:parseInt(card.dataset.jual)||0,
-    qc:card.dataset.quick==='true', created:card.dataset.created, updated:card.dataset.updated, img:card.dataset.img });
-});
-
-// ─── FILTER ───────────────────────────────────────────────────────────────────
-var _q='', _kat='';
-function applyFilter(){
-  var q=_q.trim().toLowerCase(), kat=_kat, vis=0;
-  document.querySelectorAll('#tbody tr.data-row').forEach(function(r){
-    var show=(!q||r.dataset.nama.indexOf(q)!==-1)&&(!kat||r.dataset.kat===kat);
-    r.classList.toggle('tr-hidden',!show);
-    if(show) vis++;
-  });
-  document.querySelectorAll('#card-grid .prod-card').forEach(function(c){
-    var show=(!q||c.dataset.nama.indexOf(q)!==-1)&&(!kat||c.dataset.kat===kat);
-    c.classList.toggle('card-hidden',!show);
-  });
-  var lbl=document.getElementById('count-lbl');
-  if(lbl) lbl.textContent=vis+' produk';
-  var nr=document.getElementById('no-results'), nrc=document.getElementById('no-results-card');
-  if(nr)  nr.style.display=vis===0?'':'none';
-  if(nrc) nrc.style.display=vis===0?'':'none';
-}
-document.getElementById('q').addEventListener('input',function(){ _q=this.value; applyFilter(); });
-document.getElementById('kat-pills').addEventListener('click',function(e){
-  var btn=e.target.closest('.kat-pill'); if(!btn)return;
-  _kat=btn.dataset.kat||'';
-  document.querySelectorAll('.kat-pill').forEach(function(b){ b.classList.toggle('active',b.dataset.kat===_kat); });
-  applyFilter();
-});
-
-// ─── VIEW TOGGLE ─────────────────────────────────────────────────────────────
-document.getElementById('btn-table').addEventListener('click',function(){
-  document.getElementById('view-table').style.display='';
-  document.getElementById('view-card').style.display='none';
-  this.classList.add('active'); document.getElementById('btn-card').classList.remove('active');
-  this.setAttribute('aria-pressed','true'); document.getElementById('btn-card').setAttribute('aria-pressed','false');
-  localStorage.setItem('kw-view','table');
-});
-document.getElementById('btn-card').addEventListener('click',function(){
-  document.getElementById('view-card').style.display='';
-  document.getElementById('view-table').style.display='none';
-  this.classList.add('active'); document.getElementById('btn-table').classList.remove('active');
-  this.setAttribute('aria-pressed','true'); document.getElementById('btn-table').setAttribute('aria-pressed','false');
-  localStorage.setItem('kw-view','card');
-});
-(function(){
-  if(localStorage.getItem('kw-view')==='card') document.getElementById('btn-card').click();
-})();
-
-// ─── MARGIN PREVIEW ───────────────────────────────────────────────────────────
-function updMargin(){
-  var b=parseInt(document.getElementById('f-beli').value)||0;
-  var j=parseInt(document.getElementById('f-jual').value)||0;
-  var h=document.getElementById('margin-hint');
-  if(b>0&&j>0){
-    var pct=Math.round(((j-b)/b)*100);
-    h.textContent='Untung: Rp '+(j-b).toLocaleString('id-ID')+' ('+pct+'%)';
-    h.style.color=pct<10?'#7f1d1d':pct<20?'#713f12':'#14532d';
-    h.style.display='block';
-  } else { h.style.display='none'; }
-}
-document.getElementById('f-beli').addEventListener('input',updMargin);
-document.getElementById('f-jual').addEventListener('input',updMargin);
-
-// ─── STATE FOTO (modal tambah/edit) ──────────────────────────────────────────
-var _pendingFotoBlob=null, _fotoHapus=false;
-var MAX_W=480, MAX_H=480, WEBP_Q=0.72;
-var _resizeImg=null;
-
-function resizeToWebP(file, canvasId){
-  return new Promise(function(resolve,reject){
-    if(!file){reject(new Error('File kosong'));return;}
-    var reader=new FileReader();
-    reader.onerror=function(){reject(new Error('Gagal membaca file'));};
-    reader.onload=function(ev){
-      _resizeImg=new Image();
-      var img=_resizeImg;
-      img.onerror=function(){ _resizeImg=null; reject(new Error('Format gambar tidak didukung')); };
-      img.onload=function(){
-        var ratio=Math.min(1,MAX_W/img.naturalWidth,MAX_H/img.naturalHeight);
-        var tw=Math.round(img.naturalWidth*ratio), th=Math.round(img.naturalHeight*ratio);
-        var cv=document.getElementById(canvasId);
-        cv.width=tw; cv.height=th;
-        cv.getContext('2d').drawImage(img,0,0,tw,th);
-        cv.toBlob(function(b){
-          _resizeImg=null;
-          if(b&&b.size>0){resolve(b);return;}
-          cv.toBlob(function(b2){ b2?resolve(b2):reject(new Error('Konversi canvas gagal')); },'image/jpeg',0.85);
-        },'image/webp',WEBP_Q);
-      };
-      img.src=ev.target.result;
+  // ─── API JSON ─────────────────────────────────────────────────────────────────
+  async function api(method,path,body){
+    // Selalu kirim Content-Type: application/json agar middleware tidak reject dengan 415
+    // DELETE tanpa payload tetap kirim body kosong '{}'
+    var opts={
+      method:method,
+      credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body: body!==undefined ? JSON.stringify(body) : '{}'
     };
-    reader.readAsDataURL(file);
-  });
-}
+    var r=await fetch(path,opts);
+    var d=await r.json().catch(function(){return{};});
+    if(!r.ok) throw new Error(d.error||r.statusText);
+    return d;
+  }
 
-function setFotoPreview(blob){
-  var img=document.getElementById('foto-current');
-  img.src=URL.createObjectURL(blob); img.style.display='block';
-  document.getElementById('foto-placeholder').style.display='none';
-  document.getElementById('btn-hapus-foto').style.display='';
-}
-function clearFotoPreview(){
-  var img=document.getElementById('foto-current');
-  img.src=''; img.style.display='none';
-  document.getElementById('foto-placeholder').style.display='flex';
-  document.getElementById('btn-hapus-foto').style.display='none';
-}
-function loadFotoForEdit(id){
-  var thumb=document.querySelector('tr.data-row[data-id="'+id+'"] .prod-thumb')||
-            document.querySelector('.prod-card[data-id="'+id+'"] .card-prod-img');
-  var img=document.getElementById('foto-current');
-  if(thumb&&thumb.naturalWidth>0&&!thumb.dataset.error){
-    img.src=thumb.src; img.style.display='block';
+  // ─── MODAL ────────────────────────────────────────────────────────────────────
+  var _pf=null;
+  var FOCUSABLE='button:not([disabled]),[href],input:not([disabled]),select,[tabindex]:not([tabindex="-1"])';
+  var ALL_MODALS=['detail','tambah','import','mass','hapus','hapus-massal','foto'];
+
+  function openM(id){
+    _pf=document.activeElement;
+    var m=document.getElementById('m-'+id);
+    if(!m)return;
+    m.classList.add('open'); document.body.style.overflow='hidden';
+    var els=Array.from(m.querySelectorAll(FOCUSABLE));
+    if(els.length) setTimeout(function(){els[0].focus();},40);
+    m._kt=function(e){
+      if(e.key!=='Tab'||!els.length)return;
+      var f=els[0],l=els[els.length-1];
+      if(e.shiftKey){if(document.activeElement===f){e.preventDefault();l.focus();}}
+      else{if(document.activeElement===l){e.preventDefault();f.focus();}}
+    };
+    m.addEventListener('keydown',m._kt);
+  }
+  function closeM(id){
+    var m=document.getElementById('m-'+id);
+    if(!m)return;
+    m.classList.remove('open'); document.body.style.overflow='';
+    if(m._kt){m.removeEventListener('keydown',m._kt);m._kt=null;}
+    if(_pf){_pf.focus();_pf=null;}
+    if(id==='tambah') resetForm();
+    if(id==='foto')   resetFotoModal();
+    if(id==='hapus-massal') resetHapusMassal();
+  }
+  document.addEventListener('keydown',function(e){
+    if(e.key!=='Escape')return;
+    for(var i=0;i<ALL_MODALS.length;i++){
+      var m=document.getElementById('m-'+ALL_MODALS[i]);
+      if(m&&m.classList.contains('open')){ closeM(ALL_MODALS[i]); return; }
+    }
+  });
+  ALL_MODALS.forEach(function(id){
+    var m=document.getElementById('m-'+id);
+    if(!m)return;
+    m.addEventListener('click',function(e){ if(e.target===this) closeM(id); });
+  });
+  document.querySelectorAll('.close-modal').forEach(function(b){
+    b.addEventListener('click',function(){ closeM(this.dataset.m); });
+  });
+
+  // ─── OPEN MODAL BUTTONS ───────────────────────────────────────────────────────
+  document.getElementById('btn-tambah').onclick=function(){openM('tambah');};
+  document.getElementById('btn-import').onclick=function(){openM('import');};
+  document.getElementById('btn-mass').onclick=function(){openM('mass');};
+  document.getElementById('btn-hapus-massal').onclick=function(){
+    resetHapusMassal();
+    updateHmInfo();
+    openM('hapus-massal');
+  };
+
+  // ─── MODAL DETAIL ─────────────────────────────────────────────────────────────
+  var _detailId='', _detailData={};
+
+  function openDetail(data){
+    _detailId  = data.id;
+    _detailData = data;
+    var dImg = document.getElementById('d-img');
+    var dPh  = document.getElementById('d-img-placeholder');
+    if(data.img){
+      dImg.src = data.img; dImg.alt = data.nama; dImg.style.display = ''; dPh.style.display = 'none';
+    } else { dImg.style.display = 'none'; dPh.style.display = 'flex'; }
+    document.getElementById('m-detail-title').textContent = data.nama;
+    var m     = data.beli > 0 ? Math.round(((data.jual - data.beli) / data.beli) * 100) : null;
+    var bdg   = document.getElementById('d-badges');
+    bdg.innerHTML = '<span class="badge badge-k">'+esc(data.kat)+'</span>'
+      + (data.qc ? '<span class="badge badge-qc">Quick Cash</span>' : '');
+    var untung = data.jual - data.beli;
+    document.getElementById('d-jual').textContent  = rp(data.jual);
+    document.getElementById('d-beli').textContent  = rp(data.beli);
+    document.getElementById('d-untung').textContent = rp(untung);
+    document.getElementById('d-untung').style.color = untung > 0 ? '#15803d' : 'var(--muted)';
+    var mEl = document.getElementById('d-margin-val');
+    if(m !== null){
+      mEl.textContent = m + '%';
+      mEl.style.color = m >= 20 ? '#15803d' : m >= 10 ? '#92400e' : '#991b1b';
+    } else { mEl.textContent = '—'; mEl.style.color = 'var(--muted)'; }
+    document.getElementById('d-created').textContent = fmtDate(data.created);
+    document.getElementById('d-updated').textContent = fmtDate(data.updated);
+    document.getElementById('d-qc').textContent = data.qc ? 'Aktif ✓' : 'Tidak aktif';
+    document.getElementById('d-qc').style.color = data.qc ? '#15803d' : 'var(--muted)';
+    openM('detail');
+  }
+
+  document.getElementById('d-btn-edit').addEventListener('click',function(){
+    closeM('detail');
+    var editBtn = document.querySelector('.icon-btn.edit[data-id="'+_detailId+'"]');
+    if(editBtn){ editBtn.click(); }
+  });
+  document.getElementById('d-btn-hapus').addEventListener('click',function(){
+    closeM('detail');
+    var delBtn = document.querySelector('.icon-btn.del[data-id="'+_detailId+'"]');
+    if(delBtn){ delBtn.click(); }
+  });
+
+  document.addEventListener('click',function(e){
+    var cell = e.target.closest('.name-clickable'); if(!cell) return;
+    var row = cell.closest('tr.data-row'); if(!row) return;
+    openDetail({ id:row.dataset.id, nama:row.dataset.namaAsli, kat:row.dataset.kat,
+      beli:parseInt(row.dataset.beli)||0, jual:parseInt(row.dataset.jual)||0,
+      qc:row.dataset.quick==='true', created:row.dataset.created, updated:row.dataset.updated, img:row.dataset.img });
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key!=='Enter'&&e.key!==' ')return;
+    var cell = e.target.closest('.name-clickable'); if(!cell)return;
+    var row = cell.closest('tr.data-row'); if(!row)return;
+    e.preventDefault();
+    openDetail({ id:row.dataset.id, nama:row.dataset.namaAsli, kat:row.dataset.kat,
+      beli:parseInt(row.dataset.beli)||0, jual:parseInt(row.dataset.jual)||0,
+      qc:row.dataset.quick==='true', created:row.dataset.created, updated:row.dataset.updated, img:row.dataset.img });
+  });
+  document.addEventListener('click',function(e){
+    var body = e.target.closest('.card-body-clickable'); if(!body)return;
+    var card = body.closest('.prod-card'); if(!card)return;
+    openDetail({ id:card.dataset.id, nama:card.dataset.namaAsli, kat:card.dataset.kat,
+      beli:parseInt(card.dataset.beli)||0, jual:parseInt(card.dataset.jual)||0,
+      qc:card.dataset.quick==='true', created:card.dataset.created, updated:card.dataset.updated, img:card.dataset.img });
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key!=='Enter'&&e.key!==' ')return;
+    var body = e.target.closest('.card-body-clickable'); if(!body)return;
+    var card = body.closest('.prod-card'); if(!card)return;
+    e.preventDefault();
+    openDetail({ id:card.dataset.id, nama:card.dataset.namaAsli, kat:card.dataset.kat,
+      beli:parseInt(card.dataset.beli)||0, jual:parseInt(card.dataset.jual)||0,
+      qc:card.dataset.quick==='true', created:card.dataset.created, updated:card.dataset.updated, img:card.dataset.img });
+  });
+
+  // ─── FILTER ───────────────────────────────────────────────────────────────────
+  var _q='', _kat='';
+  function applyFilter(){
+    var q=_q.trim().toLowerCase(), kat=_kat, vis=0;
+    document.querySelectorAll('#tbody tr.data-row').forEach(function(r){
+      var show=(!q||r.dataset.nama.indexOf(q)!==-1)&&(!kat||r.dataset.kat===kat);
+      r.classList.toggle('tr-hidden',!show);
+      if(show) vis++;
+    });
+    document.querySelectorAll('#card-grid .prod-card').forEach(function(c){
+      var show=(!q||c.dataset.nama.indexOf(q)!==-1)&&(!kat||c.dataset.kat===kat);
+      c.classList.toggle('card-hidden',!show);
+    });
+    var lbl=document.getElementById('count-lbl');
+    if(lbl) lbl.textContent=vis+' produk';
+    var nr=document.getElementById('no-results'), nrc=document.getElementById('no-results-card');
+    if(nr)  nr.style.display=vis===0?'':'none';
+    if(nrc) nrc.style.display=vis===0?'':'none';
+  }
+  document.getElementById('q').addEventListener('input',function(){ _q=this.value; applyFilter(); });
+  document.getElementById('kat-pills').addEventListener('click',function(e){
+    var btn=e.target.closest('.kat-pill'); if(!btn)return;
+    _kat=btn.dataset.kat||'';
+    document.querySelectorAll('.kat-pill').forEach(function(b){ b.classList.toggle('active',b.dataset.kat===_kat); });
+    applyFilter();
+  });
+
+  // ─── VIEW TOGGLE ─────────────────────────────────────────────────────────────
+  document.getElementById('btn-table').addEventListener('click',function(){
+    document.getElementById('view-table').style.display='';
+    document.getElementById('view-card').style.display='none';
+    this.classList.add('active'); document.getElementById('btn-card').classList.remove('active');
+    this.setAttribute('aria-pressed','true'); document.getElementById('btn-card').setAttribute('aria-pressed','false');
+    localStorage.setItem('kw-view','table');
+  });
+  document.getElementById('btn-card').addEventListener('click',function(){
+    document.getElementById('view-card').style.display='';
+    document.getElementById('view-table').style.display='none';
+    this.classList.add('active'); document.getElementById('btn-table').classList.remove('active');
+    this.setAttribute('aria-pressed','true'); document.getElementById('btn-table').setAttribute('aria-pressed','false');
+    localStorage.setItem('kw-view','card');
+  });
+  (function(){
+    if(localStorage.getItem('kw-view')==='card') document.getElementById('btn-card').click();
+  })();
+
+  // ─── MARGIN PREVIEW ───────────────────────────────────────────────────────────
+  function updMargin(){
+    var b=parseInt(document.getElementById('f-beli').value)||0;
+    var j=parseInt(document.getElementById('f-jual').value)||0;
+    var h=document.getElementById('margin-hint');
+    if(b>0&&j>0){
+      var pct=Math.round(((j-b)/b)*100);
+      h.textContent='Untung: Rp '+(j-b).toLocaleString('id-ID')+' ('+pct+'%)';
+      h.style.color=pct<10?'#7f1d1d':pct<20?'#713f12':'#14532d';
+      h.style.display='block';
+    } else { h.style.display='none'; }
+  }
+  document.getElementById('f-beli').addEventListener('input',updMargin);
+  document.getElementById('f-jual').addEventListener('input',updMargin);
+
+  // ─── STATE FOTO (modal tambah/edit) ──────────────────────────────────────────
+  var _pendingFotoBlob=null, _fotoHapus=false;
+  var MAX_W=480, MAX_H=480, WEBP_Q=0.72;
+  var _resizeImg=null;
+
+  function resizeToWebP(file, canvasId){
+    return new Promise(function(resolve,reject){
+      if(!file){reject(new Error('File kosong'));return;}
+      var reader=new FileReader();
+      reader.onerror=function(){reject(new Error('Gagal membaca file'));};
+      reader.onload=function(ev){
+        _resizeImg=new Image();
+        var img=_resizeImg;
+        img.onerror=function(){ _resizeImg=null; reject(new Error('Format gambar tidak didukung')); };
+        img.onload=function(){
+          var ratio=Math.min(1,MAX_W/img.naturalWidth,MAX_H/img.naturalHeight);
+          var tw=Math.round(img.naturalWidth*ratio), th=Math.round(img.naturalHeight*ratio);
+          var cv=document.getElementById(canvasId);
+          cv.width=tw; cv.height=th;
+          cv.getContext('2d').drawImage(img,0,0,tw,th);
+          cv.toBlob(function(b){
+            _resizeImg=null;
+            if(b&&b.size>0){resolve(b);return;}
+            cv.toBlob(function(b2){ b2?resolve(b2):reject(new Error('Konversi canvas gagal')); },'image/jpeg',0.85);
+          },'image/webp',WEBP_Q);
+        };
+        img.src=ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function setFotoPreview(blob){
+    var img=document.getElementById('foto-current');
+    img.src=URL.createObjectURL(blob); img.style.display='block';
     document.getElementById('foto-placeholder').style.display='none';
     document.getElementById('btn-hapus-foto').style.display='';
-  } else { clearFotoPreview(); }
-}
+  }
+  function clearFotoPreview(){
+    var img=document.getElementById('foto-current');
+    img.src=''; img.style.display='none';
+    document.getElementById('foto-placeholder').style.display='flex';
+    document.getElementById('btn-hapus-foto').style.display='none';
+  }
+  function loadFotoForEdit(id){
+    var thumb=document.querySelector('tr.data-row[data-id="'+id+'"] .prod-thumb')||
+              document.querySelector('.prod-card[data-id="'+id+'"] .card-prod-img');
+    var img=document.getElementById('foto-current');
+    if(thumb&&thumb.naturalWidth>0&&!thumb.dataset.error){
+      img.src=thumb.src; img.style.display='block';
+      document.getElementById('foto-placeholder').style.display='none';
+      document.getElementById('btn-hapus-foto').style.display='';
+    } else { clearFotoPreview(); }
+  }
 
-function resetForm(){
-  document.getElementById('edit-id').value='';
-  document.getElementById('f-nama').value='';
-  document.getElementById('f-beli').value='';
-  document.getElementById('f-jual').value='';
-  document.getElementById('f-kat').selectedIndex=0;
-  document.getElementById('f-quick').checked=false;
-  document.getElementById('m-tambah-title').textContent='Tambah Produk';
-  document.getElementById('margin-hint').style.display='none';
-  clearFotoPreview();
-  _pendingFotoBlob=null; _fotoHapus=false;
-}
+  function resetForm(){
+    document.getElementById('edit-id').value='';
+    document.getElementById('f-nama').value='';
+    document.getElementById('f-beli').value='';
+    document.getElementById('f-jual').value='';
+    document.getElementById('f-kat').selectedIndex=0;
+    document.getElementById('f-quick').checked=false;
+    document.getElementById('m-tambah-title').textContent='Tambah Produk';
+    document.getElementById('margin-hint').style.display='none';
+    clearFotoPreview();
+    _pendingFotoBlob=null; _fotoHapus=false;
+  }
 
-document.getElementById('btn-pilih-foto').addEventListener('click',function(){ document.getElementById('f-foto').click(); });
-document.getElementById('f-foto').addEventListener('change',async function(){
-  var file=this.files&&this.files[0]; if(!file) return;
-  if(!file.type.startsWith('image/')){toast('File bukan gambar',false);return;}
-  if(file.size>5*1024*1024){toast('Ukuran file maks 5 MB',false);return;}
-  try{
-    _pendingFotoBlob=await resizeToWebP(file,'resize-canvas');
-    _fotoHapus=false; setFotoPreview(_pendingFotoBlob);
-  }catch(e){ toast('Gagal memproses gambar: '+e.message,false); }
-  this.value='';
-});
-document.getElementById('btn-hapus-foto').addEventListener('click',function(){ _pendingFotoBlob=null; _fotoHapus=true; clearFotoPreview(); });
+  document.getElementById('btn-pilih-foto').addEventListener('click',function(){ document.getElementById('f-foto').click(); });
+  document.getElementById('f-foto').addEventListener('change',async function(){
+    var file=this.files&&this.files[0]; if(!file) return;
+    if(!file.type.startsWith('image/')){toast('File bukan gambar',false);return;}
+    if(file.size>5*1024*1024){toast('Ukuran file maks 5 MB',false);return;}
+    try{
+      _pendingFotoBlob=await resizeToWebP(file,'resize-canvas');
+      _fotoHapus=false; setFotoPreview(_pendingFotoBlob);
+    }catch(e){ toast('Gagal memproses gambar: '+e.message,false); }
+    this.value='';
+  });
+  document.getElementById('btn-hapus-foto').addEventListener('click',function(){ _pendingFotoBlob=null; _fotoHapus=true; clearFotoPreview(); });
 
-// ─── EDIT BTN ─────────────────────────────────────────────────────────────────
-document.addEventListener('click',function(e){
-  var btn=e.target.closest('.icon-btn.edit'); if(!btn)return;
-  var id=btn.dataset.id;
-  document.getElementById('edit-id').value=id;
-  document.getElementById('f-nama').value=btn.dataset.nama;
-  document.getElementById('f-beli').value=btn.dataset.beli;
-  document.getElementById('f-jual').value=btn.dataset.jual;
-  document.getElementById('f-kat').value=btn.dataset.kat;
-  document.getElementById('f-quick').checked=btn.dataset.quick==='true';
-  document.getElementById('m-tambah-title').textContent='Edit Produk';
-  _pendingFotoBlob=null; _fotoHapus=false;
-  loadFotoForEdit(id); updMargin(); openM('tambah');
-});
+  // ─── EDIT BTN ─────────────────────────────────────────────────────────────────
+  document.addEventListener('click',function(e){
+    var btn=e.target.closest('.icon-btn.edit'); if(!btn)return;
+    var id=btn.dataset.id;
+    document.getElementById('edit-id').value=id;
+    document.getElementById('f-nama').value=btn.dataset.nama;
+    document.getElementById('f-beli').value=btn.dataset.beli;
+    document.getElementById('f-jual').value=btn.dataset.jual;
+    document.getElementById('f-kat').value=btn.dataset.kat;
+    document.getElementById('f-quick').checked=btn.dataset.quick==='true';
+    document.getElementById('m-tambah-title').textContent='Edit Produk';
+    _pendingFotoBlob=null; _fotoHapus=false;
+    loadFotoForEdit(id); updMargin(); openM('tambah');
+  });
 
-// ─── SIMPAN ───────────────────────────────────────────────────────────────────
-document.getElementById('btn-simpan').addEventListener('click',async function(){
-  var id=document.getElementById('edit-id').value.trim();
-  var nama=document.getElementById('f-nama').value.trim();
-  var beli=parseInt(document.getElementById('f-beli').value)||0;
-  var jual=parseInt(document.getElementById('f-jual').value)||0;
-  var kat=document.getElementById('f-kat').value;
-  var qc=document.getElementById('f-quick').checked;
-  if(!nama){toast('Nama produk wajib diisi',false);document.getElementById('f-nama').focus();return;}
-  if(jual<=0){toast('Harga jual harus > 0',false);document.getElementById('f-jual').focus();return;}
-  this.disabled=true; this.textContent='Menyimpan…';
-  try{
-    var payload={nama_produk:nama,harga_beli:beli,harga_jual:jual,kategori:kat,quick_cash:qc};
-    var savedId=id;
-    if(id){ await api('PATCH','/api/produk/produk?id='+encodeURIComponent(id),payload); }
-    else { var res=await api('POST','/api/produk/produk',payload); savedId=String(res.id); }
-    var uploadedUrl=null;
-    if(_pendingFotoBlob&&savedId){
-      this.textContent='Mengupload foto…';
+  // ─── SIMPAN ───────────────────────────────────────────────────────────────────
+  document.getElementById('btn-simpan').addEventListener('click',async function(){
+    var id=document.getElementById('edit-id').value.trim();
+    var nama=document.getElementById('f-nama').value.trim();
+    var beli=parseInt(document.getElementById('f-beli').value)||0;
+    var jual=parseInt(document.getElementById('f-jual').value)||0;
+    var kat=document.getElementById('f-kat').value;
+    var qc=document.getElementById('f-quick').checked;
+    if(!nama){toast('Nama produk wajib diisi',false);document.getElementById('f-nama').focus();return;}
+    if(jual<=0){toast('Harga jual harus > 0',false);document.getElementById('f-jual').focus();return;}
+    this.disabled=true; this.textContent='Menyimpan…';
+    try{
+      var payload={nama_produk:nama,harga_beli:beli,harga_jual:jual,kategori:kat,quick_cash:qc};
+      var savedId=id;
+      if(id){ await api('PATCH','/api/produk/produk?id='+encodeURIComponent(id),payload); }
+      else { var res=await api('POST','/api/produk/produk',payload); savedId=String(res.id); }
+      var uploadedUrl=null;
+      if(_pendingFotoBlob&&savedId){
+        this.textContent='Mengupload foto…';
+        var fd=new FormData();
+        fd.append('id',savedId);
+        fd.append('file',new File([_pendingFotoBlob],'foto.webp',{type:'image/webp'}));
+        var fr=await fetch('/api/produk/foto',{method:'POST',body:fd,credentials:'same-origin'});
+        var frd=await fr.json().catch(function(){return{};});
+        if(!fr.ok) throw new Error(frd.error||'Upload foto gagal');
+        uploadedUrl = String(frd.url);
+      }
+      if(_fotoHapus&&id){
+        fetch('/api/produk/foto?id='+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin'}).catch(function(){});
+        uploadedUrl='';
+      }
+      if(uploadedUrl!==null&&savedId){
+        var selectors=['tr.data-row[data-id="'+savedId+'"] .prod-thumb','.prod-card[data-id="'+savedId+'"] .card-prod-img'];
+        selectors.forEach(function(sel){
+          var el=document.querySelector(sel); if(!el)return;
+          if(uploadedUrl){ el.src=uploadedUrl; el.style.display=''; var ph=el.parentElement&&el.parentElement.querySelector('.prod-thumb-placeholder,.card-img-placeholder'); if(ph) ph.style.display='none'; }
+          else { el.style.display='none'; var ph2=el.parentElement&&el.parentElement.querySelector('.prod-thumb-placeholder,.card-img-placeholder'); if(ph2){ ph2.style.display='flex'; } }
+        });
+        var row=document.querySelector('tr.data-row[data-id="'+savedId+'"]'); if(row) row.dataset.img=uploadedUrl||'';
+        var card=document.querySelector('.prod-card[data-id="'+savedId+'"]'); if(card) card.dataset.img=uploadedUrl||'';
+      }
+      toast(id?'Produk diupdate':'Produk ditambahkan');
+      closeM('tambah');
+      setTimeout(function(){location.reload();},600);
+    }catch(e){ toast('Error: '+e.message,false); }
+    finally{ this.disabled=false; this.textContent='Simpan'; }
+  });
+  document.getElementById('f-jual').addEventListener('keydown',function(e){
+    if(e.key==='Enter'){e.preventDefault();document.getElementById('btn-simpan').click();}
+  });
+
+  // ─── QUICK CASH TOGGLE ────────────────────────────────────────────────────────
+  document.addEventListener('click',async function(e){
+    var btn=e.target.closest('.toggle'); if(!btn)return;
+    var id=btn.dataset.id, cur=btn.getAttribute('aria-checked')==='true', next=!cur;
+    btn.setAttribute('aria-checked',String(next));
+    btn.style.background=next?'#c84b1f':'#d1d5db';
+    try{
+      await api('PATCH','/api/produk/produk?id='+encodeURIComponent(id),{quick_cash:next});
+      toast(next?'Quick Cash diaktifkan':'Quick Cash dinonaktifkan');
+    }catch(e2){
+      btn.setAttribute('aria-checked',String(cur)); btn.style.background=cur?'#c84b1f':'#d1d5db';
+      toast('Gagal: '+e2.message,false);
+    }
+  });
+
+  // ─── HAPUS (satu produk) ──────────────────────────────────────────────────────
+  var _hapusId='';
+  document.addEventListener('click',function(e){
+    var btn=e.target.closest('.icon-btn.del'); if(!btn)return;
+    _hapusId=btn.dataset.id;
+    document.getElementById('hapus-nama').textContent=btn.dataset.nama;
+    openM('hapus');
+  });
+  document.getElementById('btn-hapus-ok').addEventListener('click',async function(){
+    if(!_hapusId)return;
+    this.disabled=true; this.textContent='Menghapus…';
+    try{
+      await api('DELETE','/api/produk/produk?id='+encodeURIComponent(_hapusId));
+      fetch('/api/produk/foto?id='+encodeURIComponent(_hapusId),{method:'DELETE',credentials:'same-origin'}).catch(function(){});
+      toast('Produk dihapus'); closeM('hapus');
+      var r=document.querySelector('tr.data-row[data-id="'+_hapusId+'"]');
+      if(r){r.style.transition='opacity .18s';r.style.opacity='0';setTimeout(function(){r.remove();applyFilter();},200);}
+      var c=document.querySelector('.prod-card[data-id="'+_hapusId+'"]');
+      if(c){c.style.transition='opacity .18s,transform .18s';c.style.opacity='0';c.style.transform='scale(.92)';setTimeout(function(){c.remove();applyFilter();},200);}
+      _hapusId='';
+    }catch(e){ toast('Gagal: '+e.message,false); }
+    finally{ this.disabled=false; this.textContent='Hapus'; }
+  });
+
+  // ─── HAPUS MASSAL ─────────────────────────────────────────────────────────────
+  function countProdukByMode(mode, kat){
+    var rows = Array.from(document.querySelectorAll('#tbody tr.data-row'));
+    if(mode === 'all') return rows.length;
+    return rows.filter(function(r){ return r.dataset.kat === kat; }).length;
+  }
+
+  function updateHmInfo(){
+    var mode = document.getElementById('hm-mode').value;
+    var kat  = document.getElementById('hm-kat').value;
+    var infoEl = document.getElementById('hm-info');
+    var katWrap = document.getElementById('hm-kat-wrap');
+    katWrap.style.display = mode === 'kategori' ? '' : 'none';
+    var count = countProdukByMode(mode, kat);
+    if(count === 0){
+      infoEl.textContent = mode === 'all'
+        ? 'Tidak ada produk untuk dihapus.'
+        : 'Tidak ada produk dalam kategori "' + kat + '".';
+      infoEl.style.color = 'var(--muted)';
+    } else {
+      infoEl.innerHTML = '⚠️ Akan menghapus <strong style="color:#dc2626">' + count + ' produk</strong>'
+        + (mode === 'kategori' ? ' dalam kategori <strong>' + esc(kat) + '</strong>' : ' dari semua kategori') + '.';
+      infoEl.style.color = '#92400e';
+    }
+  }
+
+  function resetHapusMassal(){
+    document.getElementById('hm-mode').value = 'all';
+    document.getElementById('hm-kat-wrap').style.display = 'none';
+    document.getElementById('hm-confirm').value = '';
+    document.getElementById('hm-info').textContent = '';
+    var okBtn = document.getElementById('btn-hapus-massal-ok');
+    okBtn.disabled = true; okBtn.style.opacity = '.5'; okBtn.style.cursor = 'not-allowed';
+  }
+
+  document.getElementById('hm-mode').addEventListener('change', function(){
+    updateHmInfo();
+    document.getElementById('hm-confirm').value = '';
+    var okBtn = document.getElementById('btn-hapus-massal-ok');
+    okBtn.disabled = true; okBtn.style.opacity = '.5'; okBtn.style.cursor = 'not-allowed';
+  });
+  document.getElementById('hm-kat').addEventListener('change', function(){
+    updateHmInfo();
+    document.getElementById('hm-confirm').value = '';
+    var okBtn = document.getElementById('btn-hapus-massal-ok');
+    okBtn.disabled = true; okBtn.style.opacity = '.5'; okBtn.style.cursor = 'not-allowed';
+  });
+  document.getElementById('hm-confirm').addEventListener('input', function(){
+    var ok = this.value.trim().toUpperCase() === 'HAPUS';
+    var okBtn = document.getElementById('btn-hapus-massal-ok');
+    okBtn.disabled = !ok;
+    okBtn.style.opacity = ok ? '1' : '.5';
+    okBtn.style.cursor  = ok ? 'pointer' : 'not-allowed';
+  });
+
+  document.getElementById('btn-hapus-massal-ok').addEventListener('click', async function(){
+    if(this.disabled) return;
+    var mode = document.getElementById('hm-mode').value;
+    var kat  = document.getElementById('hm-kat').value;
+    this.disabled = true; this.textContent = 'Menghapus…'; this.style.opacity = '.7';
+    try{
+      var url = '/api/produk/produk?bulk=' + mode;
+      if(mode === 'kategori') url += '&kategori=' + encodeURIComponent(kat);
+      var res = await api('DELETE', url);
+      var del = res.deleted || 0;
+      toast(del + ' produk berhasil dihapus');
+      closeM('hapus-massal');
+      setTimeout(function(){ location.reload(); }, 600);
+    }catch(e){ toast('Gagal: '+e.message, false); this.disabled=false; this.textContent='Hapus Sekarang'; this.style.opacity='1'; }
+  });
+
+  // ─── MODAL FOTO CEPAT (klik thumbnail) ───────────────────────────────────────
+  var _fotoQuickBlob=null;
+
+  function resetFotoModal(){
+    _fotoQuickBlob=null;
+    document.getElementById('foto-target-id').value='';
+    document.getElementById('foto-drop-preview').style.display='none';
+    document.getElementById('foto-drop-empty').style.display='';
+    document.getElementById('btn-upload-foto').disabled=true;
+    document.getElementById('f-foto-quick').value='';
+  }
+
+  document.addEventListener('click',function(e){
+    var wrap=e.target.closest('.thumb-wrap'); if(!wrap)return;
+    if(e.target.closest('.icon-btn'))return;
+    if(e.target.closest('.name-clickable'))return;
+    if(e.target.closest('.card-body-clickable'))return;
+    var id=wrap.dataset.id; if(!id)return;
+    document.getElementById('foto-target-id').value=id;
+    openM('foto');
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key!=='Enter'&&e.key!==' ')return;
+    var wrap=e.target.closest('.thumb-wrap'); if(!wrap)return;
+    if(e.target.closest('.name-clickable'))return;
+    if(e.target.closest('.card-body-clickable'))return;
+    e.preventDefault();
+    var id=wrap.dataset.id; if(!id)return;
+    document.getElementById('foto-target-id').value=id;
+    openM('foto');
+  });
+
+  var fotoDrop=document.getElementById('foto-drop');
+  fotoDrop.addEventListener('click',function(e){ if(!e.target.closest('#btn-foto-clear')) document.getElementById('f-foto-quick').click(); });
+  fotoDrop.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();document.getElementById('f-foto-quick').click();} });
+  fotoDrop.addEventListener('dragover',function(e){e.preventDefault();this.classList.add('over');});
+  fotoDrop.addEventListener('dragleave',function(){this.classList.remove('over');});
+  fotoDrop.addEventListener('drop',function(e){ e.preventDefault(); this.classList.remove('over'); var f=e.dataTransfer&&e.dataTransfer.files[0]; if(f) processQuickFoto(f); });
+  document.getElementById('f-foto-quick').addEventListener('change',function(){ var f=this.files&&this.files[0]; if(f) processQuickFoto(f); this.value=''; });
+  document.getElementById('btn-foto-clear').addEventListener('click',function(e){
+    e.stopPropagation(); _fotoQuickBlob=null;
+    document.getElementById('foto-drop-preview').style.display='none';
+    document.getElementById('foto-drop-empty').style.display='';
+    document.getElementById('btn-upload-foto').disabled=true;
+  });
+
+  async function processQuickFoto(file){
+    if(!file.type.startsWith('image/')){toast('File bukan gambar',false);return;}
+    if(file.size>5*1024*1024){toast('Ukuran file maks 5 MB',false);return;}
+    try{
+      _fotoQuickBlob=await resizeToWebP(file,'resize-canvas-quick');
+      document.getElementById('foto-drop-img').src=URL.createObjectURL(_fotoQuickBlob);
+      document.getElementById('foto-drop-preview').style.display='block';
+      document.getElementById('foto-drop-empty').style.display='none';
+      document.getElementById('btn-upload-foto').disabled=false;
+    }catch(e){ toast('Gagal memproses: '+e.message,false); }
+  }
+
+  document.getElementById('btn-upload-foto').addEventListener('click',async function(){
+    var id=document.getElementById('foto-target-id').value;
+    if(!id||!_fotoQuickBlob)return;
+    this.disabled=true; this.textContent='Mengupload…';
+    try{
       var fd=new FormData();
-      fd.append('id',savedId);
-      fd.append('file',new File([_pendingFotoBlob],'foto.webp',{type:'image/webp'}));
-      var fr=await fetch('/api/produk/foto',{method:'POST',body:fd,credentials:'same-origin'});
-      var frd=await fr.json().catch(function(){return{};});
-      if(!fr.ok) throw new Error(frd.error||'Upload foto gagal');
-      uploadedUrl = String(frd.url);
-    }
-    if(_fotoHapus&&id){
-      fetch('/api/produk/foto?id='+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin'}).catch(function(){});
-      uploadedUrl='';
-    }
-    if(uploadedUrl!==null&&savedId){
-      var selectors=['tr.data-row[data-id="'+savedId+'"] .prod-thumb','.prod-card[data-id="'+savedId+'"] .card-prod-img'];
-      selectors.forEach(function(sel){
-        var el=document.querySelector(sel); if(!el)return;
-        if(uploadedUrl){ el.src=uploadedUrl; el.style.display=''; var ph=el.parentElement&&el.parentElement.querySelector('.prod-thumb-placeholder,.card-img-placeholder'); if(ph) ph.style.display='none'; }
-        else { el.style.display='none'; var ph2=el.parentElement&&el.parentElement.querySelector('.prod-thumb-placeholder,.card-img-placeholder'); if(ph2){ ph2.style.display='flex'; } }
-      });
-      var row=document.querySelector('tr.data-row[data-id="'+savedId+'"]'); if(row) row.dataset.img=uploadedUrl||'';
-      var card=document.querySelector('.prod-card[data-id="'+savedId+'"]'); if(card) card.dataset.img=uploadedUrl||'';
-    }
-    toast(id?'Produk diupdate':'Produk ditambahkan');
-    closeM('tambah');
-    setTimeout(function(){location.reload();},600);
-  }catch(e){ toast('Error: '+e.message,false); }
-  finally{ this.disabled=false; this.textContent='Simpan'; }
-});
-document.getElementById('f-jual').addEventListener('keydown',function(e){
-  if(e.key==='Enter'){e.preventDefault();document.getElementById('btn-simpan').click();}
-});
+      fd.append('id',id);
+      fd.append('file',new File([_fotoQuickBlob],'foto.webp',{type:'image/webp'}));
+      var r=await fetch('/api/produk/foto',{method:'POST',body:fd,credentials:'same-origin'});
+      var rd=await r.json().catch(function(){return{};});
+      if(!r.ok) throw new Error(rd.error||'Upload gagal');
+      var newSrc=String(rd.url);
+      var tThumb=document.querySelector('tr.data-row[data-id="'+id+'"] .prod-thumb');
+      if(tThumb){ tThumb.src=newSrc; tThumb.style.display=''; var tPh=tThumb.parentElement&&tThumb.parentElement.querySelector('.prod-thumb-placeholder'); if(tPh) tPh.style.display='none'; }
+      var cThumb=document.querySelector('.prod-card[data-id="'+id+'"] .card-prod-img');
+      if(cThumb){ cThumb.src=newSrc; cThumb.style.display='block'; var cPh=document.querySelector('.prod-card[data-id="'+id+'"] .card-img-placeholder'); if(cPh) cPh.style.display='none'; }
+      var row2=document.querySelector('tr.data-row[data-id="'+id+'"]'); if(row2) row2.dataset.img=newSrc;
+      var card2=document.querySelector('.prod-card[data-id="'+id+'"]'); if(card2) card2.dataset.img=newSrc;
+      var dImg=document.getElementById('d-img');
+      if(_detailId===id){ dImg.src=newSrc; dImg.style.display=''; document.getElementById('d-img-placeholder').style.display='none'; }
+      toast('Foto berhasil diperbarui'); closeM('foto');
+    }catch(e){ toast('Gagal: '+e.message,false); }
+    finally{ this.disabled=false; this.textContent='Upload'; }
+  });
 
-// ─── QUICK CASH TOGGLE ────────────────────────────────────────────────────────
-document.addEventListener('click',async function(e){
-  var btn=e.target.closest('.toggle'); if(!btn)return;
-  var id=btn.dataset.id, cur=btn.getAttribute('aria-checked')==='true', next=!cur;
-  btn.setAttribute('aria-checked',String(next));
-  btn.style.background=next?'#c84b1f':'#d1d5db';
-  try{
-    await api('PATCH','/api/produk/produk?id='+encodeURIComponent(id),{quick_cash:next});
-    toast(next?'Quick Cash diaktifkan':'Quick Cash dinonaktifkan');
-  }catch(e2){
-    btn.setAttribute('aria-checked',String(cur)); btn.style.background=cur?'#c84b1f':'#d1d5db';
-    toast('Gagal: '+e2.message,false);
-  }
-});
-
-// ─── HAPUS (satu produk) ──────────────────────────────────────────────────────
-var _hapusId='';
-document.addEventListener('click',function(e){
-  var btn=e.target.closest('.icon-btn.del'); if(!btn)return;
-  _hapusId=btn.dataset.id;
-  document.getElementById('hapus-nama').textContent=btn.dataset.nama;
-  openM('hapus');
-});
-document.getElementById('btn-hapus-ok').addEventListener('click',async function(){
-  if(!_hapusId)return;
-  this.disabled=true; this.textContent='Menghapus…';
-  try{
-    await api('DELETE','/api/produk/produk?id='+encodeURIComponent(_hapusId));
-    fetch('/api/produk/foto?id='+encodeURIComponent(_hapusId),{method:'DELETE',credentials:'same-origin'}).catch(function(){});
-    toast('Produk dihapus'); closeM('hapus');
-    var r=document.querySelector('tr.data-row[data-id="'+_hapusId+'"]');
-    if(r){r.style.transition='opacity .18s';r.style.opacity='0';setTimeout(function(){r.remove();applyFilter();},200);}
-    var c=document.querySelector('.prod-card[data-id="'+_hapusId+'"]');
-    if(c){c.style.transition='opacity .18s,transform .18s';c.style.opacity='0';c.style.transform='scale(.92)';setTimeout(function(){c.remove();applyFilter();},200);}
-    _hapusId='';
-  }catch(e){ toast('Gagal: '+e.message,false); }
-  finally{ this.disabled=false; this.textContent='Hapus'; }
-});
-
-// ─── HAPUS MASSAL ─────────────────────────────────────────────────────────────
-function countProdukByMode(mode, kat){
-  var rows = Array.from(document.querySelectorAll('#tbody tr.data-row'));
-  if(mode === 'all') return rows.length;
-  return rows.filter(function(r){ return r.dataset.kat === kat; }).length;
-}
-
-function updateHmInfo(){
-  var mode = document.getElementById('hm-mode').value;
-  var kat  = document.getElementById('hm-kat').value;
-  var infoEl = document.getElementById('hm-info');
-  var katWrap = document.getElementById('hm-kat-wrap');
-  katWrap.style.display = mode === 'kategori' ? '' : 'none';
-  var count = countProdukByMode(mode, kat);
-  if(count === 0){
-    infoEl.textContent = mode === 'all'
-      ? 'Tidak ada produk untuk dihapus.'
-      : 'Tidak ada produk dalam kategori "' + kat + '".';
-    infoEl.style.color = 'var(--muted)';
-  } else {
-    infoEl.innerHTML = '⚠️ Akan menghapus <strong style="color:#dc2626">' + count + ' produk</strong>'
-      + (mode === 'kategori' ? ' dalam kategori <strong>' + esc(kat) + '</strong>' : ' dari semua kategori') + '.';
-    infoEl.style.color = '#92400e';
-  }
-}
-
-function resetHapusMassal(){
-  document.getElementById('hm-mode').value = 'all';
-  document.getElementById('hm-kat-wrap').style.display = 'none';
-  document.getElementById('hm-confirm').value = '';
-  document.getElementById('hm-info').textContent = '';
-  var okBtn = document.getElementById('btn-hapus-massal-ok');
-  okBtn.disabled = true; okBtn.style.opacity = '.5'; okBtn.style.cursor = 'not-allowed';
-}
-
-document.getElementById('hm-mode').addEventListener('change', function(){
-  updateHmInfo();
-  document.getElementById('hm-confirm').value = '';
-  var okBtn = document.getElementById('btn-hapus-massal-ok');
-  okBtn.disabled = true; okBtn.style.opacity = '.5'; okBtn.style.cursor = 'not-allowed';
-});
-document.getElementById('hm-kat').addEventListener('change', function(){
-  updateHmInfo();
-  document.getElementById('hm-confirm').value = '';
-  var okBtn = document.getElementById('btn-hapus-massal-ok');
-  okBtn.disabled = true; okBtn.style.opacity = '.5'; okBtn.style.cursor = 'not-allowed';
-});
-document.getElementById('hm-confirm').addEventListener('input', function(){
-  var ok = this.value.trim().toUpperCase() === 'HAPUS';
-  var okBtn = document.getElementById('btn-hapus-massal-ok');
-  okBtn.disabled = !ok;
-  okBtn.style.opacity = ok ? '1' : '.5';
-  okBtn.style.cursor  = ok ? 'pointer' : 'not-allowed';
-});
-
-document.getElementById('btn-hapus-massal-ok').addEventListener('click', async function(){
-  if(this.disabled) return;
-  var mode = document.getElementById('hm-mode').value;
-  var kat  = document.getElementById('hm-kat').value;
-  this.disabled = true; this.textContent = 'Menghapus…'; this.style.opacity = '.7';
-  try{
-    var url = '/api/produk/produk?bulk=' + mode;
-    if(mode === 'kategori') url += '&kategori=' + encodeURIComponent(kat);
-    var res = await api('DELETE', url);
-    var del = res.deleted || 0;
-    toast(del + ' produk berhasil dihapus');
-    closeM('hapus-massal');
-    setTimeout(function(){ location.reload(); }, 600);
-  }catch(e){ toast('Gagal: '+e.message, false); this.disabled=false; this.textContent='Hapus Sekarang'; this.style.opacity='1'; }
-});
-
-// ─── MODAL FOTO CEPAT (klik thumbnail) ───────────────────────────────────────
-var _fotoQuickBlob=null;
-
-function resetFotoModal(){
-  _fotoQuickBlob=null;
-  document.getElementById('foto-target-id').value='';
-  document.getElementById('foto-drop-preview').style.display='none';
-  document.getElementById('foto-drop-empty').style.display='';
-  document.getElementById('btn-upload-foto').disabled=true;
-  document.getElementById('f-foto-quick').value='';
-}
-
-document.addEventListener('click',function(e){
-  var wrap=e.target.closest('.thumb-wrap'); if(!wrap)return;
-  if(e.target.closest('.icon-btn'))return;
-  if(e.target.closest('.name-clickable'))return;
-  if(e.target.closest('.card-body-clickable'))return;
-  var id=wrap.dataset.id; if(!id)return;
-  document.getElementById('foto-target-id').value=id;
-  openM('foto');
-});
-document.addEventListener('keydown',function(e){
-  if(e.key!=='Enter'&&e.key!==' ')return;
-  var wrap=e.target.closest('.thumb-wrap'); if(!wrap)return;
-  if(e.target.closest('.name-clickable'))return;
-  if(e.target.closest('.card-body-clickable'))return;
-  e.preventDefault();
-  var id=wrap.dataset.id; if(!id)return;
-  document.getElementById('foto-target-id').value=id;
-  openM('foto');
-});
-
-var fotoDrop=document.getElementById('foto-drop');
-fotoDrop.addEventListener('click',function(e){ if(!e.target.closest('#btn-foto-clear')) document.getElementById('f-foto-quick').click(); });
-fotoDrop.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();document.getElementById('f-foto-quick').click();} });
-fotoDrop.addEventListener('dragover',function(e){e.preventDefault();this.classList.add('over');});
-fotoDrop.addEventListener('dragleave',function(){this.classList.remove('over');});
-fotoDrop.addEventListener('drop',function(e){ e.preventDefault(); this.classList.remove('over'); var f=e.dataTransfer&&e.dataTransfer.files[0]; if(f) processQuickFoto(f); });
-document.getElementById('f-foto-quick').addEventListener('change',function(){ var f=this.files&&this.files[0]; if(f) processQuickFoto(f); this.value=''; });
-document.getElementById('btn-foto-clear').addEventListener('click',function(e){
-  e.stopPropagation(); _fotoQuickBlob=null;
-  document.getElementById('foto-drop-preview').style.display='none';
-  document.getElementById('foto-drop-empty').style.display='';
-  document.getElementById('btn-upload-foto').disabled=true;
-});
-
-async function processQuickFoto(file){
-  if(!file.type.startsWith('image/')){toast('File bukan gambar',false);return;}
-  if(file.size>5*1024*1024){toast('Ukuran file maks 5 MB',false);return;}
-  try{
-    _fotoQuickBlob=await resizeToWebP(file,'resize-canvas-quick');
-    document.getElementById('foto-drop-img').src=URL.createObjectURL(_fotoQuickBlob);
-    document.getElementById('foto-drop-preview').style.display='block';
-    document.getElementById('foto-drop-empty').style.display='none';
-    document.getElementById('btn-upload-foto').disabled=false;
-  }catch(e){ toast('Gagal memproses: '+e.message,false); }
-}
-
-document.getElementById('btn-upload-foto').addEventListener('click',async function(){
-  var id=document.getElementById('foto-target-id').value;
-  if(!id||!_fotoQuickBlob)return;
-  this.disabled=true; this.textContent='Mengupload…';
-  try{
-    var fd=new FormData();
-    fd.append('id',id);
-    fd.append('file',new File([_fotoQuickBlob],'foto.webp',{type:'image/webp'}));
-    var r=await fetch('/api/produk/foto',{method:'POST',body:fd,credentials:'same-origin'});
-    var rd=await r.json().catch(function(){return{};});
-    if(!r.ok) throw new Error(rd.error||'Upload gagal');
-    var newSrc=String(rd.url);
-    var tThumb=document.querySelector('tr.data-row[data-id="'+id+'"] .prod-thumb');
-    if(tThumb){ tThumb.src=newSrc; tThumb.style.display=''; var tPh=tThumb.parentElement&&tThumb.parentElement.querySelector('.prod-thumb-placeholder'); if(tPh) tPh.style.display='none'; }
-    var cThumb=document.querySelector('.prod-card[data-id="'+id+'"] .card-prod-img');
-    if(cThumb){ cThumb.src=newSrc; cThumb.style.display='block'; var cPh=document.querySelector('.prod-card[data-id="'+id+'"] .card-img-placeholder'); if(cPh) cPh.style.display='none'; }
-    var row2=document.querySelector('tr.data-row[data-id="'+id+'"]'); if(row2) row2.dataset.img=newSrc;
-    var card2=document.querySelector('.prod-card[data-id="'+id+'"]'); if(card2) card2.dataset.img=newSrc;
-    var dImg=document.getElementById('d-img');
-    if(_detailId===id){ dImg.src=newSrc; dImg.style.display=''; document.getElementById('d-img-placeholder').style.display='none'; }
-    toast('Foto berhasil diperbarui'); closeM('foto');
-  }catch(e){ toast('Gagal: '+e.message,false); }
-  finally{ this.disabled=false; this.textContent='Upload'; }
-});
-
-// ─── IMPORT CSV / XLSX ────────────────────────────────────────────────────────
-// Parsing dilakukan server-side di /api/produk/parse-xlsx
-// agar tidak perlu load library SheetJS dari CDN eksternal (konflik CSP).
-var _csvData = [];
-var dz = document.getElementById('dropzone');
-
-dz.addEventListener('click', function () { document.getElementById('f-csv').click(); });
-dz.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById('f-csv').click(); } });
-dz.addEventListener('dragover',  function (e) { e.preventDefault(); this.classList.add('over'); });
-dz.addEventListener('dragleave', function ()  { this.classList.remove('over'); });
-dz.addEventListener('drop', function (e) {
-  e.preventDefault(); this.classList.remove('over');
-  var f = e.dataTransfer && e.dataTransfer.files[0]; if (f) parseFile(f);
-});
-document.getElementById('f-csv').addEventListener('change', function () {
-  if (this.files && this.files[0]) parseFile(this.files[0]);
-});
-
-// Kirim file ke server untuk di-parse — tidak ada library di browser
-async function parseFile(file) {
-  var name = file.name.toLowerCase();
-  var validExt = name.endsWith('.csv') || name.endsWith('.xlsx') || name.endsWith('.xls');
-  if (!validExt) { toast('Hanya .csv atau .xlsx yang didukung', false); return; }
-  if (file.size === 0) { toast('File kosong', false); return; }
-  if (file.size > 2 * 1024 * 1024) { toast('Ukuran file maks 2 MB', false); return; }
-
-  // Tampilkan loading state
+  // ─── IMPORT CSV / XLSX ────────────────────────────────────────────────────────
+  // Parsing dilakukan server-side di /api/produk/parse-xlsx
+  // agar tidak perlu load library SheetJS dari CDN eksternal (konflik CSP).
+  var _csvData = [];
   var dz = document.getElementById('dropzone');
-  var origHtml = dz.innerHTML;
-  dz.innerHTML = '<p style="font-size:.8rem;color:var(--muted)">Memproses file…</p>';
-  dz.style.pointerEvents = 'none';
 
-  try {
-    var fd = new FormData();
-    fd.append('file', file);
-    var r  = await fetch('/api/produk/parse-xlsx', {
-      method: 'POST',
-      body:   fd,
-      credentials: 'same-origin'
-      // Tidak set Content-Type — browser isi boundary multipart otomatis
-    });
-    var d  = await r.json().catch(function(){ return {}; });
-    if (!r.ok) { toast(d.error || 'Gagal membaca file', false); return; }
+  dz.addEventListener('click', function () { document.getElementById('f-csv').click(); });
+  dz.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById('f-csv').click(); } });
+  dz.addEventListener('dragover',  function (e) { e.preventDefault(); this.classList.add('over'); });
+  dz.addEventListener('dragleave', function ()  { this.classList.remove('over'); });
+  dz.addEventListener('drop', function (e) {
+    e.preventDefault(); this.classList.remove('over');
+    var f = e.dataTransfer && e.dataTransfer.files[0]; if (f) parseFile(f);
+  });
+  document.getElementById('f-csv').addEventListener('change', function () {
+    if (this.files && this.files[0]) parseFile(this.files[0]);
+  });
 
-    renderParsed(d.produk || [], d.duplicates || 0, d.skipped || 0);
-  } catch (e) {
-    toast('Gagal mengirim file: ' + e.message, false);
-  } finally {
-    dz.innerHTML = origHtml;
-    dz.style.pointerEvents = '';
-    // Re-attach event listener pada input karena innerHTML diganti
-    var inp = dz.querySelector('#f-csv');
-    if (inp) inp.addEventListener('change', function () { if (this.files && this.files[0]) parseFile(this.files[0]); });
-  }
-}
+  // Kirim file ke server untuk di-parse — tidak ada library di browser
+  async function parseFile(file) {
+    var name = file.name.toLowerCase();
+    var validExt = name.endsWith('.csv') || name.endsWith('.xlsx') || name.endsWith('.xls');
+    if (!validExt) { toast('Hanya .csv atau .xlsx yang didukung', false); return; }
+    if (file.size === 0) { toast('File kosong', false); return; }
+    if (file.size > 2 * 1024 * 1024) { toast('Ukuran file maks 2 MB', false); return; }
 
-// Terima array produk yang sudah dinormalisasi dari server
-function renderParsed(produk, dupCount, skipped) {
-  _csvData = produk;
+    // Tampilkan loading state
+    var dz = document.getElementById('dropzone');
+    var origHtml = dz.innerHTML;
+    dz.innerHTML = '<p style="font-size:.8rem;color:var(--muted)">Memproses file…</p>';
+    dz.style.pointerEvents = 'none';
 
-  var countEl = document.getElementById('csv-count');
-  var info = produk.length + ' produk siap diimport';
-  if (dupCount > 0)  info += ' · <span style="color:#92400e">⚠ ' + dupCount + ' duplikat dihapus</span>';
-  if (skipped > 0)   info += ' · <span style="color:#dc2626">✕ ' + skipped + ' baris tidak valid dilewati</span>';
-  countEl.innerHTML = info;
+    try {
+      var fd = new FormData();
+      fd.append('file', file);
+      var r  = await fetch('/api/produk/parse-xlsx', {
+        method: 'POST',
+        body:   fd,
+        credentials: 'same-origin'
+        // Tidak set Content-Type — browser isi boundary multipart otomatis
+      });
+      var d  = await r.json().catch(function(){ return {}; });
+      if (!r.ok) { toast(d.error || 'Gagal membaca file', false); return; }
 
-  var tb = document.getElementById('csv-tbody');
-
-  // Header summary
-  var headerInfo = '<tr style="background:#f0fdf4;border-bottom:2px solid #86efac">'
-    + '<td colspan="6" style="padding:.4rem .65rem;font-size:.72rem;color:#15803d;font-weight:600">'
-    + '✓ Preview ' + Math.min(produk.length, 20) + ' dari ' + produk.length + ' produk'
-    + (produk.length > 20 ? ' (scroll untuk lihat semua)' : '')
-    + '</td></tr>';
-
-  tb.innerHTML = headerInfo + produk.slice(0, 50).map(function(r, i) {
-    var margin = r.harga_beli > 0
-      ? Math.round(((r.harga_jual - r.harga_beli) / r.harga_beli) * 100)
-      : null;
-    var mColor = margin === null ? '#9ca3af'
-      : margin >= 20 ? '#15803d'
-      : margin >= 10 ? '#92400e'
-      : '#dc2626';
-    var isAlt = i % 2 === 1;
-    return '<tr style="border-bottom:1px solid var(--border);' + (isAlt ? 'background:#fafaf9' : '') + '">'
-      + '<td style="padding:.35rem .5rem;text-align:center;color:#9ca3af;font-size:.68rem">' + (i+1) + '</td>'
-      + '<td style="padding:.35rem .65rem;font-weight:500">'  + esc(r.nama_produk) + '</td>'
-      + '<td style="padding:.35rem .65rem;text-align:right;color:var(--muted);font-size:.75rem">' + (r.harga_beli > 0 ? r.harga_beli.toLocaleString('id-ID') : '—') + '</td>'
-      + '<td style="padding:.35rem .65rem;text-align:right;font-weight:600">' + r.harga_jual.toLocaleString('id-ID') + '</td>'
-      + '<td style="padding:.35rem .65rem;text-align:center">'
-        + (margin !== null
-          ? '<span style="font-size:.68rem;font-weight:600;color:' + mColor + '">' + margin + '%</span>'
-          : '<span style="color:#9ca3af;font-size:.68rem">—</span>')
-      + '</td>'
-      + '<td style="padding:.35rem .65rem">'
-        + '<span style="font-size:.65rem;padding:.1rem .4rem;border-radius:3px;background:#f3f4f6;color:#374151">' + esc(r.kategori) + '</span>'
-        + (r.quick_cash ? ' <span style="font-size:.62rem;padding:.1rem .35rem;border-radius:3px;background:#c84b1f;color:#fff">QC</span>' : '')
-      + '</td>'
-      + '</tr>';
-  }).join('');
-
-  if (produk.length > 50) {
-    tb.innerHTML += '<tr><td colspan="6" style="padding:.5rem;text-align:center;color:var(--muted);font-size:.7rem;font-style:italic">'
-      + '…dan ' + (produk.length - 50) + ' produk lainnya tidak ditampilkan</td></tr>';
-  }
-
-  document.getElementById('csv-preview').style.display = '';
-  document.getElementById('btn-do-import').disabled = produk.length === 0;
-}
-
-document.getElementById('btn-do-import').addEventListener('click', async function () {
-  if (!_csvData.length) return;
-  this.disabled = true; this.textContent = 'Mengimport…';
-  try {
-    for (var i = 0; i < _csvData.length; i += 50) {
-      await api('POST', '/api/produk/produk', _csvData.slice(i, i + 50));
+      renderParsed(d.produk || [], d.duplicates || 0, d.skipped || 0);
+    } catch (e) {
+      toast('Gagal mengirim file: ' + e.message, false);
+    } finally {
+      dz.innerHTML = origHtml;
+      dz.style.pointerEvents = '';
+      // Re-attach event listener pada input karena innerHTML diganti
+      var inp = dz.querySelector('#f-csv');
+      if (inp) inp.addEventListener('change', function () { if (this.files && this.files[0]) parseFile(this.files[0]); });
     }
-    toast(_csvData.length + ' produk diimport');
-    closeM('import');
-    setTimeout(function () { location.reload(); }, 600);
-  } catch (e) { toast('Import gagal: ' + e.message, false); this.disabled = false; this.textContent = 'Import'; }
-});
+  }
 
-</script>
+  // Terima array produk yang sudah dinormalisasi dari server
+  function renderParsed(produk, dupCount, skipped) {
+    _csvData = produk;
+
+    var countEl = document.getElementById('csv-count');
+    var info = produk.length + ' produk siap diimport';
+    if (dupCount > 0)  info += ' · <span style="color:#92400e">⚠ ' + dupCount + ' duplikat dihapus</span>';
+    if (skipped > 0)   info += ' · <span style="color:#dc2626">✕ ' + skipped + ' baris tidak valid dilewati</span>';
+    countEl.innerHTML = info;
+
+    var tb = document.getElementById('csv-tbody');
+
+    // Header summary
+    var headerInfo = '<tr style="background:#f0fdf4;border-bottom:2px solid #86efac">'
+      + '<td colspan="6" style="padding:.4rem .65rem;font-size:.72rem;color:#15803d;font-weight:600">'
+      + '✓ Preview ' + Math.min(produk.length, 20) + ' dari ' + produk.length + ' produk'
+      + (produk.length > 20 ? ' (scroll untuk lihat semua)' : '')
+      + '</td></tr>';
+
+    tb.innerHTML = headerInfo + produk.slice(0, 50).map(function(r, i) {
+      var margin = r.harga_beli > 0
+        ? Math.round(((r.harga_jual - r.harga_beli) / r.harga_beli) * 100)
+        : null;
+      var mColor = margin === null ? '#9ca3af'
+        : margin >= 20 ? '#15803d'
+        : margin >= 10 ? '#92400e'
+        : '#dc2626';
+      var isAlt = i % 2 === 1;
+      return '<tr style="border-bottom:1px solid var(--border);' + (isAlt ? 'background:#fafaf9' : '') + '">'
+        + '<td style="padding:.35rem .5rem;text-align:center;color:#9ca3af;font-size:.68rem">' + (i+1) + '</td>'
+        + '<td style="padding:.35rem .65rem;font-weight:500">'  + esc(r.nama_produk) + '</td>'
+        + '<td style="padding:.35rem .65rem;text-align:right;color:var(--muted);font-size:.75rem">' + (r.harga_beli > 0 ? r.harga_beli.toLocaleString('id-ID') : '—') + '</td>'
+        + '<td style="padding:.35rem .65rem;text-align:right;font-weight:600">' + r.harga_jual.toLocaleString('id-ID') + '</td>'
+        + '<td style="padding:.35rem .65rem;text-align:center">'
+          + (margin !== null
+            ? '<span style="font-size:.68rem;font-weight:600;color:' + mColor + '">' + margin + '%</span>'
+            : '<span style="color:#9ca3af;font-size:.68rem">—</span>')
+        + '</td>'
+        + '<td style="padding:.35rem .65rem">'
+          + '<span style="font-size:.65rem;padding:.1rem .4rem;border-radius:3px;background:#f3f4f6;color:#374151">' + esc(r.kategori) + '</span>'
+          + (r.quick_cash ? ' <span style="font-size:.62rem;padding:.1rem .35rem;border-radius:3px;background:#c84b1f;color:#fff">QC</span>' : '')
+        + '</td>'
+        + '</tr>';
+    }).join('');
+
+    if (produk.length > 50) {
+      tb.innerHTML += '<tr><td colspan="6" style="padding:.5rem;text-align:center;color:var(--muted);font-size:.7rem;font-style:italic">'
+        + '…dan ' + (produk.length - 50) + ' produk lainnya tidak ditampilkan</td></tr>';
+    }
+
+    document.getElementById('csv-preview').style.display = '';
+    document.getElementById('btn-do-import').disabled = produk.length === 0;
+  }
+
+  document.getElementById('btn-do-import').addEventListener('click', async function () {
+    if (!_csvData.length) return;
+    this.disabled = true; this.textContent = 'Mengimport…';
+    try {
+      for (var i = 0; i < _csvData.length; i += 50) {
+        await api('POST', '/api/produk/produk', _csvData.slice(i, i + 50));
+      }
+      toast(_csvData.length + ' produk diimport');
+      closeM('import');
+      setTimeout(function () { location.reload(); }, 600);
+    } catch (e) { toast('Import gagal: ' + e.message, false); this.disabled = false; this.textContent = 'Import'; }
+  });
+
+    // ─── DRAG TO SCROLL (pills) ───────────────────────────────────────────────────
+  (function(){
+    var el = document.getElementById('kat-pills');
+    if(!el) return;
+    var isDown = false, startX, scrollLeft;
+    el.addEventListener('mousedown', function(e){
+      isDown = true; startX = e.pageX - el.offsetLeft; scrollLeft = el.scrollLeft;
+      el.style.cursor = 'grabbing';
+    });
+    el.addEventListener('mouseleave', function(){ isDown = false; el.style.cursor = 'grab'; });
+    el.addEventListener('mouseup',    function(){ isDown = false; el.style.cursor = 'grab'; });
+    el.addEventListener('mousemove',  function(e){
+      if(!isDown) return; e.preventDefault();
+      var x = e.pageX - el.offsetLeft;
+      el.scrollLeft = scrollLeft - (x - startX) * 1.5;
+    });
+  })();
+
+  </script>
+
+</Layout>

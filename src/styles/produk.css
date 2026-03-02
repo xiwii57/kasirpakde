@@ -56,11 +56,24 @@
 /* ── SEARCH BAR ── */
 .searchbar {
     padding:.75rem 1.75rem;
-    display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;
-    background:#fff;border-bottom:1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    /* JANGAN overflow:hidden di sini */
 }
-.search-wrap { flex:1;min-width:200px;max-width:360px;position:relative; }
-.search-wrap svg { position:absolute;left:.75rem;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none; }
+
+/* Search input wrapper — lebar tetap, tidak menyusut */
+.search-wrap {
+    flex-shrink: 0;
+    width: 220px;
+    position: relative;
+}
+.search-wrap svg {
+    position:absolute;left:.75rem;top:50%;transform:translateY(-50%);
+    color:var(--muted);pointer-events:none;
+}
 .search-wrap input {
     width:100%;padding:.55rem .75rem .55rem 2.2rem;
     border:1.5px solid var(--border);border-radius:4px;
@@ -68,17 +81,46 @@
     transition:border-color .15s,background .15s;
 }
 .search-wrap input:focus { border-color:var(--rust);background:#fff; }
-.kat-pills { display:flex;gap:.4rem;flex-wrap:wrap; }
+
+/* Pills — ambil sisa ruang, scroll horizontal, tidak wrap */
+.kat-pills {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    gap: .4rem;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
+}
+.kat-pills::-webkit-scrollbar { display: none; }
+
 .kat-pill {
-    padding:.3rem .7rem;border-radius:100px;font-size:.68rem;font-weight:600;
-    border:1.5px solid transparent;cursor:pointer;transition:all .15s;
-    background:var(--warm);color:var(--muted);
+    flex-shrink: 0;
+    padding:.3rem .7rem;
+    border-radius:100px;
+    font-size:.68rem;
+    font-weight:600;
+    border:1.5px solid transparent;
+    cursor:pointer;
+    transition:all .15s;
+    background:var(--warm);
+    color:var(--muted);
+    white-space: nowrap;
 }
 .kat-pill:hover   { border-color:var(--rust);color:var(--rust); }
 .kat-pill.active  { background:var(--ink);color:#fff;border-color:var(--ink); }
 
-/* ── VIEW TOGGLE ── */
-.view-toggle { display:flex;gap:.25rem;border:1.5px solid var(--border);border-radius:4px;overflow:hidden; }
+/* ── VIEW TOGGLE — tidak menyusut, selalu di kanan ── */
+.view-toggle {
+    flex-shrink: 0;
+    display:flex;
+    gap:.25rem;
+    border:1.5px solid var(--border);
+    border-radius:4px;
+    overflow:hidden;
+}
 .view-btn { padding:.35rem .55rem;background:transparent;border:none;cursor:pointer;color:var(--muted);transition:all .15s;line-height:0; }
 .view-btn.active { background:var(--ink);color:#fff; }
 
@@ -113,35 +155,20 @@ td.name { font-weight:600;max-width:220px; }
 .prod-card:hover { box-shadow:0 8px 24px rgba(15,13,11,.1);border-color:var(--rust);transform:translateY(-2px); }
 .card-hidden { display:none; }
 
-/*
- * .card-img-wrap: gabungan dari produk.css (aspect-ratio, flex) dan
- * inline style (position:relative, height:160px, display:block).
- * Pemenang: position:relative + height tetap 160px agar foto mengisi penuh.
- * aspect-ratio dihapus karena konflik dengan height:160px yang fixed.
- */
 .card-img-wrap {
-    position: relative;          /* wajib — agar img absolute & overlay bisa tepat */
+    position: relative;
     width: 100%;
-    height: 160px;               /* tinggi tetap, konsisten antar card */
+    height: 160px;
     background: var(--warm);
     overflow: hidden;
     flex-shrink: 0;
     border-bottom: 1px solid var(--border);
     cursor: pointer;
     border-radius: 0;
-    /* display TIDAK di-set di sini — biarkan browser default (block),
-     *      .thumb-wrap memberi inline-flex tapi kita override via class spesifik di bawah */
 }
-
-/*
- * Override display dari .thumb-wrap (inline-flex) khusus untuk card image wrap.
- * Perlu ini karena .card-img-wrap juga pakai class .thumb-wrap.
- */
 .card-img-wrap.thumb-wrap {
     display: block;
 }
-
-/* Foto produk di card — absolute agar mengisi container dengan benar */
 .card-img-wrap .card-prod-img {
     position: absolute;
     inset: 0;
@@ -155,12 +182,10 @@ td.name { font-weight:600;max-width:220px; }
 .card-img-wrap .card-prod-img.loaded {
     opacity: 1;
 }
-
-/* Placeholder card (tampil saat foto gagal load / belum ada) */
 .card-img-placeholder {
     position: absolute;
     inset: 0;
-    display: none;              /* ditampilkan via JS saat onerror */
+    display: none;
     align-items: center;
     justify-content: center;
     width: 100%;
@@ -420,6 +445,7 @@ input[type="number"] { -moz-appearance:textfield; }
     .topbar { padding:.75rem 1rem; }
     .topbar-title h1 { font-size:1.1rem; }
     .searchbar { padding:.6rem 1rem; }
+    .search-wrap { width: 160px; }
     .card-grid { padding:1rem;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.75rem; }
     .btn-label { display:none; }
     th:nth-child(3), td:nth-child(3),
@@ -428,4 +454,5 @@ input[type="number"] { -moz-appearance:textfield; }
 }
 @media(max-width:500px){
     .topbar-actions .btn-ghost { display:none; }
+    .search-wrap { width: 120px; }
 }

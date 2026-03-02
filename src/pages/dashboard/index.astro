@@ -689,7 +689,7 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
 </div>
 
 <!-- ── Script Modal Hapus Histori ─────────────────────────────────────────── -->
-<script nonce={nonce} is:inline>
+<script is:inline nonce={nonce} define:vars={{ days7, maxOmset7 }}>
 (function () {
   "use strict";
 

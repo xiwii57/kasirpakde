@@ -3,7 +3,7 @@
 export const prerender = false;
 import "../../styles/global.css";
 import "../../styles/kasir.css";
-import { createServiceClient } from "../../lib/supabase";
+import { createServiceClient, KATEGORI_LIST } from "../../lib/supabase";
 import Layout from "../../layouts/Layout.astro";
 
 const accessToken = Astro.cookies.get("sb-access-token");
@@ -32,6 +32,14 @@ function rp(n: number) {
 }
 
 const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].sort();
+
+const scriptVars = {
+  produk,
+  quickCashProduk,
+  PUBLIC_SUPABASE_URL,
+  PUBLIC_SUPABASE_ANON_KEY,
+  nonce,
+};
 ---
 
 <Layout title="Kasir" active="kasir" nonce={nonce}>
@@ -414,7 +422,7 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
   <span id="toast-msg"></span>
 </div>
 
-<script is:inline>
+<script is:inline nonce={nonce} define:vars={scriptVars}>
 window.__playSuccess = function() {
   try {
     var ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -475,7 +483,7 @@ document.addEventListener('keydown', function(e) {
 })();
 </script>
 
-<script is:inline define:vars={{ produk, PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY }}>
+<script is:inline nonce={nonce} define:vars={{ produk, PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY }}>
 'use strict';
 
 var SUPABASE_URL  = PUBLIC_SUPABASE_URL;
