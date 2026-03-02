@@ -455,12 +455,13 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
 function buildCSP(nonce: string): string {
     const supabaseOrigin = new URL(SUPABASE_URL).origin;
 
+    // JIKA MODE DEVELOPMENT (localhost)
     if (!IS_PROD) {
         return [
             "default-src 'self'",
             `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://challenges.cloudflare.com ws://localhost:* http://localhost:*`,
             "script-src-attr 'unsafe-inline'",
-            "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
             "style-src-attr 'unsafe-inline'",
             "font-src 'self' https://fonts.gstatic.com data:",
             "frame-src https://challenges.cloudflare.com",
@@ -471,12 +472,13 @@ function buildCSP(nonce: string): string {
             "object-src 'none'",
             "base-uri 'self'",
             "worker-src blob:",
+            "media-src 'none'",
         ].join("; ");
     }
 
     return [
         "default-src 'self'",
-        `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' 'wasm-unsafe-eval' https://challenges.cloudflare.com`,
+        `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-inline' 'wasm-unsafe-eval' https://challenges.cloudflare.com`,
         "script-src-attr 'unsafe-inline'",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "style-src-attr 'unsafe-inline'",

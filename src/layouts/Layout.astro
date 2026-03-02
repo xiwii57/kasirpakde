@@ -1,4 +1,5 @@
 ---
+// src/layouts/Layout.astro
 import "../styles/global.css";
 import Sidebar from "../components/Sidebar.astro";
 import { ViewTransitions } from 'astro:transitions';
@@ -20,20 +21,22 @@ const { title, active, nonce = "" } = Astro.props;
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23c84b1f'/><text x='50%' y='56%' dominant-baseline='middle' text-anchor='middle' font-size='20' font-family='Georgia,serif' fill='white'>K</text></svg>" />
   <title>{title} — Kasir Warung</title>
-  <ViewTransitions />
+  <ViewTransitions nonce={nonce} />
   <meta name="astro-prefetch" content="hover" />
 </head>
 <body class="min-h-screen bg-[#f7f3ee]" style="font-family:'DM Sans',sans-serif">
 
   <div class="flex h-screen overflow-hidden">
-
     <Sidebar active={active} />
 
     <main class="flex-1 overflow-y-auto" id="main">
       <slot />
     </main>
-
   </div>
 
+  <style is:inline>
+    /* CSS global tambahan jika diperlukan */
+    :root { view-transition-name: none; }
+  </style>
 </body>
 </html>

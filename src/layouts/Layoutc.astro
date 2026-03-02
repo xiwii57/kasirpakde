@@ -1,5 +1,6 @@
 ---
 // src/layouts/Layoutc.astro
+import { ViewTransitions } from 'astro:transitions';
 
 interface Props {
   title:   string;
@@ -20,14 +21,11 @@ const pageTitle = title ? `${title} — Karsip` : "Karsip";
   <meta name="theme-color" content="#f5f1ec" />
   <meta name="color-scheme" content="light" />
 
-  <!-- SEO minimal — aplikasi internal, jangan diindex -->
   <meta name="robots" content="noindex, nofollow" />
   <title>{pageTitle}</title>
 
-  <!-- Favicon inline SVG -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23c84b1f'/><text x='50%' y='56%' dominant-baseline='middle' text-anchor='middle' font-size='20' font-family='Georgia,serif' fill='white'>K</text></svg>" />
 
-  <!-- Fonts: DM Serif Display (judul) + DM Sans (body) -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -35,8 +33,9 @@ const pageTitle = title ? `${title} — Karsip` : "Karsip";
     href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=DM+Serif+Display:ital@0;1&display=swap"
   />
 
-  <!-- Global styles & CSS variables -->
-  <style>
+  <ViewTransitions nonce={nonce} />
+
+  <style is:inline nonce={nonce}>
     /* ── Reset ───────────────────────────────── */
     *, *::before, *::after {
       box-sizing: border-box;
@@ -83,7 +82,7 @@ const pageTitle = title ? `${title} — Karsip` : "Karsip";
       background-color:   var(--bg);
       -webkit-font-smoothing:  antialiased;
       -moz-osx-font-smoothing: grayscale;
-      text-rendering:     optimizeLegibility;
+      text-rendering:      optimizeLegibility;
       /* Full height tanpa overflow untuk layout POS */
       height: 100%;
       overflow: hidden;
