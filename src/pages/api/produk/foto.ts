@@ -1,11 +1,16 @@
+// src/pages/api/produk/foto.ts
 export const prerender = false;
 
 import type { APIRoute } from "astro";
 import { createServiceClient } from "../../../lib/supabase";
 
 const BUCKET    = "produk-foto";
-const MAX_SIZE  = 5 * 1024 * 1024; // 5 MB
+const MAX_SIZE  = 5 * 1024 * 1024; // 5 MB — batas ukuran file gambar
 const UUID_RE   = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// FIX #10 — Batas total body multipart (file + field overhead).
+// Dibuat sedikit lebih besar dari MAX_SIZE untuk menampung overhead multipart boundary.
+const MAX_BODY_BYTES = MAX_SIZE + 8 * 1024; // 5 MB + 8 KB overhead
 
 // Magic bytes untuk validasi file di server (bukan percaya client MIME)
 const MAGIC: Record<string, number[][]> = {
@@ -27,7 +32,6 @@ function json(data: unknown, status = 200) {
     });
 }
 
-/** Verifikasi token ke Supabase — bukan sekadar cek keberadaan cookie */
 async function authGuard(cookies: any): Promise<boolean> {
     const token = cookies.get("sb-access-token")?.value;
     if (!token) return false;
@@ -40,10 +44,6 @@ function isValidUUID(id: string): boolean {
     return UUID_RE.test(id);
 }
 
-/**
- * Validasi magic bytes — cek konten file sungguhan, bukan hanya MIME dari client.
- * WebP: bytes 0-3 = "RIFF", bytes 8-11 = "WEBP"
- */
 async function validateMagicBytes(blob: Blob): Promise<string | null> {
     const buf    = await blob.slice(0, 12).arrayBuffer();
     const bytes  = new Uint8Array(buf);
@@ -51,7 +51,6 @@ async function validateMagicBytes(blob: Blob): Promise<string | null> {
     for (const [mime, patterns] of Object.entries(MAGIC)) {
         for (const pattern of patterns) {
             if (pattern.every((b, i) => bytes[i] === b)) {
-                // Untuk WebP perlu cek tambahan "WEBP" di offset 8
                 if (mime === "image/webp") {
                     const webp = [0x57, 0x45, 0x42, 0x50];
                     if (webp.every((b, i) => bytes[8 + i] === b)) return mime;
@@ -61,12 +60,21 @@ async function validateMagicBytes(blob: Blob): Promise<string | null> {
             }
         }
     }
-    return null; // tidak dikenali
+    return null;
 }
 
 // ── POST /api/produk/foto (upload) ────────────────────────────────────────
 export const POST: APIRoute = async ({ request, cookies }) => {
     if (!await authGuard(cookies)) return json({ error: "Unauthorized" }, 401);
+
+    // FIX #10 — Validasi ukuran body via Content-Length sebelum membaca body.
+    // Untuk multipart/form-data kita tidak bisa baca arrayBuffer() lalu formData()
+    // sekaligus, jadi cek Content-Length header sebagai guard awal, lalu
+    // validasi ukuran file aktual setelah formData() berhasil diparsing.
+    const cl = parseInt(request.headers.get("content-length") ?? "0", 10);
+    if (Number.isNaN(cl) || cl < 1 || cl > MAX_BODY_BYTES) {
+        return json({ error: `Payload terlalu besar (maks ${MAX_SIZE / (1024 * 1024)} MB)` }, 413);
+    }
 
     let form: FormData | null = null;
     try { form = await request.formData(); }
@@ -86,6 +94,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         return json({ error: "Missing file" }, 400);
     if (file.size === 0)
         return json({ error: "File kosong" }, 400);
+
+    // FIX #10 — Validasi ukuran file aktual (dari objek Blob, tidak bisa dipalsukan)
     if (file.size > MAX_SIZE)
         return json({ error: "File terlalu besar (maks 5 MB)" }, 400);
 
@@ -113,7 +123,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     // ── Upload ke storage ──
     const path = `${id}.webp`;
 
-    // Hapus lama dulu (ignore error)
     await sb.storage.from(BUCKET).remove([path]);
 
     const { error: upErr } = await sb.storage.from(BUCKET).upload(path, file, {
@@ -137,7 +146,6 @@ export const DELETE: APIRoute = async ({ url, cookies }) => {
     if (!isValidUUID(id))
         return json({ error: "ID tidak valid" }, 400);
 
-    // ── Pastikan produk ada sebelum hapus ──
     const sb = createServiceClient();
     const { data: produk } = await sb
     .from("produk")

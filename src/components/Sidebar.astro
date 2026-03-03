@@ -1,11 +1,11 @@
 ---
-// src/components/Sidebar.astro
-
 interface Props {
   active: "dashboard" | "produk" | "margin-rendah" | "analisis" | "kasir";
+  nonce?: string;
 }
 
-const { active } = Astro.props;
+const { active, nonce = "" } = Astro.props;  // ✅ satu destructure, nonce ada di Props
+
 const userEmail = ((Astro.locals as any).user?.email ?? "") as string;
 const shortName = userEmail ? userEmail.split("@")[0] : "";
 
@@ -342,47 +342,54 @@ const navItems = [
     .sidebar-close-btn { display: flex !important; }
   }
 </style>
-
-<script is:inline>
+<script is:inline nonce={nonce}>
 (function () {
+  window.openSidebar = function () {
+    var sidebar = document.getElementById('sidebar');
+    var overlay = document.getElementById('sidebar-overlay');
+    if (!sidebar || !overlay) return;
+    sidebar.style.transform = 'translateX(0)';
+    overlay.classList.remove('hidden');
+    requestAnimationFrame(function () { overlay.style.opacity = '1'; });
+    document.body.style.overflow = 'hidden';
+    var first = sidebar.querySelector('a[href]');
+    if (first) setTimeout(function () { first.focus(); }, 250);
+  };
+
+  window.closeSidebar = function () {
+    var sidebar = document.getElementById('sidebar');
+    var overlay = document.getElementById('sidebar-overlay');
+    if (!sidebar || !overlay) return;
+    sidebar.style.transform = 'translateX(-100%)';
+    overlay.style.opacity = '0';
+    setTimeout(function () { overlay.classList.add('hidden'); }, 220);
+    document.body.style.overflow = '';
+  };
+
   function initSidebar() {
-    var sidebar  = document.getElementById('sidebar');
     var overlay  = document.getElementById('sidebar-overlay');
     var closeBtn = document.getElementById('close-sidebar');
-    if (!sidebar || !overlay) return;
+    if (!overlay) return;
 
-    window.openSidebar = function () {
-      sidebar.style.transform = 'translateX(0)';
-      overlay.classList.remove('hidden');
-      requestAnimationFrame(function () { overlay.style.opacity = '1'; });
-      document.body.style.overflow = 'hidden';
-      var first = sidebar.querySelector('a[href]');
-      if (first) setTimeout(function () { first.focus(); }, 250);
-    };
-
-    window.closeSidebar = function () {
-      sidebar.style.transform = 'translateX(-100%)';
-      overlay.style.opacity = '0';
-      setTimeout(function () { overlay.classList.add('hidden'); }, 220);
-      document.body.style.overflow = '';
-    };
-
-    // Hanya close di mobile
     if (window.innerWidth < 1024) window.closeSidebar();
 
     if (closeBtn) {
-      closeBtn.removeEventListener('click', window.closeSidebar);
-      closeBtn.addEventListener('click', window.closeSidebar);
+      var newClose = closeBtn.cloneNode(true);
+      closeBtn.parentNode.replaceChild(newClose, closeBtn);
+      newClose.addEventListener('click', window.closeSidebar);
     }
-    overlay.removeEventListener('click', window.closeSidebar);
-    overlay.addEventListener('click', window.closeSidebar);
+
+    var newOverlay = overlay.cloneNode(true);
+    overlay.parentNode.replaceChild(newOverlay, overlay);
+    newOverlay.addEventListener('click', window.closeSidebar);
   }
 
   document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
     var sidebar = document.getElementById('sidebar');
-    if (e.key === 'Escape' && sidebar && sidebar.style.transform === 'translateX(0px)') {
-      window.closeSidebar && window.closeSidebar();
-    }
+    if (!sidebar) return;
+    var t = sidebar.style.transform;
+    if (t === 'translateX(0)' || t === 'translateX(0px)') window.closeSidebar();
   });
 
   window.addEventListener('resize', function () {
@@ -395,5 +402,6 @@ const navItems = [
 
   initSidebar();
   document.addEventListener('astro:page-load', initSidebar);
+  document.addEventListener('astro:after-swap', initSidebar);
 }());
 </script>

@@ -11,13 +11,19 @@ import { createServiceClient } from "../../../lib/supabase";
 
 // ─── Konstanta ────────────────────────────────────────────────────────────────
 
-const MAX_TOKEN_LENGTH = 1024;
-const AUTH_TIMEOUT_MS  = 5_000;
-const MAX_FILE_BYTES   = 2 * 1024 * 1024;
-const MAX_ROWS         = 1_000;
-const MAX_NAMA_LEN     = 200;
-const MAX_KATEGORI_LEN = 100;
-const MAX_HARGA        = 100_000_000;
+const MAX_TOKEN_LENGTH   = 1024;
+const AUTH_TIMEOUT_MS    = 5_000;
+const MAX_FILE_BYTES     = 2 * 1024 * 1024;   // 2 MB — batas ukuran file upload
+const MAX_BODY_BYTES     = MAX_FILE_BYTES + 8 * 1024; // 2 MB + 8 KB overhead multipart
+const MAX_ROWS           = 1_000;
+const MAX_NAMA_LEN       = 200;
+const MAX_KATEGORI_LEN   = 100;
+const MAX_HARGA          = 100_000_000;
+
+// FIX ZIP bomb — batas ukuran output setelah decompress per entry ZIP
+// Nilai sengaja lebih besar dari MAX_FILE_BYTES karena XML lebih besar dari source data,
+// tapi tetap dibatasi ketat agar ZIP bomb tidak menghabiskan memori.
+const MAX_DECOMPRESS_BYTES = 10 * 1024 * 1024; // 10 MB per entry
 
 const VALID_KATEGORI = new Set([
     "Minuman", "Makanan", "Snack", "Rokok", "Sembako",
@@ -146,22 +152,41 @@ function parseCSV(text: string): string[][] {
     return rows;
 }
 
-// ─── DEFLATE decompressor (Node 18+ / Vercel Edge) ───────────────────────────
+// ─── DEFLATE decompressor dengan batas ukuran output ─────────────────────────
+//
+// FIX ZIP bomb: inflateAsync sekarang menerima parameter maxOutputBytes.
+// Jika output decompress melebihi batas, fungsi melempar error sebelum
+// seluruh data di-buffer ke memori — mencegah OOM dari ZIP bomb.
 
-async function inflateAsync(data: Uint8Array): Promise<Uint8Array> {
-    const ds = new (globalThis as any).DecompressionStream("deflate-raw");
+async function inflateAsync(data: Uint8Array, maxOutputBytes: number): Promise<Uint8Array> {
+    const ds     = new (globalThis as any).DecompressionStream("deflate-raw");
     const writer = ds.writable.getWriter();
     const reader = ds.readable.getReader();
+
     writer.write(data).catch(() => {});
     writer.close().catch(() => {});
+
     const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        if (value) chunks.push(value);
+        if (value) {
+            totalBytes += value.length;
+            // FIX — batalkan decompress segera jika output melebihi batas
+            if (totalBytes > maxOutputBytes) {
+                // Batalkan reader agar stream tidak terus mengalir
+                await reader.cancel().catch(() => {});
+                throw new Error(
+                    `[parse-xlsx] Output decompress melebihi batas ${maxOutputBytes / (1024 * 1024)} MB — kemungkinan ZIP bomb.`
+                );
+            }
+            chunks.push(value);
+        }
     }
-    const total = chunks.reduce((s, c) => s + c.length, 0);
-    const out = new Uint8Array(total);
+
+    const out = new Uint8Array(totalBytes);
     let off = 0;
     for (const c of chunks) { out.set(c, off); off += c.length; }
     return out;
@@ -186,7 +211,6 @@ function extractCellValue(attrs: string, inner: string, sharedStrings: string[])
         return sharedStrings[parseInt(vMatch[1], 10)] ?? "";
     }
     if (isInline) {
-        // openpyxl menyimpan string sebagai <is><t>nilai</t></is>
         const isBlock = inner.match(/<is>([\s\S]*?)<\/is>/);
         if (isBlock) {
             let val = "";
@@ -196,7 +220,7 @@ function extractCellValue(attrs: string, inner: string, sharedStrings: string[])
         return tMatch ? xmlUnescape(tMatch[1]) : "";
     }
     if (tMatch) return xmlUnescape(tMatch[1]);
-    if (vMatch) return vMatch[1]; // angka — kembalikan as-is
+    if (vMatch) return vMatch[1];
     return "";
 }
 
@@ -210,7 +234,6 @@ async function parseXLSX(buffer: ArrayBuffer): Promise<string[][]> {
         return (bytes[p] | (bytes[p+1]<<8) | (bytes[p+2]<<16) | (bytes[p+3]<<24)) >>> 0;
     }
 
-    // Ekstrak semua entry ZIP — support method 0 (store) dan 8 (deflate)
     const files = new Map<string, string>();
     let pos = 0;
 
@@ -220,7 +243,6 @@ async function parseXLSX(buffer: ArrayBuffer): Promise<string[][]> {
 
             const compMethod = readU16(pos + 8);
         const compSize   = readU32(pos + 18);
-        const uncompSize = readU32(pos + 22);
         const nameLen    = readU16(pos + 26);
         const extraLen   = readU16(pos + 28);
         const nameStart  = pos + 30;
@@ -228,30 +250,46 @@ async function parseXLSX(buffer: ArrayBuffer): Promise<string[][]> {
         const dataStart  = nameStart + nameLen + extraLen;
         const dataEnd    = dataStart + compSize;
 
-        // Hanya proses file XML yang relevan untuk efisiensi
         const relevant = name.includes("sheet1") || name.includes("Sheet1") ||
         name.toLowerCase().includes("sharedstr");
 
-        if (relevant && uncompSize <= 10 * 1024 * 1024) {
+        if (relevant) {
             try {
                 let raw: Uint8Array;
                 if (compMethod === 0) {
+                    // Stored (tidak dikompresi) — cek ukuran langsung
                     raw = bytes.slice(dataStart, dataEnd);
+                    if (raw.length > MAX_DECOMPRESS_BYTES) {
+                        console.warn(`[parse-xlsx] Entry ZIP '${name}' terlalu besar (stored), dilewati.`);
+                        pos = dataEnd;
+                        continue;
+                    }
                 } else if (compMethod === 8) {
-                    raw = await inflateAsync(bytes.slice(dataStart, dataEnd));
+                    // Deflate — FIX: inflateAsync sekarang membatasi output aktual
+                    // bukan hanya mengandalkan uncompSize dari header yang bisa dipalsukan
+                    raw = await inflateAsync(bytes.slice(dataStart, dataEnd), MAX_DECOMPRESS_BYTES);
                 } else {
-                    pos = dataEnd; continue;
+                    // Method kompresi tidak dikenal — lewati
+                    pos = dataEnd;
+                    continue;
                 }
                 files.set(name, new TextDecoder("utf-8", { fatal: false }).decode(raw));
             } catch (e) {
-                console.error("[parse-xlsx] decompress failed:", name, e);
+                // Tangkap error ZIP bomb dari inflateAsync dan log, lalu batalkan parsing
+                const msg = e instanceof Error ? e.message : "unknown";
+                console.error(`[parse-xlsx] Gagal decompress '${name}': ${msg}`);
+                // Jika ini adalah ZIP bomb, hentikan seluruh parsing
+                if (msg.includes("ZIP bomb")) {
+                    throw new Error("File terdeteksi sebagai ZIP bomb dan ditolak.");
+                }
+                // Error lain (file corrupt) — lewati entry ini saja
             }
         }
 
         pos = dataEnd;
     }
 
-    // Parse shared strings (opsional — openpyxl kadang pakai inlineStr)
+    // Parse shared strings
     const sharedStrings: string[] = [];
     const ssXml = files.get("xl/sharedStrings.xml") ?? files.get("xl/sharedstrings.xml") ?? "";
     if (ssXml) {
@@ -314,6 +352,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     if (!ct.includes("multipart/form-data"))
         return json({ error: "Content-Type harus multipart/form-data" }, 415);
 
+    // Validasi Content-Length sebelum baca body (guard awal untuk multipart)
+    const cl = parseInt(request.headers.get("content-length") ?? "0", 10);
+    if (Number.isNaN(cl) || cl < 1 || cl > MAX_BODY_BYTES) {
+        return json({ error: `File terlalu besar (maks ${MAX_FILE_BYTES / (1024 * 1024)} MB)` }, 413);
+    }
+
     let form: FormData;
     try { form = await request.formData(); }
     catch { return json({ error: "Gagal membaca form data" }, 400); }
@@ -328,8 +372,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     if (!isCSV && !isXLSX)
         return json({ error: "Hanya file .csv atau .xlsx yang didukung" }, 400);
 
-    if (file.size === 0)            return json({ error: "File kosong" }, 400);
-    if (file.size > MAX_FILE_BYTES) return json({ error: "Ukuran file maks 2 MB" }, 400);
+    if (file.size === 0)
+        return json({ error: "File kosong" }, 400);
+
+    // Validasi ukuran file aktual dari objek File (tidak bisa dipalsukan)
+    if (file.size > MAX_FILE_BYTES)
+        return json({ error: "Ukuran file maks 2 MB" }, 400);
 
     let rawRows: string[][];
     try {
@@ -337,7 +385,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         ? parseCSV(await file.text())
         : await parseXLSX(await file.arrayBuffer());
     } catch (e) {
-        console.error("[parse-xlsx] error:", e);
+        const msg = e instanceof Error ? e.message : "unknown";
+        console.error("[parse-xlsx] error:", msg);
+        // Pesan error ZIP bomb dikirim ke client agar admin tahu
+        if (msg.includes("ZIP bomb")) {
+            return json({ error: "File ditolak karena terdeteksi sebagai ZIP bomb." }, 422);
+        }
         return json({ error: "Gagal membaca isi file. Pastikan format file benar." }, 422);
     }
 

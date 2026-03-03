@@ -6,6 +6,7 @@ import { createServiceClient } from "../../../lib/supabase";
 // ── Konstanta ──────────────────────────────────────────────────────────────
 const MAX_NAMA     = 100;
 const MAX_HARGA    = 999_999_999;
+const MAX_BODY     = 512 * 1024; // 512 KB — FIX #10
 const UUID_RE      = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KATEGORI_OK  = new Set([
     "Minuman", "Makanan", "Rokok", "Es Krim",
@@ -29,10 +30,28 @@ async function authGuard(cookies: any): Promise<boolean> {
     const token = cookies.get("sb-access-token")?.value;
     if (!token) return false;
 
-    // Verifikasi token valid dengan mengambil user dari Supabase
     const sb = createServiceClient();
     const { data, error } = await sb.auth.getUser(token);
     return !error && !!data?.user;
+}
+
+// FIX #10 — Baca body aktual dan cek ukurannya, bukan hanya header Content-Length
+async function readJsonBody(request: Request): Promise<{ ok: true; body: unknown } | { ok: false; error: string; status: number }> {
+    let buf: ArrayBuffer;
+    try {
+        buf = await request.arrayBuffer();
+    } catch {
+        return { ok: false, error: "Gagal membaca body", status: 400 };
+    }
+    if (buf.byteLength > MAX_BODY) {
+        return { ok: false, error: "Payload terlalu besar (maks 512 KB)", status: 413 };
+    }
+    try {
+        const body = JSON.parse(new TextDecoder().decode(buf));
+        return { ok: true, body };
+    } catch {
+        return { ok: false, error: "Body bukan JSON valid", status: 400 };
+    }
 }
 
 function isValidUUID(id: string): boolean {
@@ -65,7 +84,6 @@ export const GET: APIRoute = async ({ url, cookies }) => {
     const katFilter = url.searchParams.get("kategori")          ?? "";
     const filterLow = url.searchParams.get("filter") === "low_margin";
 
-    // Validasi kategori filter agar tidak bisa inject nilai sembarang
     const safeKat = katFilter && KATEGORI_OK.has(katFilter) ? katFilter : "";
 
     let query = sb
@@ -92,11 +110,12 @@ export const GET: APIRoute = async ({ url, cookies }) => {
 export const POST: APIRoute = async ({ request, cookies }) => {
     if (!await authGuard(cookies)) return json({ error: "Unauthorized" }, 401);
 
-    const sb = createServiceClient();
-    let body: unknown;
+    // FIX #10 — Baca + validasi ukuran body aktual
+    const read = await readJsonBody(request);
+    if (!read.ok) return json({ error: read.error }, read.status);
+    const body = read.body;
 
-    try { body = await request.json(); }
-    catch { return json({ error: "Body tidak valid" }, 400); }
+    const sb = createServiceClient();
 
     // ── Bulk insert ──
     if (Array.isArray(body)) {
@@ -164,9 +183,10 @@ export const PATCH: APIRoute = async ({ request, url, cookies }) => {
     const id = url.searchParams.get("id") ?? "";
     if (!isValidUUID(id)) return json({ error: "ID tidak valid" }, 400);
 
-    let body: unknown;
-    try { body = await request.json(); }
-    catch { return json({ error: "Body tidak valid" }, 400); }
+    // FIX #10 — Baca + validasi ukuran body aktual
+    const read = await readJsonBody(request);
+    if (!read.ok) return json({ error: read.error }, read.status);
+    const body = read.body;
 
     if (typeof body !== "object" || body === null)
         return json({ error: "Body tidak valid" }, 400);
@@ -228,7 +248,6 @@ export const DELETE: APIRoute = async ({ url, cookies }) => {
 
     // ── Hapus massal semua produk ──────────────────────────────────────────
     if (bulk === "all") {
-        // neq dengan UUID dummy = hapus semua baris tanpa kondisi kosong
         const { error, count } = await sb
         .from("produk")
         .delete({ count: "exact" })

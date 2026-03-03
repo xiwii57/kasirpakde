@@ -11,16 +11,16 @@ import { createServiceClient } from "../../../lib/supabase";
 
 const MAX_TOKEN_LEN  = 1024;
 const AUTH_TIMEOUT   = 5_000;
-const MAX_ITEMS      = 100;       // maks item per transaksi
-const MAX_NAMA_LEN   = 200;       // maks panjang nama produk
-const MAX_QTY        = 9_999;     // maks qty per item
-const MAX_HARGA      = 100_000_000; // maks harga (Rp 100 juta)
-const MAX_TOTAL      = 500_000_000; // maks total (Rp 500 juta)
+const MAX_ITEMS      = 100;
+const MAX_NAMA_LEN   = 200;
+const MAX_QTY        = 9_999;
+const MAX_HARGA      = 100_000_000;
+const MAX_TOTAL      = 500_000_000;
 
-// Metode bayar yang valid — hanya cash dan qris statis
+// Batas body aktual POST transaksi: 100 item × ~200 byte + overhead = ~64 KB
+const MAX_BODY_BYTES = 64 * 1024;
+
 const VALID_METODE = new Set(["cash", "qris"]);
-
-// Status yang valid
 const VALID_STATUS = new Set(["paid"]);
 
 // ─── Auth Guard ───────────────────────────────────────────────────────────────
@@ -61,7 +61,7 @@ function json(data: unknown, status = 200): Response {
 function sanitizeStr(val: unknown, maxLen: number): string {
     return String(val ?? "")
     .trim()
-    .replace(/[\x00-\x1F\x7F]/g, "") // hapus control characters
+    .replace(/[\x00-\x1F\x7F]/g, "")
     .slice(0, maxLen);
 }
 
@@ -72,6 +72,27 @@ function isUUID(val: unknown): boolean {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 }
 
+// ─── Read + validasi body JSON aktual ────────────────────────────────────────
+
+async function readJsonBody(request: Request, maxBytes: number): Promise<
+{ ok: true; body: unknown } | { ok: false; error: string; status: number }
+> {
+    let buf: ArrayBuffer;
+    try {
+        buf = await request.arrayBuffer();
+    } catch {
+        return { ok: false, error: "Gagal membaca body", status: 400 };
+    }
+    if (buf.byteLength > maxBytes) {
+        return { ok: false, error: `Payload terlalu besar (maks ${maxBytes / 1024} KB)`, status: 413 };
+    }
+    try {
+        return { ok: true, body: JSON.parse(new TextDecoder().decode(buf)) };
+    } catch {
+        return { ok: false, error: "Body bukan JSON valid", status: 400 };
+    }
+}
+
 // ─── GET: histori transaksi hari ini ─────────────────────────────────────────
 
 export const GET: APIRoute = async ({ cookies }) => {
@@ -80,7 +101,6 @@ export const GET: APIRoute = async ({ cookies }) => {
     const sb  = createServiceClient();
     const now = new Date();
 
-    // Awal hari WIB (UTC+7)
     const todayWIB = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Jakarta" }));
     todayWIB.setHours(0, 0, 0, 0);
     const startUTC = new Date(todayWIB.getTime() - 7 * 60 * 60 * 1000).toISOString();
@@ -113,13 +133,10 @@ export const GET: APIRoute = async ({ cookies }) => {
 export const POST: APIRoute = async ({ request, cookies }) => {
     if (!await authGuard(cookies)) return json({ error: "Unauthorized" }, 401);
 
-    // Parse body
-    let body: unknown;
-    try {
-        body = await request.json();
-    } catch {
-        return json({ error: "Body tidak valid" }, 400);
-    }
+    // Baca + validasi ukuran body aktual sebelum parse JSON
+    const read = await readJsonBody(request, MAX_BODY_BYTES);
+    if (!read.ok) return json({ error: read.error }, read.status);
+    const body = read.body;
 
     if (typeof body !== "object" || body === null || Array.isArray(body)) {
         return json({ error: "Body harus berupa object" }, 400);
@@ -139,16 +156,16 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         return json({ error: `status tidak valid. Gunakan: ${[...VALID_STATUS].join(", ")}` }, 400);
     }
 
-    // ── Validasi total ───────────────────────────────────────────────────────
-    const total = Math.round(Number(b["total"] ?? 0));
-    if (!Number.isFinite(total) || total <= 0) {
+    // ── Validasi total (dari client — akan diverifikasi ulang vs DB di bawah) ─
+    const totalClient = Math.round(Number(b["total"] ?? 0));
+    if (!Number.isFinite(totalClient) || totalClient <= 0) {
         return json({ error: "total harus berupa angka positif" }, 400);
     }
-    if (total > MAX_TOTAL) {
+    if (totalClient > MAX_TOTAL) {
         return json({ error: `total melebihi batas maksimum (${MAX_TOTAL.toLocaleString("id-ID")})` }, 400);
     }
 
-    // ── Validasi items ───────────────────────────────────────────────────────
+    // ── Validasi struktur items dari client ──────────────────────────────────
     const rawItems = b["items"];
     if (!Array.isArray(rawItems) || rawItems.length === 0) {
         return json({ error: "items wajib ada dan tidak boleh kosong" }, 400);
@@ -157,15 +174,19 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         return json({ error: `Terlalu banyak item. Maks ${MAX_ITEMS} per transaksi` }, 400);
     }
 
-    type ItemRow = {
+    // ── Tipe data intermediate sebelum harga di-override dari DB ─────────────
+    type ItemInput = {
         produk_id:   string | null;
         nama_produk: string;
-        harga_jual:  number;
-        harga_beli:  number;
         qty:         number;
+        // harga_jual & harga_beli dari client — hanya sebagai fallback
+        // untuk produk tanpa produk_id (produk custom / non-katalog)
+        harga_jual_client: number;
+        harga_beli_client: number;
     };
 
-    const items: ItemRow[] = [];
+    const itemsInput: ItemInput[] = [];
+
     for (let i = 0; i < rawItems.length; i++) {
         const r = rawItems[i];
         if (typeof r !== "object" || r === null) {
@@ -176,39 +197,111 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         const nama = sanitizeStr(row["nama_produk"], MAX_NAMA_LEN);
         if (!nama) return json({ error: `Item ${i + 1}: nama_produk wajib diisi` }, 400);
 
-        const hargaJual = Math.round(Number(row["harga_jual"] ?? 0));
-        const hargaBeli = Math.round(Number(row["harga_beli"] ?? 0));
-        const qty       = Math.round(Number(row["qty"]        ?? 1));
-
-        if (!Number.isFinite(hargaJual) || hargaJual < 0 || hargaJual > MAX_HARGA) {
-            return json({ error: `Item ${i + 1}: harga_jual tidak valid` }, 400);
-        }
-        if (!Number.isFinite(hargaBeli) || hargaBeli < 0 || hargaBeli > MAX_HARGA) {
-            return json({ error: `Item ${i + 1}: harga_beli tidak valid` }, 400);
-        }
+        const qty = Math.round(Number(row["qty"] ?? 1));
         if (!Number.isFinite(qty) || qty < 1 || qty > MAX_QTY) {
             return json({ error: `Item ${i + 1}: qty harus antara 1–${MAX_QTY}` }, 400);
         }
 
-        // produk_id opsional — validasi UUID jika ada
+        // Harga dari client hanya dipakai untuk produk tanpa produk_id
+        const hargaJualClient = Math.round(Number(row["harga_jual"] ?? 0));
+        const hargaBeliClient = Math.round(Number(row["harga_beli"] ?? 0));
+
+        if (!Number.isFinite(hargaJualClient) || hargaJualClient < 0 || hargaJualClient > MAX_HARGA) {
+            return json({ error: `Item ${i + 1}: harga_jual tidak valid` }, 400);
+        }
+        if (!Number.isFinite(hargaBeliClient) || hargaBeliClient < 0 || hargaBeliClient > MAX_HARGA) {
+            return json({ error: `Item ${i + 1}: harga_beli tidak valid` }, 400);
+        }
+
         const produkId = isUUID(row["produk_id"]) ? (row["produk_id"] as string) : null;
 
-        items.push({ produk_id: produkId, nama_produk: nama, harga_jual: hargaJual, harga_beli: hargaBeli, qty });
+        itemsInput.push({
+            produk_id:         produkId,
+            nama_produk:       nama,
+            qty,
+            harga_jual_client: hargaJualClient,
+            harga_beli_client: hargaBeliClient,
+        });
     }
 
-    // ── Verifikasi total cocok dengan items ──────────────────────────────────
-    const totalHitung = items.reduce((s, i) => s + i.harga_jual * i.qty, 0);
-    if (totalHitung !== total) {
-        return json({ error: `Total tidak sesuai. Dihitung: ${totalHitung}, dikirim: ${total}` }, 400);
+    // ── FIX: Override harga dari database untuk produk yang punya produk_id ──
+    //
+    // SEBELUMNYA: harga_jual & harga_beli diambil langsung dari client body.
+    // Ini memungkinkan price manipulation — attacker bisa kirim harga_jual: 1
+    // untuk semua produk dan transaksi tetap diterima, merusak laporan laba.
+    //
+    // SEKARANG: untuk setiap item yang memiliki produk_id valid, harga
+    // di-fetch dari database dan digunakan untuk menggantikan nilai dari client.
+    // Produk tanpa produk_id (produk custom/non-katalog) tetap pakai harga client.
+
+    const sb = createServiceClient();
+
+    const produkIds = [...new Set(
+        itemsInput.filter(i => i.produk_id !== null).map(i => i.produk_id!)
+    )];
+
+    // Map produk_id → { harga_jual, harga_beli } dari DB
+    const dbHargaMap = new Map<string, { harga_jual: number; harga_beli: number }>();
+
+    if (produkIds.length > 0) {
+        const { data: produkData, error: produkErr } = await sb
+        .from("produk")
+        .select("id, harga_jual, harga_beli")
+        .in("id", produkIds);
+
+        if (produkErr) {
+            console.error("[transaksi POST] fetch harga produk:", produkErr.message);
+            return json({ error: "Gagal memverifikasi harga produk" }, 500);
+        }
+
+        for (const p of produkData ?? []) {
+            dbHargaMap.set(p.id, { harga_jual: p.harga_jual, harga_beli: p.harga_beli });
+        }
+
+        // Pastikan semua produk_id yang dikirim client benar-benar ada di DB
+        for (const id of produkIds) {
+            if (!dbHargaMap.has(id)) {
+                return json({ error: `Produk dengan ID ${id} tidak ditemukan` }, 400);
+            }
+        }
+    }
+
+    // Bangun item final dengan harga dari DB (override) atau harga client (fallback)
+    type ItemRow = {
+        produk_id:   string | null;
+        nama_produk: string;
+        harga_jual:  number;
+        harga_beli:  number;
+        qty:         number;
+    };
+
+    const items: ItemRow[] = itemsInput.map(item => {
+        const dbHarga = item.produk_id ? dbHargaMap.get(item.produk_id) : undefined;
+        return {
+            produk_id:   item.produk_id,
+            nama_produk: item.nama_produk,
+            qty:         item.qty,
+            // Gunakan harga dari DB jika ada, fallback ke harga client untuk produk custom
+            harga_jual:  dbHarga ? dbHarga.harga_jual : item.harga_jual_client,
+            harga_beli:  dbHarga ? dbHarga.harga_beli : item.harga_beli_client,
+        };
+    });
+
+    // ── Verifikasi total client cocok dengan harga dari DB ───────────────────
+    // Ini mendeteksi jika client mencoba manipulasi total secara langsung
+    const totalDariDB = items.reduce((s, i) => s + i.harga_jual * i.qty, 0);
+    if (totalDariDB !== totalClient) {
+        console.warn(`[transaksi POST] Total tidak sesuai DB. Client: ${totalClient}, DB: ${totalDariDB}`);
+        return json({
+            error: `Total tidak sesuai dengan harga produk saat ini. Mohon refresh halaman dan coba lagi.`,
+        }, 400);
     }
 
     // ── Simpan ke database ───────────────────────────────────────────────────
-    const sb = createServiceClient();
-
     const { data: trx, error: trxErr } = await sb
     .from("transaksi")
     .insert({
-        total,
+        total:        totalDariDB, // selalu pakai total yang dihitung dari DB
         metode_bayar: metodeBayar,
         status,
         created_at:   new Date().toISOString(),
@@ -227,7 +320,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
 
     if (itemErr) {
         console.error("[transaksi POST] insert items:", itemErr.message);
-        // Rollback — hapus transaksi yang sudah tersimpan
         await sb.from("transaksi").delete().eq("id", trx.id);
         return json({ error: "Gagal menyimpan item transaksi" }, 500);
     }

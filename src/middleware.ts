@@ -63,21 +63,13 @@ const MAX_BODY_BYTES      = 512 * 1024;
 const ALLOWED_METHODS     = new Set(["GET", "POST", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
 const REQUIRED_CT_METHODS = new Set(["POST", "PATCH"]);
 
+// FIX #9 — Batas panjang token agar tidak ada token raksasa masuk ke validator
+const MAX_TOKEN_LENGTH = 4096;
+
 // ══════════════════════════════════════════════════════════════════
 // ERROR PAGE HELPERS
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * Untuk route API  → selalu JSON (tidak ada UI)
- * Untuk route HTML → redirect ke halaman error custom
- *
- * Halaman error tersedia di:
- *   /401  — sesi habis / tidak login
- *   /403  — akses ditolak (bukan admin)
- *   /429  — rate limit
- *   /500  — server error
- *   /404  — tidak ditemukan (ditangani Astro otomatis via src/pages/404.astro)
- */
 function errorPageUrl(code: 401 | 403 | 429 | 500, extra?: string): string {
     const base = `https://${CANONICAL_DOMAIN}/${code}`;
     return extra ? `${base}?${extra}` : base;
@@ -113,7 +105,10 @@ function generateNonce(): string {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// RATE LIMITER (In-Memory)
+// RATE LIMITER (In-Memory — Single Instance)
+// FIX #2: Catatan arsitektur — solusi ini valid untuk single-instance/single-user.
+// Jika nantinya multi-worker, migrasi ke Cloudflare KV / Durable Objects.
+// FIX #7: Cleanup proaktif via setInterval, bukan hanya saat request datang.
 // ══════════════════════════════════════════════════════════════════
 
 interface RateRecord {
@@ -125,6 +120,20 @@ interface RateRecord {
 }
 
 const rateStore = new Map<string, RateRecord>();
+
+// FIX #7 — Cleanup proaktif setiap 5 menit, tidak bergantung pada incoming request
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+setInterval(() => {
+    const now = Date.now();
+    let cleaned = 0;
+    for (const [k, r] of rateStore.entries()) {
+        if (now > r.resetAt && (!r.blocked || now > r.blockUntil)) {
+            rateStore.delete(k);
+            cleaned++;
+        }
+    }
+    if (cleaned > 0) console.info(`[Middleware] RateStore cleanup: ${cleaned} entry dihapus.`);
+}, CLEANUP_INTERVAL_MS);
 
 const RATE_CONFIG = {
     login: {
@@ -150,7 +159,8 @@ function checkRateLimit(ip: string, category: RateCategory): { allowed: boolean;
     const key = `${category}:${ip.replace(/[^a-fA-F0-9.:]/g, "").slice(0, 45)}`;
     const now = Date.now();
 
-    if (rateStore.size > 500) {
+    // FIX #7 — Threshold dinaikkan dan cleanup sudah dihandle oleh setInterval di atas
+    if (rateStore.size > 2000) {
         for (const [k, r] of rateStore.entries()) {
             if (now > r.resetAt && (!r.blocked || now > r.blockUntil)) rateStore.delete(k);
         }
@@ -178,7 +188,8 @@ function checkRateLimit(ip: string, category: RateCategory): { allowed: boolean;
         rec.blockUntil = now + blockMs;
         rec.strikes    = strikes;
         rateStore.set(key, rec);
-        console.warn(`[Middleware] Rate limit (${category}) IP diblokir: ${ip}, strike: ${strikes}, durasi: ${Math.round(blockMs / 60000)}m`);
+        // FIX #11 — Tidak mencetak IP lengkap, hanya 8 karakter pertama
+        console.warn(`[Middleware] Rate limit (${category}) IP diblokir: ${ip.slice(0, 8)}***, strike: ${strikes}, durasi: ${Math.round(blockMs / 60000)}m`);
         return { allowed: false, retryAfter: Math.ceil(blockMs / 1000) };
     }
     return { allowed: true, retryAfter: 0 };
@@ -192,6 +203,8 @@ function resetLoginRateLimit(ip: string): void {
 // HELPERS
 // ══════════════════════════════════════════════════════════════════
 
+// FIX #3 — Peringatan: IP hanya bisa dipercaya jika semua traffic 100% melalui Cloudflare.
+// Blokir direct-to-origin di Cloudflare Dashboard untuk memastikan header tidak bisa dipalsukan.
 function getClientIp(request: Request): string {
     const cfIp = request.headers.get("cf-connecting-ip");
     if (cfIp) return cfIp.trim().slice(0, 45);
@@ -208,12 +221,17 @@ function isStaticAsset(pathname: string): boolean {
     return pathname.startsWith("/_astro/") || STATIC_EXTS.test(pathname);
 }
 
+// FIX #5 — safeCompare tidak lagi bocorkan panjang string via early return.
+// Kedua string dipad ke panjang yang sama sebelum dibandingkan.
 function safeCompare(a: string, b: string): boolean {
-    if (a.length !== b.length) return false;
-    const enc = new TextEncoder();
-    const aB  = enc.encode(a);
-    const bB  = enc.encode(b);
-    let diff  = 0;
+    const enc   = new TextEncoder();
+    const maxLen = Math.max(a.length, b.length, 1);
+    // Pad ke panjang yang sama agar tidak ada timing leak dari length check
+    const aPad  = a.padEnd(maxLen, "\0");
+    const bPad  = b.padEnd(maxLen, "\0");
+    const aB    = enc.encode(aPad);
+    const bB    = enc.encode(bPad);
+    let diff    = a.length === b.length ? 0 : 1; // length berbeda → pasti tidak sama
     for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i];
     return diff === 0;
 }
@@ -263,26 +281,32 @@ function checkOrigin(request: Request, url: URL): boolean {
                 const isAllowedHost = [...ALLOWED_DOMAINS].some(d => host === d);
                 if (isAllowedHost) return true;
                 if (!IS_PROD && (host === "localhost" || host === "127.0.0.1")) return true;
-                console.warn(`[Middleware] CSRF: host tidak dikenali untuk ${url.pathname}: ${host}`);
+                // FIX #11 — Log tidak mencetak detail path yang mungkin sensitif
+                console.warn(`[Middleware] CSRF: host tidak dikenali untuk login endpoint`);
                 return false;
             }
-            console.warn(`[Middleware] CSRF: origin tidak ada untuk ${url.pathname}`);
+            console.warn(`[Middleware] CSRF: origin tidak ada untuk API endpoint`);
             return false;
         }
         try {
             const originUrl = new URL(origin);
             const allowed   = allowedOrigins.has(originUrl.origin);
-            if (!allowed) console.warn(`[Middleware] CSRF ditolak — origin: ${originUrl.origin}`);
+            if (!allowed) console.warn(`[Middleware] CSRF ditolak — origin tidak diizinkan`);
             return allowed;
         } catch { return false; }
     }
 
+    // FIX #4 — Untuk non-API POST/PATCH, jika tidak ada origin DAN tidak ada referer → tolak.
+    // Referer bisa hilang via Referrer-Policy: no-referrer di halaman penyerang.
+    // Karena ini admin-only single-user, kebijakan ketat lebih aman.
     if (!origin || origin === "null") {
         if (request.method === "GET") return true;
         if (referer) {
             try { return allowedOrigins.has(new URL(referer).origin); }
             catch { return false; }
         }
+        // FIX #4 — Tidak ada origin dan tidak ada referer untuk mutating request → tolak
+        console.warn(`[Middleware] CSRF: tidak ada origin maupun referer untuk ${request.method} request`);
         return false;
     }
     try { return allowedOrigins.has(new URL(origin).origin); }
@@ -295,6 +319,8 @@ function checkOrigin(request: Request, url: URL): boolean {
 
 function isValidJwtStructure(token: string): boolean {
     if (!token || typeof token !== "string") return false;
+    // FIX #9 — Cek panjang sebelum parsing apapun
+    if (token.length > MAX_TOKEN_LENGTH)      return false;
     const parts = token.split(".");
     if (parts.length !== 3) return false;
     const b64url = /^[A-Za-z0-9_-]+$/;
@@ -384,6 +410,9 @@ async function refreshSessionFromToken(refreshToken: string): Promise<{
 
 // ══════════════════════════════════════════════════════════════════
 // SESSION CACHE (30 detik)
+// FIX #1: Cache key sekarang menggunakan SHA-256 dari seluruh token,
+//         bukan hanya prefix+suffix 16 karakter (mencegah collision).
+// FIX #8: Cleanup proaktif via setInterval.
 // ══════════════════════════════════════════════════════════════════
 
 interface SessionResult {
@@ -398,19 +427,46 @@ interface SessionResult {
 const sessionCache = new Map<string, { result: SessionResult; expiresAt: number }>();
 const SESSION_CACHE_TTL = 30_000;
 
-function getSessionCacheKey(token: string): string {
-    return `sc:${token.slice(0, 16)}:${token.slice(-16)}`;
+// FIX #8 — Cleanup session cache proaktif setiap 2 menit
+setInterval(() => {
+    const now = Date.now();
+    let cleaned = 0;
+    for (const [k, entry] of sessionCache.entries()) {
+        if (now > entry.expiresAt) {
+            sessionCache.delete(k);
+            cleaned++;
+        }
+    }
+    if (cleaned > 0) console.info(`[Middleware] SessionCache cleanup: ${cleaned} entry dihapus.`);
+}, 2 * 60 * 1000);
+
+// FIX #1 — Hash SHA-256 dari seluruh token, bukan slice 16 karakter
+async function getSessionCacheKey(token: string): Promise<string> {
+    const encoded = new TextEncoder().encode(token);
+    const hashBuf = await crypto.subtle.digest("SHA-256", encoded);
+    const hashArr = Array.from(new Uint8Array(hashBuf));
+    return "sc:" + hashArr.map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-export function invalidateSessionCache(accessToken: string): void {
-    if (accessToken) sessionCache.delete(getSessionCacheKey(accessToken));
+export async function invalidateSessionCache(accessToken: string): Promise<void> {
+    if (accessToken) {
+        const key = await getSessionCacheKey(accessToken);
+        sessionCache.delete(key);
+    }
 }
 
 async function validateSession(accessToken: string, refreshToken: string): Promise<SessionResult> {
     if (!accessToken || !refreshToken)     return { valid: false, isAdmin: false };
+
+    // FIX #9 — Validasi panjang token sebelum apapun
+    if (accessToken.length > MAX_TOKEN_LENGTH || refreshToken.length > MAX_TOKEN_LENGTH) {
+        console.warn("[Middleware] Token melebihi batas panjang maksimum.");
+        return { valid: false, isAdmin: false };
+    }
+
     if (!isValidJwtStructure(accessToken)) return { valid: false, isAdmin: false };
 
-    const cacheKey = getSessionCacheKey(accessToken);
+    const cacheKey = await getSessionCacheKey(accessToken);
 
     if (sessionCache.size > 200) {
         const now = Date.now();
@@ -443,7 +499,7 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
             newExpiresIn:    rd.expiresIn,
         };
     } catch (err) {
-        console.error("[Middleware] validateSession error:", err instanceof Error ? err.message : err);
+        console.error("[Middleware] validateSession error:", err instanceof Error ? err.message : "unknown");
         return { valid: false, isAdmin: false };
     }
 }
@@ -455,7 +511,6 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
 function buildCSP(nonce: string): string {
     const supabaseOrigin = new URL(SUPABASE_URL).origin;
 
-    // JIKA MODE DEVELOPMENT (localhost)
     if (!IS_PROD) {
         return [
             "default-src 'self'",
@@ -478,7 +533,7 @@ function buildCSP(nonce: string): string {
 
     return [
         "default-src 'self'",
-        `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-inline' 'wasm-unsafe-eval' https://challenges.cloudflare.com`,
+        `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' 'wasm-unsafe-eval' https://challenges.cloudflare.com`,
         "script-src-attr 'unsafe-inline'",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "style-src-attr 'unsafe-inline'",
@@ -549,6 +604,35 @@ function isSuspiciousRequest(request: Request, pathname: string): boolean {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// OPTIONS PREFLIGHT HANDLER
+// FIX #12 — Tangani OPTIONS secara eksplisit agar tidak bocor ke Astro
+// dengan header CORS yang mungkin terlalu permisif.
+// ══════════════════════════════════════════════════════════════════
+
+function handleOptions(request: Request, url: URL): Response | null {
+    if (request.method !== "OPTIONS") return null;
+
+    const origin = request.headers.get("origin");
+    const allowedOrigins = getAllowedOrigins(request);
+
+    // Jika bukan dari origin yang diizinkan, tolak preflight
+    if (!origin || !allowedOrigins.has(origin)) {
+        return new Response(null, { status: 403 });
+    }
+
+    return new Response(null, {
+        status: 204,
+        headers: {
+            "Access-Control-Allow-Origin":  origin,
+            "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, HEAD, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            "Access-Control-Max-Age":       "600",
+            "Vary":                         "Origin",
+        },
+    });
+}
+
+// ══════════════════════════════════════════════════════════════════
 // MIDDLEWARE UTAMA
 // ══════════════════════════════════════════════════════════════════
 
@@ -565,8 +649,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
     // ── 1. Aset statis ────────────────────────────────────────────
     if (isStaticAsset(pathname)) return next();
 
-    // ── 2. Izinkan halaman error custom diakses bebas ─────────────
-    // Tanpa ini, /401 /403 /429 /500 bisa kena loop redirect
+    // ── 2. Halaman error custom diakses bebas ─────────────────────
+    // FIX #6 — Halaman error tidak boleh menampilkan data sensitif.
+    // Middleware sudah bebas, pastikan src/pages/401.astro dll tidak bocorkan info internal.
     const ERROR_PAGES = new Set(["/401", "/403", "/404", "/429", "/500"]);
     if (ERROR_PAGES.has(pathname)) {
         const response = await next();
@@ -587,7 +672,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
     // ── 4. Deteksi request mencurigakan ───────────────────────────
     if (isSuspiciousRequest(request, pathname)) {
-        console.warn(`[Middleware] Request mencurigakan — IP: ${ip}, path: ${pathname}`);
+        // FIX #11 — Tidak log path (bisa mengandung payload XSS/SQLi di log viewer)
+        console.warn(`[Middleware] Request mencurigakan — IP: ${ip.slice(0, 8)}***`);
         return new Response("Bad Request", { status: 400 });
     }
 
@@ -599,23 +685,34 @@ export const onRequest = defineMiddleware(async (context, next) => {
         });
     }
 
-    // ── 6. Cegah body terlalu besar ───────────────────────────────
-    const contentLength = parseInt(request.headers.get("content-length") ?? "0", 10);
-    if (Number.isNaN(contentLength) || contentLength > MAX_BODY_BYTES) {
-        return isApiRoute
-        ? jsonError("Payload terlalu besar", 413)
-        : htmlErrorRedirect(500);
-    }
+    // ── 6. FIX #12 — Tangani OPTIONS preflight secara eksplisit ──
+    const optionsResponse = handleOptions(request, url);
+    if (optionsResponse) return optionsResponse;
 
-    // ── 7. CSRF check ─────────────────────────────────────────────
+    // ── 7. Cegah body terlalu besar ───────────────────────────────
+    // FIX #10 — Content-Length header bisa dipalsukan atau tidak ada (chunked transfer).
+    // Validasi ini sebagai filter awal, validasi body aktual harus dilakukan di handler.
+    const clHeader = request.headers.get("content-length");
+    if (clHeader !== null) {
+        const contentLength = parseInt(clHeader, 10);
+        if (Number.isNaN(contentLength) || contentLength < 0 || contentLength > MAX_BODY_BYTES) {
+            return isApiRoute
+            ? jsonError("Payload terlalu besar", 413)
+            : htmlErrorRedirect(500);
+        }
+    }
+    // Untuk chunked transfer (tidak ada Content-Length), validasi dilakukan di handler API masing-masing.
+    // Tambahkan batas di handler: const buf = await request.arrayBuffer(); if (buf.byteLength > MAX_BODY_BYTES) ...
+
+    // ── 8. CSRF check ─────────────────────────────────────────────
     if (!checkOrigin(request, url)) {
-        console.warn(`[Middleware] CSRF gagal — IP: ${ip}, path: ${pathname}, method: ${method}, origin: ${request.headers.get("origin")}`);
+        console.warn(`[Middleware] CSRF gagal — IP: ${ip.slice(0, 8)}***, method: ${method}`);
         return isApiRoute
         ? jsonError("Forbidden: origin tidak valid", 403)
         : htmlErrorRedirect(403);
     }
 
-    // ── 8. Content-Type validation ────────────────────────────────
+    // ── 9. Content-Type validation ────────────────────────────────
     if (REQUIRED_CT_METHODS.has(method) && isApiRoute) {
         const ct      = request.headers.get("content-type") ?? "";
         const validCT = ct.includes("application/json") ||
@@ -624,19 +721,19 @@ export const onRequest = defineMiddleware(async (context, next) => {
         if (!validCT) return jsonError("Content-Type tidak valid", 415);
     }
 
-    // ── 9. Rate limit login ───────────────────────────────────────
+    // ── 10. Rate limit login ───────────────────────────────────────
     if (pathname === "/api/auth/login" && method === "POST") {
         const { allowed, retryAfter } = checkRateLimit(ip, "login");
         if (!allowed) {
             const mnt = retryAfter === 9999 ? "sementara" : `${Math.ceil(retryAfter / 60)} menit`;
-            console.warn(`[Middleware] Login rate limit — IP: ${ip}`);
+            console.warn(`[Middleware] Login rate limit — IP: ${ip.slice(0, 8)}***`);
             return isApiRoute
             ? jsonError(`Terlalu banyak percobaan. Coba lagi dalam ${mnt}.`, 429, retryAfter)
             : htmlErrorRedirect(429, `retry=${retryAfter}`);
         }
     }
 
-    // ── 10. Rate limit API umum ───────────────────────────────────
+    // ── 11. Rate limit API umum ───────────────────────────────────
     if (isApiRoute && method !== "GET") {
         const { allowed, retryAfter } = checkRateLimit(ip, "api");
         if (!allowed) {
@@ -646,18 +743,23 @@ export const onRequest = defineMiddleware(async (context, next) => {
         }
     }
 
-    // ── 11. Route publik ──────────────────────────────────────────
+    // ── 12. Route publik ──────────────────────────────────────────
     if (PUBLIC_ROUTES.has(pathname)) {
         const response = await next();
         return applySecurityHeaders(response, nonce, isApiRoute);
     }
 
-    // ── 12. Route terproteksi — validasi session ──────────────────
+    // ── 13. Route terproteksi — validasi session ──────────────────
     if (isProtectedRoute(pathname)) {
         const accessToken  = cookies.get("sb-access-token")?.value  ?? "";
         const refreshToken = cookies.get("sb-refresh-token")?.value ?? "";
 
-        if (!accessToken || !refreshToken) {
+        // FIX #9 — Cek panjang token dari cookie sebelum lanjut
+        if (
+            !accessToken || !refreshToken ||
+            accessToken.length > MAX_TOKEN_LENGTH ||
+            refreshToken.length > MAX_TOKEN_LENGTH
+        ) {
             clearAuthCookies(cookies);
             return isApiRoute
             ? jsonError("Autentikasi diperlukan.", 401)
@@ -667,7 +769,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         const session = await validateSession(accessToken, refreshToken);
 
         if (!session.valid) {
-            console.warn(`[Middleware] Sesi tidak valid — IP: ${ip}, path: ${pathname}`);
+            console.warn(`[Middleware] Sesi tidak valid — IP: ${ip.slice(0, 8)}***`);
             clearAuthCookies(cookies);
             return isApiRoute
             ? jsonError("Sesi tidak valid.", 401)
@@ -675,7 +777,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         }
 
         if (!session.isAdmin) {
-            console.warn(`[Middleware] Non-admin ditolak: ${session.email} — IP: ${ip}`);
+            console.warn(`[Middleware] Non-admin ditolak — IP: ${ip.slice(0, 8)}***`);
             clearAuthCookies(cookies);
             return isApiRoute
             ? jsonError("Akses ditolak.", 403)
@@ -696,7 +798,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         return applySecurityHeaders(response, nonce, isApiRoute);
     }
 
-    // ── 13. Fallback ──────────────────────────────────────────────
+    // ── 14. Fallback ──────────────────────────────────────────────
     const response = await next();
     return applySecurityHeaders(response, nonce, isApiRoute);
 });
