@@ -43,8 +43,6 @@ function fmtDate(s: string) {
   <!-- ── TOP BAR ── -->
   <div class="topbar">
     <div class="topbar-title">
-
-      <!-- Hamburger — hanya mobile, tidak fixed, tidak menimpa apapun -->
       <button
         type="button"
         onclick="window.openSidebar && window.openSidebar()"
@@ -55,13 +53,11 @@ function fmtDate(s: string) {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
         </svg>
       </button>
-
       <div>
         <h1 style="font-family:'DM Serif Display',serif">Daftar Produk</h1>
         <p><span id="count-lbl" aria-live="polite">{produk.length} produk</span></p>
       </div>
     </div>
-
     <div class="topbar-actions">
       <button type="button" id="btn-import" class="btn btn-ghost btn-sm" aria-haspopup="dialog">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -71,11 +67,9 @@ function fmtDate(s: string) {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         <span class="btn-label">Sesuaikan Harga</span>
       </button>
-      <!-- ★ TOMBOL HAPUS MASSAL ★ -->
       <button type="button" id="btn-hapus-massal" class="btn btn-ghost btn-sm" aria-haspopup="dialog"
         style="color:#dc2626;border-color:#fecaca">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-          stroke-linecap="round" stroke-linejoin="round">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="3 6 5 6 21 6"/>
           <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
           <path d="M10 11v6"/><path d="M14 11v6"/>
@@ -160,14 +154,8 @@ function fmtDate(s: string) {
                   data-img={imgUrl}>
                 <td style="padding:.5rem .75rem .5rem 1rem">
                   <div class="thumb-wrap" data-id={p.id} title="Klik untuk ganti foto" tabindex="0" role="button" aria-label={`Ganti foto ${p.nama_produk}`}>
-                    <img
-                      class="prod-thumb"
-                      src={imgUrl}
-                      alt={p.nama_produk}
-                      loading="lazy"
-                      decoding="async"
-                      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
-                    />
+                    <img class="prod-thumb" src={imgUrl} alt={p.nama_produk} loading="lazy" decoding="async"
+                      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
                     <div class="prod-thumb-placeholder" style="display:none">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 9 4-4 4 4 4-5 6 7"/></svg>
                     </div>
@@ -184,15 +172,12 @@ function fmtDate(s: string) {
                 <td class="r" style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:.77rem">{rp(p.harga_beli)}</td>
                 <td class="r" style="font-variant-numeric:tabular-nums;font-weight:700;font-size:.82rem">{rp(p.harga_jual)}</td>
                 <td class="r" style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:.77rem">{rp(u)}</td>
-                <td class="r">
-                  <span class={`badge ${bCls}`}>{m !== null ? `${m}%` : '—'}</span>
-                </td>
+                <td class="r"><span class={`badge ${bCls}`}>{m !== null ? `${m}%` : '—'}</span></td>
                 <td class="c">
                   <button type="button"
                     class={`toggle ${p.quick_cash ? 'bg-rust' : ''}`}
                     style={`background:${p.quick_cash ? '#c84b1f' : '#d1d5db'}`}
-                    data-id={p.id}
-                    role="switch"
+                    data-id={p.id} role="switch"
                     aria-checked={p.quick_cash ? "true" : "false"}
                     aria-label={`Quick Cash ${p.nama_produk}`}>
                     <span class="thumb"></span>
@@ -237,28 +222,14 @@ function fmtDate(s: string) {
         const imgUrl = `${PUBLIC_SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${p.id}.webp`;
         return (
           <div class="prod-card"
-               data-id={p.id}
-               data-nama={p.nama_produk.toLowerCase()}
-               data-kat={p.kategori}
-               data-nama-asli={p.nama_produk}
-               data-beli={p.harga_beli}
-               data-jual={p.harga_jual}
-               data-quick={p.quick_cash}
-               data-created={p.created_at}
-               data-updated={p.updated_at}
-               data-img={imgUrl}>
+               data-id={p.id} data-nama={p.nama_produk.toLowerCase()} data-kat={p.kategori}
+               data-nama-asli={p.nama_produk} data-beli={p.harga_beli} data-jual={p.harga_jual}
+               data-quick={p.quick_cash} data-created={p.created_at} data-updated={p.updated_at} data-img={imgUrl}>
             <div class="card-img-wrap thumb-wrap" data-id={p.id}
-                 title="Klik untuk ganti foto" tabindex="0" role="button"
-                 aria-label={`Ganti foto ${p.nama_produk}`}>
-              <img
-                  class="card-prod-img"
-                  src={imgUrl}
-                  alt={p.nama_produk}
-                  loading="lazy"
-                  decoding="async"
-                  onload="this.classList.add('loaded')"
-                  onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
-                />
+                 title="Klik untuk ganti foto" tabindex="0" role="button" aria-label={`Ganti foto ${p.nama_produk}`}>
+              <img class="card-prod-img" src={imgUrl} alt={p.nama_produk} loading="lazy" decoding="async"
+                onload="this.classList.add('loaded')"
+                onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
               <div class="card-img-placeholder" style="display:none;align-items:center;justify-content:center;width:100%;height:100%;position:absolute;inset:0;background:var(--cream)">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="color:#d1c9be"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 9 4-4 4 4 4-5 6 7"/></svg>
               </div>
@@ -279,18 +250,14 @@ function fmtDate(s: string) {
             <div class="card-footer">
               <span style="font-size:.68rem;color:var(--muted)">Beli: {rp(p.harga_beli)}</span>
               <div style="display:flex;gap:.2rem">
-                <button type="button" class="icon-btn edit btn-sm"
-                  title="Klik untuk edit"
-                  data-id={p.id} data-nama={p.nama_produk}
-                  data-beli={p.harga_beli} data-jual={p.harga_jual}
-                  data-kat={p.kategori} data-quick={p.quick_cash}
+                <button type="button" class="icon-btn edit btn-sm" title="Klik untuk edit"
+                  data-id={p.id} data-nama={p.nama_produk} data-beli={p.harga_beli}
+                  data-jual={p.harga_jual} data-kat={p.kategori} data-quick={p.quick_cash}
                   aria-label={`Edit ${p.nama_produk}`}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>
-                <button type="button" class="icon-btn del btn-sm"
-                  data-id={p.id} data-nama={p.nama_produk}
-                  title="Klik untuk hapus"
-                  aria-label={`Hapus ${p.nama_produk}`}>
+                <button type="button" class="icon-btn del btn-sm" data-id={p.id} data-nama={p.nama_produk}
+                  title="Klik untuk hapus" aria-label={`Hapus ${p.nama_produk}`}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                 </button>
               </div>
@@ -326,42 +293,21 @@ function fmtDate(s: string) {
           </div>
         </div>
         <div class="detail-price-grid">
-          <div class="detail-price-card">
-            <span class="detail-price-label">Harga Jual</span>
-            <span class="detail-price-value" id="d-jual"></span>
-          </div>
-          <div class="detail-price-card">
-            <span class="detail-price-label">Harga Beli</span>
-            <span class="detail-price-value detail-price-muted" id="d-beli"></span>
-          </div>
-          <div class="detail-price-card">
-            <span class="detail-price-label">Keuntungan</span>
-            <span class="detail-price-value" id="d-untung"></span>
-          </div>
-          <div class="detail-price-card">
-            <span class="detail-price-label">Margin</span>
-            <span class="detail-price-value" id="d-margin-val"></span>
-          </div>
+          <div class="detail-price-card"><span class="detail-price-label">Harga Jual</span><span class="detail-price-value" id="d-jual"></span></div>
+          <div class="detail-price-card"><span class="detail-price-label">Harga Beli</span><span class="detail-price-value detail-price-muted" id="d-beli"></span></div>
+          <div class="detail-price-card"><span class="detail-price-label">Keuntungan</span><span class="detail-price-value" id="d-untung"></span></div>
+          <div class="detail-price-card"><span class="detail-price-label">Margin</span><span class="detail-price-value" id="d-margin-val"></span></div>
         </div>
         <div class="detail-meta-row">
-          <div class="detail-meta-item">
-            <span class="detail-meta-label">Dibuat</span>
-            <span class="detail-meta-value" id="d-created"></span>
-          </div>
-          <div class="detail-meta-item">
-            <span class="detail-meta-label">Diperbarui</span>
-            <span class="detail-meta-value" id="d-updated"></span>
-          </div>
-          <div class="detail-meta-item">
-            <span class="detail-meta-label">Quick Cash</span>
-            <span class="detail-meta-value" id="d-qc"></span>
-          </div>
+          <div class="detail-meta-item"><span class="detail-meta-label">Dibuat</span><span class="detail-meta-value" id="d-created"></span></div>
+          <div class="detail-meta-item"><span class="detail-meta-label">Diperbarui</span><span class="detail-meta-value" id="d-updated"></span></div>
+          <div class="detail-meta-item"><span class="detail-meta-label">Quick Cash</span><span class="detail-meta-value" id="d-qc"></span></div>
         </div>
       </div>
       <div class="detail-footer">
         <button type="button" class="btn btn-ghost close-modal" data-m="detail">Tutup</button>
         <div style="display:flex;gap:.5rem">
-          <button type="button" id="d-btn-edit" title"Klik untuk edit" class="btn btn-dark">
+          <button type="button" id="d-btn-edit" class="btn btn-dark">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             Edit
           </button>
@@ -615,7 +561,6 @@ function fmtDate(s: string) {
         </button>
       </div>
       <div class="modal-bd">
-        <!-- Warning banner -->
         <div style="display:flex;gap:.6rem;align-items:flex-start;padding:.65rem .85rem;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;margin-bottom:1rem">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" style="flex-shrink:0;margin-top:.05rem">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -623,8 +568,6 @@ function fmtDate(s: string) {
           </svg>
           <p style="font-size:.75rem;color:#991b1b;margin:0">Aksi ini <strong>tidak dapat dibatalkan</strong>. Semua produk yang dihapus akan hilang permanen.</p>
         </div>
-
-        <!-- Opsi mode -->
         <div class="field">
           <label for="hm-mode" class="label">Target Penghapusan</label>
           <select id="hm-mode" class="input">
@@ -632,19 +575,13 @@ function fmtDate(s: string) {
             <option value="kategori">Per Kategori</option>
           </select>
         </div>
-
-        <!-- Pilih kategori (toggle berdasarkan mode) -->
         <div id="hm-kat-wrap" class="field" style="display:none">
           <label for="hm-kat" class="label">Kategori yang Dihapus</label>
           <select id="hm-kat" class="input">
             {KATEGORI_LIST.map(k => <option value={k}>{k}</option>)}
           </select>
         </div>
-
-        <!-- Info jumlah produk -->
         <div id="hm-info" style="padding:.5rem .75rem;background:var(--cream);border-radius:4px;font-size:.75rem;color:var(--muted);margin-bottom:.5rem" aria-live="polite"></div>
-
-        <!-- Konfirmasi ketik -->
         <div class="field">
           <label for="hm-confirm" class="label">
             Ketik <strong style="color:#dc2626;font-family:monospace;letter-spacing:.04em">HAPUS</strong> untuk konfirmasi
@@ -656,8 +593,7 @@ function fmtDate(s: string) {
         <button type="button" class="btn btn-ghost close-modal" data-m="hapus-massal">Batal</button>
         <button type="button" id="btn-hapus-massal-ok" class="btn" disabled
           style="background:#dc2626;color:#fff;opacity:.5;cursor:not-allowed">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="3 6 5 6 21 6"/>
             <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
           </svg>
@@ -682,13 +618,14 @@ function fmtDate(s: string) {
   function fmtDate(s){
     if(!s)return '—';
     try{ return new Date(s).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}); }
-    catch{ return '—'; }
+    catch(e){ return '—'; }
   }
 
   // ─── TOAST ────────────────────────────────────────────────────────────────────
   var _tt;
   function toast(msg, ok){
     var t=document.getElementById('toast'), ic=document.getElementById('t-icon');
+    if(!t||!ic) return;
     document.getElementById('t-msg').textContent=msg;
     ic.style.color = ok===false?'#f87171':'#4ade80';
     ic.innerHTML   = ok===false ? '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' : '<polyline points="20 6 9 17 4 12"/>';
@@ -698,8 +635,6 @@ function fmtDate(s: string) {
 
   // ─── API JSON ─────────────────────────────────────────────────────────────────
   async function api(method,path,body){
-    // Selalu kirim Content-Type: application/json agar middleware tidak reject dengan 415
-    // DELETE tanpa payload tetap kirim body kosong '{}'
     var opts={
       method:method,
       credentials:'same-origin',
@@ -712,202 +647,7 @@ function fmtDate(s: string) {
     return d;
   }
 
-  // ─── MODAL ────────────────────────────────────────────────────────────────────
-  var _pf=null;
-  var FOCUSABLE='button:not([disabled]),[href],input:not([disabled]),select,[tabindex]:not([tabindex="-1"])';
-  var ALL_MODALS=['detail','tambah','import','mass','hapus','hapus-massal','foto'];
-
-  function openM(id){
-    _pf=document.activeElement;
-    var m=document.getElementById('m-'+id);
-    if(!m)return;
-    m.classList.add('open'); document.body.style.overflow='hidden';
-    var els=Array.from(m.querySelectorAll(FOCUSABLE));
-    if(els.length) setTimeout(function(){els[0].focus();},40);
-    m._kt=function(e){
-      if(e.key!=='Tab'||!els.length)return;
-      var f=els[0],l=els[els.length-1];
-      if(e.shiftKey){if(document.activeElement===f){e.preventDefault();l.focus();}}
-      else{if(document.activeElement===l){e.preventDefault();f.focus();}}
-    };
-    m.addEventListener('keydown',m._kt);
-  }
-  function closeM(id){
-    var m=document.getElementById('m-'+id);
-    if(!m)return;
-    m.classList.remove('open'); document.body.style.overflow='';
-    if(m._kt){m.removeEventListener('keydown',m._kt);m._kt=null;}
-    if(_pf){_pf.focus();_pf=null;}
-    if(id==='tambah') resetForm();
-    if(id==='foto')   resetFotoModal();
-    if(id==='hapus-massal') resetHapusMassal();
-  }
-  document.addEventListener('keydown',function(e){
-    if(e.key!=='Escape')return;
-    for(var i=0;i<ALL_MODALS.length;i++){
-      var m=document.getElementById('m-'+ALL_MODALS[i]);
-      if(m&&m.classList.contains('open')){ closeM(ALL_MODALS[i]); return; }
-    }
-  });
-  ALL_MODALS.forEach(function(id){
-    var m=document.getElementById('m-'+id);
-    if(!m)return;
-    m.addEventListener('click',function(e){ if(e.target===this) closeM(id); });
-  });
-  document.querySelectorAll('.close-modal').forEach(function(b){
-    b.addEventListener('click',function(){ closeM(this.dataset.m); });
-  });
-
-  // ─── OPEN MODAL BUTTONS ───────────────────────────────────────────────────────
-  document.getElementById('btn-tambah').onclick=function(){openM('tambah');};
-  document.getElementById('btn-import').onclick=function(){openM('import');};
-  document.getElementById('btn-mass').onclick=function(){openM('mass');};
-  document.getElementById('btn-hapus-massal').onclick=function(){
-    resetHapusMassal();
-    updateHmInfo();
-    openM('hapus-massal');
-  };
-
-  // ─── MODAL DETAIL ─────────────────────────────────────────────────────────────
-  var _detailId='', _detailData={};
-
-  function openDetail(data){
-    _detailId  = data.id;
-    _detailData = data;
-    var dImg = document.getElementById('d-img');
-    var dPh  = document.getElementById('d-img-placeholder');
-    if(data.img){
-      dImg.src = data.img; dImg.alt = data.nama; dImg.style.display = ''; dPh.style.display = 'none';
-    } else { dImg.style.display = 'none'; dPh.style.display = 'flex'; }
-    document.getElementById('m-detail-title').textContent = data.nama;
-    var m     = data.beli > 0 ? Math.round(((data.jual - data.beli) / data.beli) * 100) : null;
-    var bdg   = document.getElementById('d-badges');
-    bdg.innerHTML = '<span class="badge badge-k">'+esc(data.kat)+'</span>'
-      + (data.qc ? '<span class="badge badge-qc">Quick Cash</span>' : '');
-    var untung = data.jual - data.beli;
-    document.getElementById('d-jual').textContent  = rp(data.jual);
-    document.getElementById('d-beli').textContent  = rp(data.beli);
-    document.getElementById('d-untung').textContent = rp(untung);
-    document.getElementById('d-untung').style.color = untung > 0 ? '#15803d' : 'var(--muted)';
-    var mEl = document.getElementById('d-margin-val');
-    if(m !== null){
-      mEl.textContent = m + '%';
-      mEl.style.color = m >= 20 ? '#15803d' : m >= 10 ? '#92400e' : '#991b1b';
-    } else { mEl.textContent = '—'; mEl.style.color = 'var(--muted)'; }
-    document.getElementById('d-created').textContent = fmtDate(data.created);
-    document.getElementById('d-updated').textContent = fmtDate(data.updated);
-    document.getElementById('d-qc').textContent = data.qc ? 'Aktif ✓' : 'Tidak aktif';
-    document.getElementById('d-qc').style.color = data.qc ? '#15803d' : 'var(--muted)';
-    openM('detail');
-  }
-
-  document.getElementById('d-btn-edit').addEventListener('click',function(){
-    closeM('detail');
-    var editBtn = document.querySelector('.icon-btn.edit[data-id="'+_detailId+'"]');
-    if(editBtn){ editBtn.click(); }
-  });
-  document.getElementById('d-btn-hapus').addEventListener('click',function(){
-    closeM('detail');
-    var delBtn = document.querySelector('.icon-btn.del[data-id="'+_detailId+'"]');
-    if(delBtn){ delBtn.click(); }
-  });
-
-  document.addEventListener('click',function(e){
-    var cell = e.target.closest('.name-clickable'); if(!cell) return;
-    var row = cell.closest('tr.data-row'); if(!row) return;
-    openDetail({ id:row.dataset.id, nama:row.dataset.namaAsli, kat:row.dataset.kat,
-      beli:parseInt(row.dataset.beli)||0, jual:parseInt(row.dataset.jual)||0,
-      qc:row.dataset.quick==='true', created:row.dataset.created, updated:row.dataset.updated, img:row.dataset.img });
-  });
-  document.addEventListener('keydown',function(e){
-    if(e.key!=='Enter'&&e.key!==' ')return;
-    var cell = e.target.closest('.name-clickable'); if(!cell)return;
-    var row = cell.closest('tr.data-row'); if(!row)return;
-    e.preventDefault();
-    openDetail({ id:row.dataset.id, nama:row.dataset.namaAsli, kat:row.dataset.kat,
-      beli:parseInt(row.dataset.beli)||0, jual:parseInt(row.dataset.jual)||0,
-      qc:row.dataset.quick==='true', created:row.dataset.created, updated:row.dataset.updated, img:row.dataset.img });
-  });
-  document.addEventListener('click',function(e){
-    var body = e.target.closest('.card-body-clickable'); if(!body)return;
-    var card = body.closest('.prod-card'); if(!card)return;
-    openDetail({ id:card.dataset.id, nama:card.dataset.namaAsli, kat:card.dataset.kat,
-      beli:parseInt(card.dataset.beli)||0, jual:parseInt(card.dataset.jual)||0,
-      qc:card.dataset.quick==='true', created:card.dataset.created, updated:card.dataset.updated, img:card.dataset.img });
-  });
-  document.addEventListener('keydown',function(e){
-    if(e.key!=='Enter'&&e.key!==' ')return;
-    var body = e.target.closest('.card-body-clickable'); if(!body)return;
-    var card = body.closest('.prod-card'); if(!card)return;
-    e.preventDefault();
-    openDetail({ id:card.dataset.id, nama:card.dataset.namaAsli, kat:card.dataset.kat,
-      beli:parseInt(card.dataset.beli)||0, jual:parseInt(card.dataset.jual)||0,
-      qc:card.dataset.quick==='true', created:card.dataset.created, updated:card.dataset.updated, img:card.dataset.img });
-  });
-
-  // ─── FILTER ───────────────────────────────────────────────────────────────────
-  var _q='', _kat='';
-  function applyFilter(){
-    var q=_q.trim().toLowerCase(), kat=_kat, vis=0;
-    document.querySelectorAll('#tbody tr.data-row').forEach(function(r){
-      var show=(!q||r.dataset.nama.indexOf(q)!==-1)&&(!kat||r.dataset.kat===kat);
-      r.classList.toggle('tr-hidden',!show);
-      if(show) vis++;
-    });
-    document.querySelectorAll('#card-grid .prod-card').forEach(function(c){
-      var show=(!q||c.dataset.nama.indexOf(q)!==-1)&&(!kat||c.dataset.kat===kat);
-      c.classList.toggle('card-hidden',!show);
-    });
-    var lbl=document.getElementById('count-lbl');
-    if(lbl) lbl.textContent=vis+' produk';
-    var nr=document.getElementById('no-results'), nrc=document.getElementById('no-results-card');
-    if(nr)  nr.style.display=vis===0?'':'none';
-    if(nrc) nrc.style.display=vis===0?'':'none';
-  }
-  document.getElementById('q').addEventListener('input',function(){ _q=this.value; applyFilter(); });
-  document.getElementById('kat-pills').addEventListener('click',function(e){
-    var btn=e.target.closest('.kat-pill'); if(!btn)return;
-    _kat=btn.dataset.kat||'';
-    document.querySelectorAll('.kat-pill').forEach(function(b){ b.classList.toggle('active',b.dataset.kat===_kat); });
-    applyFilter();
-  });
-
-  // ─── VIEW TOGGLE ─────────────────────────────────────────────────────────────
-  document.getElementById('btn-table').addEventListener('click',function(){
-    document.getElementById('view-table').style.display='';
-    document.getElementById('view-card').style.display='none';
-    this.classList.add('active'); document.getElementById('btn-card').classList.remove('active');
-    this.setAttribute('aria-pressed','true'); document.getElementById('btn-card').setAttribute('aria-pressed','false');
-    localStorage.setItem('kw-view','table');
-  });
-  document.getElementById('btn-card').addEventListener('click',function(){
-    document.getElementById('view-card').style.display='';
-    document.getElementById('view-table').style.display='none';
-    this.classList.add('active'); document.getElementById('btn-table').classList.remove('active');
-    this.setAttribute('aria-pressed','true'); document.getElementById('btn-table').setAttribute('aria-pressed','false');
-    localStorage.setItem('kw-view','card');
-  });
-  (function(){
-    if(localStorage.getItem('kw-view')==='card') document.getElementById('btn-card').click();
-  })();
-
-  // ─── MARGIN PREVIEW ───────────────────────────────────────────────────────────
-  function updMargin(){
-    var b=parseInt(document.getElementById('f-beli').value)||0;
-    var j=parseInt(document.getElementById('f-jual').value)||0;
-    var h=document.getElementById('margin-hint');
-    if(b>0&&j>0){
-      var pct=Math.round(((j-b)/b)*100);
-      h.textContent='Untung: Rp '+(j-b).toLocaleString('id-ID')+' ('+pct+'%)';
-      h.style.color=pct<10?'#7f1d1d':pct<20?'#713f12':'#14532d';
-      h.style.display='block';
-    } else { h.style.display='none'; }
-  }
-  document.getElementById('f-beli').addEventListener('input',updMargin);
-  document.getElementById('f-jual').addEventListener('input',updMargin);
-
-  // ─── STATE FOTO (modal tambah/edit) ──────────────────────────────────────────
-  var _pendingFotoBlob=null, _fotoHapus=false;
+  // ─── FOTO RESIZE ─────────────────────────────────────────────────────────────
   var MAX_W=480, MAX_H=480, WEBP_Q=0.72;
   var _resizeImg=null;
 
@@ -938,455 +678,585 @@ function fmtDate(s: string) {
     });
   }
 
-  function setFotoPreview(blob){
-    var img=document.getElementById('foto-current');
-    img.src=URL.createObjectURL(blob); img.style.display='block';
-    document.getElementById('foto-placeholder').style.display='none';
-    document.getElementById('btn-hapus-foto').style.display='';
-  }
-  function clearFotoPreview(){
-    var img=document.getElementById('foto-current');
-    img.src=''; img.style.display='none';
-    document.getElementById('foto-placeholder').style.display='flex';
-    document.getElementById('btn-hapus-foto').style.display='none';
-  }
-  function loadFotoForEdit(id){
-    var thumb=document.querySelector('tr.data-row[data-id="'+id+'"] .prod-thumb')||
-              document.querySelector('.prod-card[data-id="'+id+'"] .card-prod-img');
-    var img=document.getElementById('foto-current');
-    if(thumb&&thumb.naturalWidth>0&&!thumb.dataset.error){
-      img.src=thumb.src; img.style.display='block';
+  /* ══════════════════════════════════════════════════════════════════════════
+     INIT — semua addEventListener dipasang di sini
+  ══════════════════════════════════════════════════════════════════════════ */
+  function initProduk() {
+
+    // State yang di-reset tiap init
+    var _q='', _kat='';
+    var _pendingFotoBlob=null, _fotoHapus=false;
+    var _fotoQuickBlob=null;
+    var _detailId='', _detailData={};
+    var _hapusId='';
+    var _csvData=[];
+    var _pf=null;
+    var FOCUSABLE='button:not([disabled]),[href],input:not([disabled]),select,[tabindex]:not([tabindex="-1"])';
+    var ALL_MODALS=['detail','tambah','import','mass','hapus','hapus-massal','foto'];
+
+    // ─── MODAL ──────────────────────────────────────────────────────────────────
+    function openM(id){
+      _pf=document.activeElement;
+      var m=document.getElementById('m-'+id);
+      if(!m)return;
+      m.classList.add('open'); document.body.style.overflow='hidden';
+      var els=Array.from(m.querySelectorAll(FOCUSABLE));
+      if(els.length) setTimeout(function(){els[0].focus();},40);
+      m._kt=function(e){
+        if(e.key!=='Tab'||!els.length)return;
+        var f=els[0],l=els[els.length-1];
+        if(e.shiftKey){if(document.activeElement===f){e.preventDefault();l.focus();}}
+        else{if(document.activeElement===l){e.preventDefault();f.focus();}}
+      };
+      m.addEventListener('keydown',m._kt);
+    }
+    function closeM(id){
+      var m=document.getElementById('m-'+id);
+      if(!m)return;
+      m.classList.remove('open'); document.body.style.overflow='';
+      if(m._kt){m.removeEventListener('keydown',m._kt);m._kt=null;}
+      if(_pf){_pf.focus();_pf=null;}
+      if(id==='tambah') resetForm();
+      if(id==='foto')   resetFotoModal();
+      if(id==='hapus-massal') resetHapusMassal();
+    }
+
+    document.addEventListener('keydown',function(e){
+      if(e.key!=='Escape')return;
+      for(var i=0;i<ALL_MODALS.length;i++){
+        var m=document.getElementById('m-'+ALL_MODALS[i]);
+        if(m&&m.classList.contains('open')){ closeM(ALL_MODALS[i]); return; }
+      }
+    });
+    ALL_MODALS.forEach(function(id){
+      var m=document.getElementById('m-'+id);
+      if(!m)return;
+      m.addEventListener('click',function(e){ if(e.target===this) closeM(id); });
+    });
+    document.querySelectorAll('.close-modal').forEach(function(b){
+      b.addEventListener('click',function(){ closeM(this.dataset.m); });
+    });
+
+    // ─── OPEN MODAL BUTTONS ─────────────────────────────────────────────────────
+    var btnTambah = document.getElementById('btn-tambah');
+    var btnImport = document.getElementById('btn-import');
+    var btnMass   = document.getElementById('btn-mass');
+    var btnHapusMassal = document.getElementById('btn-hapus-massal');
+    if(btnTambah) btnTambah.onclick=function(){openM('tambah');};
+    if(btnImport) btnImport.onclick=function(){openM('import');};
+    if(btnMass)   btnMass.onclick=function(){openM('mass');};
+    if(btnHapusMassal) btnHapusMassal.onclick=function(){ resetHapusMassal(); updateHmInfo(); openM('hapus-massal'); };
+
+    // ─── MODAL DETAIL ───────────────────────────────────────────────────────────
+    function openDetail(data){
+      _detailId=data.id; _detailData=data;
+      var dImg=document.getElementById('d-img'), dPh=document.getElementById('d-img-placeholder');
+      if(data.img){ dImg.src=data.img; dImg.alt=data.nama; dImg.style.display=''; dPh.style.display='none'; }
+      else { dImg.style.display='none'; dPh.style.display='flex'; }
+      document.getElementById('m-detail-title').textContent=data.nama;
+      var m=data.beli>0?Math.round(((data.jual-data.beli)/data.beli)*100):null;
+      document.getElementById('d-badges').innerHTML='<span class="badge badge-k">'+esc(data.kat)+'</span>'+(data.qc?'<span class="badge badge-qc">Quick Cash</span>':'');
+      var untung=data.jual-data.beli;
+      document.getElementById('d-jual').textContent=rp(data.jual);
+      document.getElementById('d-beli').textContent=rp(data.beli);
+      document.getElementById('d-untung').textContent=rp(untung);
+      document.getElementById('d-untung').style.color=untung>0?'#15803d':'var(--muted)';
+      var mEl=document.getElementById('d-margin-val');
+      if(m!==null){ mEl.textContent=m+'%'; mEl.style.color=m>=20?'#15803d':m>=10?'#92400e':'#991b1b'; }
+      else { mEl.textContent='—'; mEl.style.color='var(--muted)'; }
+      document.getElementById('d-created').textContent=fmtDate(data.created);
+      document.getElementById('d-updated').textContent=fmtDate(data.updated);
+      document.getElementById('d-qc').textContent=data.qc?'Aktif ✓':'Tidak aktif';
+      document.getElementById('d-qc').style.color=data.qc?'#15803d':'var(--muted)';
+      openM('detail');
+    }
+
+    var dBtnEdit=document.getElementById('d-btn-edit');
+    var dBtnHapus=document.getElementById('d-btn-hapus');
+    if(dBtnEdit) dBtnEdit.addEventListener('click',function(){ closeM('detail'); var b=document.querySelector('.icon-btn.edit[data-id="'+_detailId+'"]'); if(b) b.click(); });
+    if(dBtnHapus) dBtnHapus.addEventListener('click',function(){ closeM('detail'); var b=document.querySelector('.icon-btn.del[data-id="'+_detailId+'"]'); if(b) b.click(); });
+
+    document.addEventListener('click',function(e){
+      var cell=e.target.closest('.name-clickable'); if(!cell)return;
+      var row=cell.closest('tr.data-row'); if(!row)return;
+      openDetail({id:row.dataset.id,nama:row.dataset.namaAsli,kat:row.dataset.kat,beli:parseInt(row.dataset.beli)||0,jual:parseInt(row.dataset.jual)||0,qc:row.dataset.quick==='true',created:row.dataset.created,updated:row.dataset.updated,img:row.dataset.img});
+    });
+    document.addEventListener('keydown',function(e){
+      if(e.key!=='Enter'&&e.key!==' ')return;
+      var cell=e.target.closest('.name-clickable'); if(!cell)return;
+      var row=cell.closest('tr.data-row'); if(!row)return;
+      e.preventDefault();
+      openDetail({id:row.dataset.id,nama:row.dataset.namaAsli,kat:row.dataset.kat,beli:parseInt(row.dataset.beli)||0,jual:parseInt(row.dataset.jual)||0,qc:row.dataset.quick==='true',created:row.dataset.created,updated:row.dataset.updated,img:row.dataset.img});
+    });
+    document.addEventListener('click',function(e){
+      var body=e.target.closest('.card-body-clickable'); if(!body)return;
+      var card=body.closest('.prod-card'); if(!card)return;
+      openDetail({id:card.dataset.id,nama:card.dataset.namaAsli,kat:card.dataset.kat,beli:parseInt(card.dataset.beli)||0,jual:parseInt(card.dataset.jual)||0,qc:card.dataset.quick==='true',created:card.dataset.created,updated:card.dataset.updated,img:card.dataset.img});
+    });
+    document.addEventListener('keydown',function(e){
+      if(e.key!=='Enter'&&e.key!==' ')return;
+      var body=e.target.closest('.card-body-clickable'); if(!body)return;
+      var card=body.closest('.prod-card'); if(!card)return;
+      e.preventDefault();
+      openDetail({id:card.dataset.id,nama:card.dataset.namaAsli,kat:card.dataset.kat,beli:parseInt(card.dataset.beli)||0,jual:parseInt(card.dataset.jual)||0,qc:card.dataset.quick==='true',created:card.dataset.created,updated:card.dataset.updated,img:card.dataset.img});
+    });
+
+    // ─── FILTER ─────────────────────────────────────────────────────────────────
+    function applyFilter(){
+      var q=_q.trim().toLowerCase(), kat=_kat, vis=0;
+      document.querySelectorAll('#tbody tr.data-row').forEach(function(r){
+        var show=(!q||r.dataset.nama.indexOf(q)!==-1)&&(!kat||r.dataset.kat===kat);
+        r.classList.toggle('tr-hidden',!show);
+        if(show) vis++;
+      });
+      document.querySelectorAll('#card-grid .prod-card').forEach(function(c){
+        var show=(!q||c.dataset.nama.indexOf(q)!==-1)&&(!kat||c.dataset.kat===kat);
+        c.classList.toggle('card-hidden',!show);
+      });
+      var lbl=document.getElementById('count-lbl');
+      if(lbl) lbl.textContent=vis+' produk';
+      var nr=document.getElementById('no-results'), nrc=document.getElementById('no-results-card');
+      if(nr)  nr.style.display=vis===0?'':'none';
+      if(nrc) nrc.style.display=vis===0?'':'none';
+    }
+    var qEl=document.getElementById('q');
+    if(qEl) qEl.addEventListener('input',function(){ _q=this.value; applyFilter(); });
+    var katPills=document.getElementById('kat-pills');
+    if(katPills) katPills.addEventListener('click',function(e){
+      var btn=e.target.closest('.kat-pill'); if(!btn)return;
+      _kat=btn.dataset.kat||'';
+      document.querySelectorAll('.kat-pill').forEach(function(b){ b.classList.toggle('active',b.dataset.kat===_kat||(!b.dataset.kat&&!_kat)); });
+      applyFilter();
+    });
+
+    // ─── VIEW TOGGLE ────────────────────────────────────────────────────────────
+    var btnTable=document.getElementById('btn-table');
+    var btnCard=document.getElementById('btn-card');
+    if(btnTable) btnTable.addEventListener('click',function(){
+      document.getElementById('view-table').style.display='';
+      document.getElementById('view-card').style.display='none';
+      this.classList.add('active'); btnCard.classList.remove('active');
+      this.setAttribute('aria-pressed','true'); btnCard.setAttribute('aria-pressed','false');
+      localStorage.setItem('kw-view','table');
+    });
+    if(btnCard) btnCard.addEventListener('click',function(){
+      document.getElementById('view-card').style.display='';
+      document.getElementById('view-table').style.display='none';
+      this.classList.add('active'); btnTable.classList.remove('active');
+      this.setAttribute('aria-pressed','true'); btnTable.setAttribute('aria-pressed','false');
+      localStorage.setItem('kw-view','card');
+    });
+    if(localStorage.getItem('kw-view')==='card' && btnCard) btnCard.click();
+
+    // ─── MARGIN PREVIEW ─────────────────────────────────────────────────────────
+    function updMargin(){
+      var b=parseInt(document.getElementById('f-beli').value)||0;
+      var j=parseInt(document.getElementById('f-jual').value)||0;
+      var h=document.getElementById('margin-hint');
+      if(b>0&&j>0){
+        var pct=Math.round(((j-b)/b)*100);
+        h.textContent='Untung: Rp '+(j-b).toLocaleString('id-ID')+' ('+pct+'%)';
+        h.style.color=pct<10?'#7f1d1d':pct<20?'#713f12':'#14532d';
+        h.style.display='block';
+      } else { h.style.display='none'; }
+    }
+    var fBeli=document.getElementById('f-beli'), fJual=document.getElementById('f-jual');
+    if(fBeli) fBeli.addEventListener('input',updMargin);
+    if(fJual) fJual.addEventListener('input',updMargin);
+
+    // ─── FOTO HELPERS ────────────────────────────────────────────────────────────
+    function setFotoPreview(blob){
+      var img=document.getElementById('foto-current');
+      img.src=URL.createObjectURL(blob); img.style.display='block';
       document.getElementById('foto-placeholder').style.display='none';
       document.getElementById('btn-hapus-foto').style.display='';
-    } else { clearFotoPreview(); }
-  }
+    }
+    function clearFotoPreview(){
+      var img=document.getElementById('foto-current');
+      img.src=''; img.style.display='none';
+      document.getElementById('foto-placeholder').style.display='flex';
+      document.getElementById('btn-hapus-foto').style.display='none';
+    }
+    function loadFotoForEdit(id){
+      var thumb=document.querySelector('tr.data-row[data-id="'+id+'"] .prod-thumb')||
+                document.querySelector('.prod-card[data-id="'+id+'"] .card-prod-img');
+      var img=document.getElementById('foto-current');
+      if(thumb&&thumb.naturalWidth>0&&!thumb.dataset.error){
+        img.src=thumb.src; img.style.display='block';
+        document.getElementById('foto-placeholder').style.display='none';
+        document.getElementById('btn-hapus-foto').style.display='';
+      } else { clearFotoPreview(); }
+    }
+    function resetForm(){
+      document.getElementById('edit-id').value='';
+      document.getElementById('f-nama').value='';
+      document.getElementById('f-beli').value='';
+      document.getElementById('f-jual').value='';
+      document.getElementById('f-kat').selectedIndex=0;
+      document.getElementById('f-quick').checked=false;
+      document.getElementById('m-tambah-title').textContent='Tambah Produk';
+      document.getElementById('margin-hint').style.display='none';
+      clearFotoPreview();
+      _pendingFotoBlob=null; _fotoHapus=false;
+    }
+    function resetFotoModal(){
+      _fotoQuickBlob=null;
+      document.getElementById('foto-target-id').value='';
+      document.getElementById('foto-drop-preview').style.display='none';
+      document.getElementById('foto-drop-empty').style.display='';
+      document.getElementById('btn-upload-foto').disabled=true;
+      document.getElementById('f-foto-quick').value='';
+    }
 
-  function resetForm(){
-    document.getElementById('edit-id').value='';
-    document.getElementById('f-nama').value='';
-    document.getElementById('f-beli').value='';
-    document.getElementById('f-jual').value='';
-    document.getElementById('f-kat').selectedIndex=0;
-    document.getElementById('f-quick').checked=false;
-    document.getElementById('m-tambah-title').textContent='Tambah Produk';
-    document.getElementById('margin-hint').style.display='none';
-    clearFotoPreview();
-    _pendingFotoBlob=null; _fotoHapus=false;
-  }
+    var btnPilihFoto=document.getElementById('btn-pilih-foto');
+    if(btnPilihFoto) btnPilihFoto.addEventListener('click',function(){ document.getElementById('f-foto').click(); });
+    var fFoto=document.getElementById('f-foto');
+    if(fFoto) fFoto.addEventListener('change',async function(){
+      var file=this.files&&this.files[0]; if(!file) return;
+      if(!file.type.startsWith('image/')){toast('File bukan gambar',false);return;}
+      if(file.size>5*1024*1024){toast('Ukuran file maks 5 MB',false);return;}
+      try{ _pendingFotoBlob=await resizeToWebP(file,'resize-canvas'); _fotoHapus=false; setFotoPreview(_pendingFotoBlob); }
+      catch(e){ toast('Gagal memproses gambar: '+e.message,false); }
+      this.value='';
+    });
+    var btnHapusFoto=document.getElementById('btn-hapus-foto');
+    if(btnHapusFoto) btnHapusFoto.addEventListener('click',function(){ _pendingFotoBlob=null; _fotoHapus=true; clearFotoPreview(); });
 
-  document.getElementById('btn-pilih-foto').addEventListener('click',function(){ document.getElementById('f-foto').click(); });
-  document.getElementById('f-foto').addEventListener('change',async function(){
-    var file=this.files&&this.files[0]; if(!file) return;
-    if(!file.type.startsWith('image/')){toast('File bukan gambar',false);return;}
-    if(file.size>5*1024*1024){toast('Ukuran file maks 5 MB',false);return;}
-    try{
-      _pendingFotoBlob=await resizeToWebP(file,'resize-canvas');
-      _fotoHapus=false; setFotoPreview(_pendingFotoBlob);
-    }catch(e){ toast('Gagal memproses gambar: '+e.message,false); }
-    this.value='';
-  });
-  document.getElementById('btn-hapus-foto').addEventListener('click',function(){ _pendingFotoBlob=null; _fotoHapus=true; clearFotoPreview(); });
+    // ─── EDIT BTN ───────────────────────────────────────────────────────────────
+    document.addEventListener('click',function(e){
+      var btn=e.target.closest('.icon-btn.edit'); if(!btn)return;
+      var id=btn.dataset.id;
+      document.getElementById('edit-id').value=id;
+      document.getElementById('f-nama').value=btn.dataset.nama;
+      document.getElementById('f-beli').value=btn.dataset.beli;
+      document.getElementById('f-jual').value=btn.dataset.jual;
+      document.getElementById('f-kat').value=btn.dataset.kat;
+      document.getElementById('f-quick').checked=btn.dataset.quick==='true';
+      document.getElementById('m-tambah-title').textContent='Edit Produk';
+      _pendingFotoBlob=null; _fotoHapus=false;
+      loadFotoForEdit(id); updMargin(); openM('tambah');
+    });
 
-  // ─── EDIT BTN ─────────────────────────────────────────────────────────────────
-  document.addEventListener('click',function(e){
-    var btn=e.target.closest('.icon-btn.edit'); if(!btn)return;
-    var id=btn.dataset.id;
-    document.getElementById('edit-id').value=id;
-    document.getElementById('f-nama').value=btn.dataset.nama;
-    document.getElementById('f-beli').value=btn.dataset.beli;
-    document.getElementById('f-jual').value=btn.dataset.jual;
-    document.getElementById('f-kat').value=btn.dataset.kat;
-    document.getElementById('f-quick').checked=btn.dataset.quick==='true';
-    document.getElementById('m-tambah-title').textContent='Edit Produk';
-    _pendingFotoBlob=null; _fotoHapus=false;
-    loadFotoForEdit(id); updMargin(); openM('tambah');
-  });
+    // ─── SIMPAN ─────────────────────────────────────────────────────────────────
+    var btnSimpan=document.getElementById('btn-simpan');
+    if(btnSimpan) btnSimpan.addEventListener('click',async function(){
+      var id=document.getElementById('edit-id').value.trim();
+      var nama=document.getElementById('f-nama').value.trim();
+      var beli=parseInt(document.getElementById('f-beli').value)||0;
+      var jual=parseInt(document.getElementById('f-jual').value)||0;
+      var kat=document.getElementById('f-kat').value;
+      var qc=document.getElementById('f-quick').checked;
+      if(!nama){toast('Nama produk wajib diisi',false);document.getElementById('f-nama').focus();return;}
+      if(jual<=0){toast('Harga jual harus > 0',false);document.getElementById('f-jual').focus();return;}
+      this.disabled=true; this.textContent='Menyimpan…';
+      try{
+        var payload={nama_produk:nama,harga_beli:beli,harga_jual:jual,kategori:kat,quick_cash:qc};
+        var savedId=id;
+        if(id){ await api('PATCH','/api/produk/produk?id='+encodeURIComponent(id),payload); }
+        else { var res=await api('POST','/api/produk/produk',payload); savedId=String(res.id); }
+        var uploadedUrl=null;
+        if(_pendingFotoBlob&&savedId){
+          this.textContent='Mengupload foto…';
+          var fd=new FormData();
+          fd.append('id',savedId);
+          fd.append('file',new File([_pendingFotoBlob],'foto.webp',{type:'image/webp'}));
+          var fr=await fetch('/api/produk/foto',{method:'POST',body:fd,credentials:'same-origin'});
+          var frd=await fr.json().catch(function(){return{};});
+          if(!fr.ok) throw new Error(frd.error||'Upload foto gagal');
+          uploadedUrl=String(frd.url);
+        }
+        if(_fotoHapus&&id){
+          fetch('/api/produk/foto?id='+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin'}).catch(function(){});
+          uploadedUrl='';
+        }
+        if(uploadedUrl!==null&&savedId){
+          var selectors=['tr.data-row[data-id="'+savedId+'"] .prod-thumb','.prod-card[data-id="'+savedId+'"] .card-prod-img'];
+          selectors.forEach(function(sel){
+            var el=document.querySelector(sel); if(!el)return;
+            if(uploadedUrl){ el.src=uploadedUrl; el.style.display=''; var ph=el.parentElement&&el.parentElement.querySelector('.prod-thumb-placeholder,.card-img-placeholder'); if(ph) ph.style.display='none'; }
+            else { el.style.display='none'; var ph2=el.parentElement&&el.parentElement.querySelector('.prod-thumb-placeholder,.card-img-placeholder'); if(ph2){ ph2.style.display='flex'; } }
+          });
+          var row=document.querySelector('tr.data-row[data-id="'+savedId+'"]'); if(row) row.dataset.img=uploadedUrl||'';
+          var card=document.querySelector('.prod-card[data-id="'+savedId+'"]'); if(card) card.dataset.img=uploadedUrl||'';
+        }
+        toast(id?'Produk diupdate':'Produk ditambahkan');
+        closeM('tambah');
+        setTimeout(function(){location.reload();},600);
+      }catch(e){ toast('Error: '+e.message,false); }
+      finally{ this.disabled=false; this.textContent='Simpan'; }
+    });
+    if(fJual) fJual.addEventListener('keydown',function(e){ if(e.key==='Enter'){e.preventDefault();if(btnSimpan) btnSimpan.click();} });
 
-  // ─── SIMPAN ───────────────────────────────────────────────────────────────────
-  document.getElementById('btn-simpan').addEventListener('click',async function(){
-    var id=document.getElementById('edit-id').value.trim();
-    var nama=document.getElementById('f-nama').value.trim();
-    var beli=parseInt(document.getElementById('f-beli').value)||0;
-    var jual=parseInt(document.getElementById('f-jual').value)||0;
-    var kat=document.getElementById('f-kat').value;
-    var qc=document.getElementById('f-quick').checked;
-    if(!nama){toast('Nama produk wajib diisi',false);document.getElementById('f-nama').focus();return;}
-    if(jual<=0){toast('Harga jual harus > 0',false);document.getElementById('f-jual').focus();return;}
-    this.disabled=true; this.textContent='Menyimpan…';
-    try{
-      var payload={nama_produk:nama,harga_beli:beli,harga_jual:jual,kategori:kat,quick_cash:qc};
-      var savedId=id;
-      if(id){ await api('PATCH','/api/produk/produk?id='+encodeURIComponent(id),payload); }
-      else { var res=await api('POST','/api/produk/produk',payload); savedId=String(res.id); }
-      var uploadedUrl=null;
-      if(_pendingFotoBlob&&savedId){
-        this.textContent='Mengupload foto…';
+    // ─── QUICK CASH TOGGLE ──────────────────────────────────────────────────────
+    document.addEventListener('click',async function(e){
+      var btn=e.target.closest('.toggle'); if(!btn)return;
+      var id=btn.dataset.id, cur=btn.getAttribute('aria-checked')==='true', next=!cur;
+      btn.setAttribute('aria-checked',String(next));
+      btn.style.background=next?'#c84b1f':'#d1d5db';
+      try{
+        await api('PATCH','/api/produk/produk?id='+encodeURIComponent(id),{quick_cash:next});
+        toast(next?'Quick Cash diaktifkan':'Quick Cash dinonaktifkan');
+      }catch(e2){ btn.setAttribute('aria-checked',String(cur)); btn.style.background=cur?'#c84b1f':'#d1d5db'; toast('Gagal: '+e2.message,false); }
+    });
+
+    // ─── HAPUS (satu produk) ────────────────────────────────────────────────────
+    document.addEventListener('click',function(e){
+      var btn=e.target.closest('.icon-btn.del'); if(!btn)return;
+      _hapusId=btn.dataset.id;
+      document.getElementById('hapus-nama').textContent=btn.dataset.nama;
+      openM('hapus');
+    });
+    var btnHapusOk=document.getElementById('btn-hapus-ok');
+    if(btnHapusOk) btnHapusOk.addEventListener('click',async function(){
+      if(!_hapusId)return;
+      this.disabled=true; this.textContent='Menghapus…';
+      try{
+        await api('DELETE','/api/produk/produk?id='+encodeURIComponent(_hapusId));
+        fetch('/api/produk/foto?id='+encodeURIComponent(_hapusId),{method:'DELETE',credentials:'same-origin'}).catch(function(){});
+        toast('Produk dihapus'); closeM('hapus');
+        var r=document.querySelector('tr.data-row[data-id="'+_hapusId+'"]');
+        if(r){r.style.transition='opacity .18s';r.style.opacity='0';setTimeout(function(){r.remove();applyFilter();},200);}
+        var c=document.querySelector('.prod-card[data-id="'+_hapusId+'"]');
+        if(c){c.style.transition='opacity .18s,transform .18s';c.style.opacity='0';c.style.transform='scale(.92)';setTimeout(function(){c.remove();applyFilter();},200);}
+        _hapusId='';
+      }catch(e){ toast('Gagal: '+e.message,false); }
+      finally{ this.disabled=false; this.textContent='Hapus'; }
+    });
+
+    // ─── HAPUS MASSAL ───────────────────────────────────────────────────────────
+    function countProdukByMode(mode, kat){
+      var rows=Array.from(document.querySelectorAll('#tbody tr.data-row'));
+      if(mode==='all') return rows.length;
+      return rows.filter(function(r){ return r.dataset.kat===kat; }).length;
+    }
+    function updateHmInfo(){
+      var mode=document.getElementById('hm-mode').value;
+      var kat=document.getElementById('hm-kat').value;
+      var infoEl=document.getElementById('hm-info');
+      var katWrap=document.getElementById('hm-kat-wrap');
+      katWrap.style.display=mode==='kategori'?'':'none';
+      var count=countProdukByMode(mode,kat);
+      if(count===0){
+        infoEl.textContent=mode==='all'?'Tidak ada produk untuk dihapus.':'Tidak ada produk dalam kategori "'+kat+'".';
+        infoEl.style.color='var(--muted)';
+      } else {
+        infoEl.innerHTML='⚠️ Akan menghapus <strong style="color:#dc2626">'+count+' produk</strong>'+(mode==='kategori'?' dalam kategori <strong>'+esc(kat)+'</strong>':' dari semua kategori')+'.';
+        infoEl.style.color='#92400e';
+      }
+    }
+    function resetHapusMassal(){
+      document.getElementById('hm-mode').value='all';
+      document.getElementById('hm-kat-wrap').style.display='none';
+      document.getElementById('hm-confirm').value='';
+      document.getElementById('hm-info').textContent='';
+      var okBtn=document.getElementById('btn-hapus-massal-ok');
+      okBtn.disabled=true; okBtn.style.opacity='.5'; okBtn.style.cursor='not-allowed';
+    }
+    var hmMode=document.getElementById('hm-mode');
+    var hmKat=document.getElementById('hm-kat');
+    var hmConfirm=document.getElementById('hm-confirm');
+    if(hmMode) hmMode.addEventListener('change',function(){ updateHmInfo(); hmConfirm.value=''; var ok=document.getElementById('btn-hapus-massal-ok'); ok.disabled=true; ok.style.opacity='.5'; ok.style.cursor='not-allowed'; });
+    if(hmKat) hmKat.addEventListener('change',function(){ updateHmInfo(); hmConfirm.value=''; var ok=document.getElementById('btn-hapus-massal-ok'); ok.disabled=true; ok.style.opacity='.5'; ok.style.cursor='not-allowed'; });
+    if(hmConfirm) hmConfirm.addEventListener('input',function(){
+      var ok=this.value.trim().toUpperCase()==='HAPUS';
+      var okBtn=document.getElementById('btn-hapus-massal-ok');
+      okBtn.disabled=!ok; okBtn.style.opacity=ok?'1':'.5'; okBtn.style.cursor=ok?'pointer':'not-allowed';
+    });
+    var btnHapusMassalOk=document.getElementById('btn-hapus-massal-ok');
+    if(btnHapusMassalOk) btnHapusMassalOk.addEventListener('click',async function(){
+      if(this.disabled)return;
+      var mode=document.getElementById('hm-mode').value;
+      var kat=document.getElementById('hm-kat').value;
+      this.disabled=true; this.textContent='Menghapus…'; this.style.opacity='.7';
+      try{
+        var url='/api/produk/produk?bulk='+mode;
+        if(mode==='kategori') url+='&kategori='+encodeURIComponent(kat);
+        var res=await api('DELETE',url);
+        toast((res.deleted||0)+' produk berhasil dihapus');
+        closeM('hapus-massal');
+        setTimeout(function(){location.reload();},600);
+      }catch(e){ toast('Gagal: '+e.message,false); this.disabled=false; this.textContent='Hapus Sekarang'; this.style.opacity='1'; }
+    });
+
+    // ─── MODAL FOTO CEPAT ───────────────────────────────────────────────────────
+    document.addEventListener('click',function(e){
+      var wrap=e.target.closest('.thumb-wrap'); if(!wrap)return;
+      if(e.target.closest('.icon-btn'))return;
+      if(e.target.closest('.name-clickable'))return;
+      if(e.target.closest('.card-body-clickable'))return;
+      var id=wrap.dataset.id; if(!id)return;
+      document.getElementById('foto-target-id').value=id;
+      openM('foto');
+    });
+    document.addEventListener('keydown',function(e){
+      if(e.key!=='Enter'&&e.key!==' ')return;
+      var wrap=e.target.closest('.thumb-wrap'); if(!wrap)return;
+      if(e.target.closest('.name-clickable'))return;
+      if(e.target.closest('.card-body-clickable'))return;
+      e.preventDefault();
+      var id=wrap.dataset.id; if(!id)return;
+      document.getElementById('foto-target-id').value=id;
+      openM('foto');
+    });
+
+    async function processQuickFoto(file){
+      if(!file.type.startsWith('image/')){toast('File bukan gambar',false);return;}
+      if(file.size>5*1024*1024){toast('Ukuran file maks 5 MB',false);return;}
+      try{
+        _fotoQuickBlob=await resizeToWebP(file,'resize-canvas-quick');
+        document.getElementById('foto-drop-img').src=URL.createObjectURL(_fotoQuickBlob);
+        document.getElementById('foto-drop-preview').style.display='block';
+        document.getElementById('foto-drop-empty').style.display='none';
+        document.getElementById('btn-upload-foto').disabled=false;
+      }catch(e){ toast('Gagal memproses: '+e.message,false); }
+    }
+
+    var fotoDrop=document.getElementById('foto-drop');
+    if(fotoDrop){
+      fotoDrop.addEventListener('click',function(e){ if(!e.target.closest('#btn-foto-clear')) document.getElementById('f-foto-quick').click(); });
+      fotoDrop.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();document.getElementById('f-foto-quick').click();} });
+      fotoDrop.addEventListener('dragover',function(e){e.preventDefault();this.classList.add('over');});
+      fotoDrop.addEventListener('dragleave',function(){this.classList.remove('over');});
+      fotoDrop.addEventListener('drop',function(e){ e.preventDefault(); this.classList.remove('over'); var f=e.dataTransfer&&e.dataTransfer.files[0]; if(f) processQuickFoto(f); });
+    }
+    var fFotoQuick=document.getElementById('f-foto-quick');
+    if(fFotoQuick) fFotoQuick.addEventListener('change',function(){ var f=this.files&&this.files[0]; if(f) processQuickFoto(f); this.value=''; });
+    var btnFotoClear=document.getElementById('btn-foto-clear');
+    if(btnFotoClear) btnFotoClear.addEventListener('click',function(e){
+      e.stopPropagation(); _fotoQuickBlob=null;
+      document.getElementById('foto-drop-preview').style.display='none';
+      document.getElementById('foto-drop-empty').style.display='';
+      document.getElementById('btn-upload-foto').disabled=true;
+    });
+
+    var btnUploadFoto=document.getElementById('btn-upload-foto');
+    if(btnUploadFoto) btnUploadFoto.addEventListener('click',async function(){
+      var id=document.getElementById('foto-target-id').value;
+      if(!id||!_fotoQuickBlob)return;
+      this.disabled=true; this.textContent='Mengupload…';
+      try{
         var fd=new FormData();
-        fd.append('id',savedId);
-        fd.append('file',new File([_pendingFotoBlob],'foto.webp',{type:'image/webp'}));
-        var fr=await fetch('/api/produk/foto',{method:'POST',body:fd,credentials:'same-origin'});
-        var frd=await fr.json().catch(function(){return{};});
-        if(!fr.ok) throw new Error(frd.error||'Upload foto gagal');
-        uploadedUrl = String(frd.url);
-      }
-      if(_fotoHapus&&id){
-        fetch('/api/produk/foto?id='+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin'}).catch(function(){});
-        uploadedUrl='';
-      }
-      if(uploadedUrl!==null&&savedId){
-        var selectors=['tr.data-row[data-id="'+savedId+'"] .prod-thumb','.prod-card[data-id="'+savedId+'"] .card-prod-img'];
-        selectors.forEach(function(sel){
-          var el=document.querySelector(sel); if(!el)return;
-          if(uploadedUrl){ el.src=uploadedUrl; el.style.display=''; var ph=el.parentElement&&el.parentElement.querySelector('.prod-thumb-placeholder,.card-img-placeholder'); if(ph) ph.style.display='none'; }
-          else { el.style.display='none'; var ph2=el.parentElement&&el.parentElement.querySelector('.prod-thumb-placeholder,.card-img-placeholder'); if(ph2){ ph2.style.display='flex'; } }
-        });
-        var row=document.querySelector('tr.data-row[data-id="'+savedId+'"]'); if(row) row.dataset.img=uploadedUrl||'';
-        var card=document.querySelector('.prod-card[data-id="'+savedId+'"]'); if(card) card.dataset.img=uploadedUrl||'';
-      }
-      toast(id?'Produk diupdate':'Produk ditambahkan');
-      closeM('tambah');
-      setTimeout(function(){location.reload();},600);
-    }catch(e){ toast('Error: '+e.message,false); }
-    finally{ this.disabled=false; this.textContent='Simpan'; }
-  });
-  document.getElementById('f-jual').addEventListener('keydown',function(e){
-    if(e.key==='Enter'){e.preventDefault();document.getElementById('btn-simpan').click();}
-  });
+        fd.append('id',id);
+        fd.append('file',new File([_fotoQuickBlob],'foto.webp',{type:'image/webp'}));
+        var r=await fetch('/api/produk/foto',{method:'POST',body:fd,credentials:'same-origin'});
+        var rd=await r.json().catch(function(){return{};});
+        if(!r.ok) throw new Error(rd.error||'Upload gagal');
+        var newSrc=String(rd.url);
+        var tThumb=document.querySelector('tr.data-row[data-id="'+id+'"] .prod-thumb');
+        if(tThumb){ tThumb.src=newSrc; tThumb.style.display=''; var tPh=tThumb.parentElement&&tThumb.parentElement.querySelector('.prod-thumb-placeholder'); if(tPh) tPh.style.display='none'; }
+        var cThumb=document.querySelector('.prod-card[data-id="'+id+'"] .card-prod-img');
+        if(cThumb){ cThumb.src=newSrc; cThumb.style.display='block'; var cPh=document.querySelector('.prod-card[data-id="'+id+'"] .card-img-placeholder'); if(cPh) cPh.style.display='none'; }
+        var row2=document.querySelector('tr.data-row[data-id="'+id+'"]'); if(row2) row2.dataset.img=newSrc;
+        var card2=document.querySelector('.prod-card[data-id="'+id+'"]'); if(card2) card2.dataset.img=newSrc;
+        var dImg2=document.getElementById('d-img');
+        if(_detailId===id){ dImg2.src=newSrc; dImg2.style.display=''; document.getElementById('d-img-placeholder').style.display='none'; }
+        toast('Foto berhasil diperbarui'); closeM('foto');
+      }catch(e){ toast('Gagal: '+e.message,false); }
+      finally{ this.disabled=false; this.textContent='Upload'; }
+    });
 
-  // ─── QUICK CASH TOGGLE ────────────────────────────────────────────────────────
-  document.addEventListener('click',async function(e){
-    var btn=e.target.closest('.toggle'); if(!btn)return;
-    var id=btn.dataset.id, cur=btn.getAttribute('aria-checked')==='true', next=!cur;
-    btn.setAttribute('aria-checked',String(next));
-    btn.style.background=next?'#c84b1f':'#d1d5db';
-    try{
-      await api('PATCH','/api/produk/produk?id='+encodeURIComponent(id),{quick_cash:next});
-      toast(next?'Quick Cash diaktifkan':'Quick Cash dinonaktifkan');
-    }catch(e2){
-      btn.setAttribute('aria-checked',String(cur)); btn.style.background=cur?'#c84b1f':'#d1d5db';
-      toast('Gagal: '+e2.message,false);
+    // ─── IMPORT CSV / XLSX ──────────────────────────────────────────────────────
+    async function parseFile(file){
+      var name=file.name.toLowerCase();
+      var validExt=name.endsWith('.csv')||name.endsWith('.xlsx')||name.endsWith('.xls');
+      if(!validExt){toast('Hanya .csv atau .xlsx yang didukung',false);return;}
+      if(file.size===0){toast('File kosong',false);return;}
+      if(file.size>2*1024*1024){toast('Ukuran file maks 2 MB',false);return;}
+      var dz=document.getElementById('dropzone');
+      var origHtml=dz.innerHTML;
+      dz.innerHTML='<p style="font-size:.8rem;color:var(--muted)">Memproses file…</p>';
+      dz.style.pointerEvents='none';
+      try{
+        var fd=new FormData();
+        fd.append('file',file);
+        var r=await fetch('/api/produk/parse-xlsx',{method:'POST',body:fd,credentials:'same-origin'});
+        var d=await r.json().catch(function(){return{};});
+        if(!r.ok){toast(d.error||'Gagal membaca file',false);return;}
+        renderParsed(d.produk||[],d.duplicates||0,d.skipped||0);
+      }catch(e){ toast('Gagal mengirim file: '+e.message,false); }
+      finally{
+        dz.innerHTML=origHtml; dz.style.pointerEvents='';
+        var inp=dz.querySelector('#f-csv');
+        if(inp) inp.addEventListener('change',function(){ if(this.files&&this.files[0]) parseFile(this.files[0]); });
+      }
     }
-  });
 
-  // ─── HAPUS (satu produk) ──────────────────────────────────────────────────────
-  var _hapusId='';
-  document.addEventListener('click',function(e){
-    var btn=e.target.closest('.icon-btn.del'); if(!btn)return;
-    _hapusId=btn.dataset.id;
-    document.getElementById('hapus-nama').textContent=btn.dataset.nama;
-    openM('hapus');
-  });
-  document.getElementById('btn-hapus-ok').addEventListener('click',async function(){
-    if(!_hapusId)return;
-    this.disabled=true; this.textContent='Menghapus…';
-    try{
-      await api('DELETE','/api/produk/produk?id='+encodeURIComponent(_hapusId));
-      fetch('/api/produk/foto?id='+encodeURIComponent(_hapusId),{method:'DELETE',credentials:'same-origin'}).catch(function(){});
-      toast('Produk dihapus'); closeM('hapus');
-      var r=document.querySelector('tr.data-row[data-id="'+_hapusId+'"]');
-      if(r){r.style.transition='opacity .18s';r.style.opacity='0';setTimeout(function(){r.remove();applyFilter();},200);}
-      var c=document.querySelector('.prod-card[data-id="'+_hapusId+'"]');
-      if(c){c.style.transition='opacity .18s,transform .18s';c.style.opacity='0';c.style.transform='scale(.92)';setTimeout(function(){c.remove();applyFilter();},200);}
-      _hapusId='';
-    }catch(e){ toast('Gagal: '+e.message,false); }
-    finally{ this.disabled=false; this.textContent='Hapus'; }
-  });
-
-  // ─── HAPUS MASSAL ─────────────────────────────────────────────────────────────
-  function countProdukByMode(mode, kat){
-    var rows = Array.from(document.querySelectorAll('#tbody tr.data-row'));
-    if(mode === 'all') return rows.length;
-    return rows.filter(function(r){ return r.dataset.kat === kat; }).length;
-  }
-
-  function updateHmInfo(){
-    var mode = document.getElementById('hm-mode').value;
-    var kat  = document.getElementById('hm-kat').value;
-    var infoEl = document.getElementById('hm-info');
-    var katWrap = document.getElementById('hm-kat-wrap');
-    katWrap.style.display = mode === 'kategori' ? '' : 'none';
-    var count = countProdukByMode(mode, kat);
-    if(count === 0){
-      infoEl.textContent = mode === 'all'
-        ? 'Tidak ada produk untuk dihapus.'
-        : 'Tidak ada produk dalam kategori "' + kat + '".';
-      infoEl.style.color = 'var(--muted)';
-    } else {
-      infoEl.innerHTML = '⚠️ Akan menghapus <strong style="color:#dc2626">' + count + ' produk</strong>'
-        + (mode === 'kategori' ? ' dalam kategori <strong>' + esc(kat) + '</strong>' : ' dari semua kategori') + '.';
-      infoEl.style.color = '#92400e';
+    function renderParsed(produk, dupCount, skipped){
+      _csvData=produk;
+      var countEl=document.getElementById('csv-count');
+      var info=produk.length+' produk siap diimport';
+      if(dupCount>0) info+=' · <span style="color:#92400e">⚠ '+dupCount+' duplikat dihapus</span>';
+      if(skipped>0)  info+=' · <span style="color:#dc2626">✕ '+skipped+' baris tidak valid dilewati</span>';
+      countEl.innerHTML=info;
+      var tb=document.getElementById('csv-tbody');
+      var headerInfo='<tr style="background:#f0fdf4;border-bottom:2px solid #86efac"><td colspan="6" style="padding:.4rem .65rem;font-size:.72rem;color:#15803d;font-weight:600">✓ Preview '+Math.min(produk.length,20)+' dari '+produk.length+' produk'+(produk.length>20?' (scroll untuk lihat semua)':'')+'</td></tr>';
+      tb.innerHTML=headerInfo+produk.slice(0,50).map(function(r,i){
+        var margin=r.harga_beli>0?Math.round(((r.harga_jual-r.harga_beli)/r.harga_beli)*100):null;
+        var mColor=margin===null?'#9ca3af':margin>=20?'#15803d':margin>=10?'#92400e':'#dc2626';
+        var isAlt=i%2===1;
+        return '<tr style="border-bottom:1px solid var(--border);'+(isAlt?'background:#fafaf9':'')+'">'
+          +'<td style="padding:.35rem .5rem;text-align:center;color:#9ca3af;font-size:.68rem">'+(i+1)+'</td>'
+          +'<td style="padding:.35rem .65rem;font-weight:500">'+esc(r.nama_produk)+'</td>'
+          +'<td style="padding:.35rem .65rem;text-align:right;color:var(--muted);font-size:.75rem">'+(r.harga_beli>0?r.harga_beli.toLocaleString('id-ID'):'—')+'</td>'
+          +'<td style="padding:.35rem .65rem;text-align:right;font-weight:600">'+r.harga_jual.toLocaleString('id-ID')+'</td>'
+          +'<td style="padding:.35rem .65rem;text-align:center">'+(margin!==null?'<span style="font-size:.68rem;font-weight:600;color:'+mColor+'">'+margin+'%</span>':'<span style="color:#9ca3af;font-size:.68rem">—</span>')+'</td>'
+          +'<td style="padding:.35rem .65rem"><span style="font-size:.65rem;padding:.1rem .4rem;border-radius:3px;background:#f3f4f6;color:#374151">'+esc(r.kategori)+'</span>'+(r.quick_cash?' <span style="font-size:.62rem;padding:.1rem .35rem;border-radius:3px;background:#c84b1f;color:#fff">QC</span>':'')+'</td>'
+          +'</tr>';
+      }).join('');
+      if(produk.length>50) tb.innerHTML+='<tr><td colspan="6" style="padding:.5rem;text-align:center;color:var(--muted);font-size:.7rem;font-style:italic">…dan '+(produk.length-50)+' produk lainnya tidak ditampilkan</td></tr>';
+      document.getElementById('csv-preview').style.display='';
+      document.getElementById('btn-do-import').disabled=produk.length===0;
     }
-  }
 
-  function resetHapusMassal(){
-    document.getElementById('hm-mode').value = 'all';
-    document.getElementById('hm-kat-wrap').style.display = 'none';
-    document.getElementById('hm-confirm').value = '';
-    document.getElementById('hm-info').textContent = '';
-    var okBtn = document.getElementById('btn-hapus-massal-ok');
-    okBtn.disabled = true; okBtn.style.opacity = '.5'; okBtn.style.cursor = 'not-allowed';
-  }
+    var dz=document.getElementById('dropzone');
+    if(dz){
+      dz.addEventListener('click',function(){ document.getElementById('f-csv').click(); });
+      dz.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();document.getElementById('f-csv').click();} });
+      dz.addEventListener('dragover',function(e){e.preventDefault();this.classList.add('over');});
+      dz.addEventListener('dragleave',function(){this.classList.remove('over');});
+      dz.addEventListener('drop',function(e){ e.preventDefault();this.classList.remove('over'); var f=e.dataTransfer&&e.dataTransfer.files[0]; if(f) parseFile(f); });
+    }
+    var fCsv=document.getElementById('f-csv');
+    if(fCsv) fCsv.addEventListener('change',function(){ if(this.files&&this.files[0]) parseFile(this.files[0]); });
 
-  document.getElementById('hm-mode').addEventListener('change', function(){
-    updateHmInfo();
-    document.getElementById('hm-confirm').value = '';
-    var okBtn = document.getElementById('btn-hapus-massal-ok');
-    okBtn.disabled = true; okBtn.style.opacity = '.5'; okBtn.style.cursor = 'not-allowed';
-  });
-  document.getElementById('hm-kat').addEventListener('change', function(){
-    updateHmInfo();
-    document.getElementById('hm-confirm').value = '';
-    var okBtn = document.getElementById('btn-hapus-massal-ok');
-    okBtn.disabled = true; okBtn.style.opacity = '.5'; okBtn.style.cursor = 'not-allowed';
-  });
-  document.getElementById('hm-confirm').addEventListener('input', function(){
-    var ok = this.value.trim().toUpperCase() === 'HAPUS';
-    var okBtn = document.getElementById('btn-hapus-massal-ok');
-    okBtn.disabled = !ok;
-    okBtn.style.opacity = ok ? '1' : '.5';
-    okBtn.style.cursor  = ok ? 'pointer' : 'not-allowed';
-  });
+    var btnDoImport=document.getElementById('btn-do-import');
+    if(btnDoImport) btnDoImport.addEventListener('click',async function(){
+      if(!_csvData.length)return;
+      this.disabled=true; this.textContent='Mengimport…';
+      try{
+        for(var i=0;i<_csvData.length;i+=50){ await api('POST','/api/produk/produk',_csvData.slice(i,i+50)); }
+        toast(_csvData.length+' produk diimport');
+        closeM('import');
+        setTimeout(function(){location.reload();},600);
+      }catch(e){ toast('Import gagal: '+e.message,false); this.disabled=false; this.textContent='Import'; }
+    });
 
-  document.getElementById('btn-hapus-massal-ok').addEventListener('click', async function(){
-    if(this.disabled) return;
-    var mode = document.getElementById('hm-mode').value;
-    var kat  = document.getElementById('hm-kat').value;
-    this.disabled = true; this.textContent = 'Menghapus…'; this.style.opacity = '.7';
-    try{
-      var url = '/api/produk/produk?bulk=' + mode;
-      if(mode === 'kategori') url += '&kategori=' + encodeURIComponent(kat);
-      var res = await api('DELETE', url);
-      var del = res.deleted || 0;
-      toast(del + ' produk berhasil dihapus');
-      closeM('hapus-massal');
-      setTimeout(function(){ location.reload(); }, 600);
-    }catch(e){ toast('Gagal: '+e.message, false); this.disabled=false; this.textContent='Hapus Sekarang'; this.style.opacity='1'; }
-  });
+    // ─── DRAG TO SCROLL (pills) ─────────────────────────────────────────────────
+    var el=document.getElementById('kat-pills');
+    if(el){
+      var isDown=false, startX, scrollLeft;
+      el.addEventListener('mousedown',function(e){ isDown=true; startX=e.pageX-el.offsetLeft; scrollLeft=el.scrollLeft; el.style.cursor='grabbing'; });
+      el.addEventListener('mouseleave',function(){ isDown=false; el.style.cursor='grab'; });
+      el.addEventListener('mouseup',function(){ isDown=false; el.style.cursor='grab'; });
+      el.addEventListener('mousemove',function(e){ if(!isDown)return; e.preventDefault(); el.scrollLeft=scrollLeft-(e.pageX-el.offsetLeft-startX)*1.5; });
+    }
 
-  // ─── MODAL FOTO CEPAT (klik thumbnail) ───────────────────────────────────────
-  var _fotoQuickBlob=null;
-
-  function resetFotoModal(){
-    _fotoQuickBlob=null;
-    document.getElementById('foto-target-id').value='';
-    document.getElementById('foto-drop-preview').style.display='none';
-    document.getElementById('foto-drop-empty').style.display='';
-    document.getElementById('btn-upload-foto').disabled=true;
-    document.getElementById('f-foto-quick').value='';
-  }
-
-  document.addEventListener('click',function(e){
-    var wrap=e.target.closest('.thumb-wrap'); if(!wrap)return;
-    if(e.target.closest('.icon-btn'))return;
-    if(e.target.closest('.name-clickable'))return;
-    if(e.target.closest('.card-body-clickable'))return;
-    var id=wrap.dataset.id; if(!id)return;
-    document.getElementById('foto-target-id').value=id;
-    openM('foto');
-  });
-  document.addEventListener('keydown',function(e){
-    if(e.key!=='Enter'&&e.key!==' ')return;
-    var wrap=e.target.closest('.thumb-wrap'); if(!wrap)return;
-    if(e.target.closest('.name-clickable'))return;
-    if(e.target.closest('.card-body-clickable'))return;
-    e.preventDefault();
-    var id=wrap.dataset.id; if(!id)return;
-    document.getElementById('foto-target-id').value=id;
-    openM('foto');
-  });
-
-  var fotoDrop=document.getElementById('foto-drop');
-  fotoDrop.addEventListener('click',function(e){ if(!e.target.closest('#btn-foto-clear')) document.getElementById('f-foto-quick').click(); });
-  fotoDrop.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();document.getElementById('f-foto-quick').click();} });
-  fotoDrop.addEventListener('dragover',function(e){e.preventDefault();this.classList.add('over');});
-  fotoDrop.addEventListener('dragleave',function(){this.classList.remove('over');});
-  fotoDrop.addEventListener('drop',function(e){ e.preventDefault(); this.classList.remove('over'); var f=e.dataTransfer&&e.dataTransfer.files[0]; if(f) processQuickFoto(f); });
-  document.getElementById('f-foto-quick').addEventListener('change',function(){ var f=this.files&&this.files[0]; if(f) processQuickFoto(f); this.value=''; });
-  document.getElementById('btn-foto-clear').addEventListener('click',function(e){
-    e.stopPropagation(); _fotoQuickBlob=null;
-    document.getElementById('foto-drop-preview').style.display='none';
-    document.getElementById('foto-drop-empty').style.display='';
-    document.getElementById('btn-upload-foto').disabled=true;
-  });
-
-  async function processQuickFoto(file){
-    if(!file.type.startsWith('image/')){toast('File bukan gambar',false);return;}
-    if(file.size>5*1024*1024){toast('Ukuran file maks 5 MB',false);return;}
-    try{
-      _fotoQuickBlob=await resizeToWebP(file,'resize-canvas-quick');
-      document.getElementById('foto-drop-img').src=URL.createObjectURL(_fotoQuickBlob);
-      document.getElementById('foto-drop-preview').style.display='block';
-      document.getElementById('foto-drop-empty').style.display='none';
-      document.getElementById('btn-upload-foto').disabled=false;
-    }catch(e){ toast('Gagal memproses: '+e.message,false); }
-  }
-
-  document.getElementById('btn-upload-foto').addEventListener('click',async function(){
-    var id=document.getElementById('foto-target-id').value;
-    if(!id||!_fotoQuickBlob)return;
-    this.disabled=true; this.textContent='Mengupload…';
-    try{
-      var fd=new FormData();
-      fd.append('id',id);
-      fd.append('file',new File([_fotoQuickBlob],'foto.webp',{type:'image/webp'}));
-      var r=await fetch('/api/produk/foto',{method:'POST',body:fd,credentials:'same-origin'});
-      var rd=await r.json().catch(function(){return{};});
-      if(!r.ok) throw new Error(rd.error||'Upload gagal');
-      var newSrc=String(rd.url);
-      var tThumb=document.querySelector('tr.data-row[data-id="'+id+'"] .prod-thumb');
-      if(tThumb){ tThumb.src=newSrc; tThumb.style.display=''; var tPh=tThumb.parentElement&&tThumb.parentElement.querySelector('.prod-thumb-placeholder'); if(tPh) tPh.style.display='none'; }
-      var cThumb=document.querySelector('.prod-card[data-id="'+id+'"] .card-prod-img');
-      if(cThumb){ cThumb.src=newSrc; cThumb.style.display='block'; var cPh=document.querySelector('.prod-card[data-id="'+id+'"] .card-img-placeholder'); if(cPh) cPh.style.display='none'; }
-      var row2=document.querySelector('tr.data-row[data-id="'+id+'"]'); if(row2) row2.dataset.img=newSrc;
-      var card2=document.querySelector('.prod-card[data-id="'+id+'"]'); if(card2) card2.dataset.img=newSrc;
-      var dImg=document.getElementById('d-img');
-      if(_detailId===id){ dImg.src=newSrc; dImg.style.display=''; document.getElementById('d-img-placeholder').style.display='none'; }
-      toast('Foto berhasil diperbarui'); closeM('foto');
-    }catch(e){ toast('Gagal: '+e.message,false); }
-    finally{ this.disabled=false; this.textContent='Upload'; }
-  });
-
-  // ─── IMPORT CSV / XLSX ────────────────────────────────────────────────────────
-  // Parsing dilakukan server-side di /api/produk/parse-xlsx
-  // agar tidak perlu load library SheetJS dari CDN eksternal (konflik CSP).
-  var _csvData = [];
-  var dz = document.getElementById('dropzone');
-
-  dz.addEventListener('click', function () { document.getElementById('f-csv').click(); });
-  dz.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById('f-csv').click(); } });
-  dz.addEventListener('dragover',  function (e) { e.preventDefault(); this.classList.add('over'); });
-  dz.addEventListener('dragleave', function ()  { this.classList.remove('over'); });
-  dz.addEventListener('drop', function (e) {
-    e.preventDefault(); this.classList.remove('over');
-    var f = e.dataTransfer && e.dataTransfer.files[0]; if (f) parseFile(f);
-  });
-  document.getElementById('f-csv').addEventListener('change', function () {
-    if (this.files && this.files[0]) parseFile(this.files[0]);
-  });
-
-  // Kirim file ke server untuk di-parse — tidak ada library di browser
-  async function parseFile(file) {
-    var name = file.name.toLowerCase();
-    var validExt = name.endsWith('.csv') || name.endsWith('.xlsx') || name.endsWith('.xls');
-    if (!validExt) { toast('Hanya .csv atau .xlsx yang didukung', false); return; }
-    if (file.size === 0) { toast('File kosong', false); return; }
-    if (file.size > 2 * 1024 * 1024) { toast('Ukuran file maks 2 MB', false); return; }
-
-    // Tampilkan loading state
-    var dz = document.getElementById('dropzone');
-    var origHtml = dz.innerHTML;
-    dz.innerHTML = '<p style="font-size:.8rem;color:var(--muted)">Memproses file…</p>';
-    dz.style.pointerEvents = 'none';
-
-    try {
-      var fd = new FormData();
-      fd.append('file', file);
-      var r  = await fetch('/api/produk/parse-xlsx', {
-        method: 'POST',
-        body:   fd,
-        credentials: 'same-origin'
-        // Tidak set Content-Type — browser isi boundary multipart otomatis
+    // ─── CHECK URL PARAMS ────────────────────────────────────────────────────────
+    var urlParams=new URLSearchParams(window.location.search);
+    if(urlParams.get('modal')==='tambah') openM('tambah');
+    if(urlParams.get('filter')==='low_margin'){
+      _kat='';
+      document.querySelectorAll('#tbody tr.data-row').forEach(function(r){
+        var beli=parseInt(r.dataset.beli)||0, jual=parseInt(r.dataset.jual)||0;
+        var m=beli>0?((jual-beli)/beli):1;
+        r.classList.toggle('tr-hidden',m>=0.10);
       });
-      var d  = await r.json().catch(function(){ return {}; });
-      if (!r.ok) { toast(d.error || 'Gagal membaca file', false); return; }
-
-      renderParsed(d.produk || [], d.duplicates || 0, d.skipped || 0);
-    } catch (e) {
-      toast('Gagal mengirim file: ' + e.message, false);
-    } finally {
-      dz.innerHTML = origHtml;
-      dz.style.pointerEvents = '';
-      // Re-attach event listener pada input karena innerHTML diganti
-      var inp = dz.querySelector('#f-csv');
-      if (inp) inp.addEventListener('change', function () { if (this.files && this.files[0]) parseFile(this.files[0]); });
-    }
-  }
-
-  // Terima array produk yang sudah dinormalisasi dari server
-  function renderParsed(produk, dupCount, skipped) {
-    _csvData = produk;
-
-    var countEl = document.getElementById('csv-count');
-    var info = produk.length + ' produk siap diimport';
-    if (dupCount > 0)  info += ' · <span style="color:#92400e">⚠ ' + dupCount + ' duplikat dihapus</span>';
-    if (skipped > 0)   info += ' · <span style="color:#dc2626">✕ ' + skipped + ' baris tidak valid dilewati</span>';
-    countEl.innerHTML = info;
-
-    var tb = document.getElementById('csv-tbody');
-
-    // Header summary
-    var headerInfo = '<tr style="background:#f0fdf4;border-bottom:2px solid #86efac">'
-      + '<td colspan="6" style="padding:.4rem .65rem;font-size:.72rem;color:#15803d;font-weight:600">'
-      + '✓ Preview ' + Math.min(produk.length, 20) + ' dari ' + produk.length + ' produk'
-      + (produk.length > 20 ? ' (scroll untuk lihat semua)' : '')
-      + '</td></tr>';
-
-    tb.innerHTML = headerInfo + produk.slice(0, 50).map(function(r, i) {
-      var margin = r.harga_beli > 0
-        ? Math.round(((r.harga_jual - r.harga_beli) / r.harga_beli) * 100)
-        : null;
-      var mColor = margin === null ? '#9ca3af'
-        : margin >= 20 ? '#15803d'
-        : margin >= 10 ? '#92400e'
-        : '#dc2626';
-      var isAlt = i % 2 === 1;
-      return '<tr style="border-bottom:1px solid var(--border);' + (isAlt ? 'background:#fafaf9' : '') + '">'
-        + '<td style="padding:.35rem .5rem;text-align:center;color:#9ca3af;font-size:.68rem">' + (i+1) + '</td>'
-        + '<td style="padding:.35rem .65rem;font-weight:500">'  + esc(r.nama_produk) + '</td>'
-        + '<td style="padding:.35rem .65rem;text-align:right;color:var(--muted);font-size:.75rem">' + (r.harga_beli > 0 ? r.harga_beli.toLocaleString('id-ID') : '—') + '</td>'
-        + '<td style="padding:.35rem .65rem;text-align:right;font-weight:600">' + r.harga_jual.toLocaleString('id-ID') + '</td>'
-        + '<td style="padding:.35rem .65rem;text-align:center">'
-          + (margin !== null
-            ? '<span style="font-size:.68rem;font-weight:600;color:' + mColor + '">' + margin + '%</span>'
-            : '<span style="color:#9ca3af;font-size:.68rem">—</span>')
-        + '</td>'
-        + '<td style="padding:.35rem .65rem">'
-          + '<span style="font-size:.65rem;padding:.1rem .4rem;border-radius:3px;background:#f3f4f6;color:#374151">' + esc(r.kategori) + '</span>'
-          + (r.quick_cash ? ' <span style="font-size:.62rem;padding:.1rem .35rem;border-radius:3px;background:#c84b1f;color:#fff">QC</span>' : '')
-        + '</td>'
-        + '</tr>';
-    }).join('');
-
-    if (produk.length > 50) {
-      tb.innerHTML += '<tr><td colspan="6" style="padding:.5rem;text-align:center;color:var(--muted);font-size:.7rem;font-style:italic">'
-        + '…dan ' + (produk.length - 50) + ' produk lainnya tidak ditampilkan</td></tr>';
     }
 
-    document.getElementById('csv-preview').style.display = '';
-    document.getElementById('btn-do-import').disabled = produk.length === 0;
-  }
+  } // end initProduk
 
-  document.getElementById('btn-do-import').addEventListener('click', async function () {
-    if (!_csvData.length) return;
-    this.disabled = true; this.textContent = 'Mengimport…';
-    try {
-      for (var i = 0; i < _csvData.length; i += 50) {
-        await api('POST', '/api/produk/produk', _csvData.slice(i, i + 50));
-      }
-      toast(_csvData.length + ' produk diimport');
-      closeM('import');
-      setTimeout(function () { location.reload(); }, 600);
-    } catch (e) { toast('Import gagal: ' + e.message, false); this.disabled = false; this.textContent = 'Import'; }
-  });
-
-    // ─── DRAG TO SCROLL (pills) ───────────────────────────────────────────────────
-  (function(){
-    var el = document.getElementById('kat-pills');
-    if(!el) return;
-    var isDown = false, startX, scrollLeft;
-    el.addEventListener('mousedown', function(e){
-      isDown = true; startX = e.pageX - el.offsetLeft; scrollLeft = el.scrollLeft;
-      el.style.cursor = 'grabbing';
-    });
-    el.addEventListener('mouseleave', function(){ isDown = false; el.style.cursor = 'grab'; });
-    el.addEventListener('mouseup',    function(){ isDown = false; el.style.cursor = 'grab'; });
-    el.addEventListener('mousemove',  function(e){
-      if(!isDown) return; e.preventDefault();
-      var x = e.pageX - el.offsetLeft;
-      el.scrollLeft = scrollLeft - (x - startX) * 1.5;
-    });
-  })();
-
+  /* Jalankan saat pertama load DAN setiap navigasi ViewTransitions */
+  document.addEventListener('astro:page-load', initProduk);
   </script>
 
 </Layout>

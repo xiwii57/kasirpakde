@@ -32,14 +32,6 @@ function rp(n: number) {
 }
 
 const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].sort();
-
-const scriptVars = {
-  produk,
-  quickCashProduk,
-  PUBLIC_SUPABASE_URL,
-  PUBLIC_SUPABASE_ANON_KEY,
-  nonce,
-};
 ---
 
 <Layout title="Kasir" active="kasir" nonce={nonce}>
@@ -224,13 +216,12 @@ const scriptVars = {
 </div>
 </div>
 
-<!-- ══ MOBILE/TABLET: Sheet backdrop ══ -->
+<!-- ══ MOBILE: Sheet backdrop ══ -->
 <div id="sheet-backdrop" aria-hidden="true"></div>
 
-<!-- ══ MOBILE/TABLET: Cart bottom sheet ══ -->
+<!-- ══ MOBILE: Cart bottom sheet ══ -->
 <div id="cart-sheet" role="dialog" aria-modal="true" aria-label="Keranjang belanja">
   <div class="sheet-handle"></div>
-
   <div class="cart-header" style="flex-shrink:0">
     <div class="cart-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -250,7 +241,6 @@ const scriptVars = {
       </button>
     </div>
   </div>
-
   <div class="sheet-items" id="m-list" aria-live="polite">
     <div class="cart-empty-state" id="m-empty" style="min-height:120px">
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
@@ -261,7 +251,6 @@ const scriptVars = {
       <p>Keranjang kosong</p>
     </div>
   </div>
-
   <div class="cart-footer" style="border-top:1px solid var(--border)">
     <div class="cart-total-row">
       <div>
@@ -293,8 +282,7 @@ const scriptVars = {
 <!-- ══ MODAL: QRIS ══ -->
 <div id="modal-qris" class="modal-wrap" role="dialog" aria-modal="true" aria-labelledby="mq-h">
   <div class="modal-box flex flex-col max-h-[90vh] overflow-hidden !p-0" style="max-width:400px">
-
-    <div class="modal-head !shrink-0 !static border-b border-gray-100" style="padding: 16px 20px;">
+    <div class="modal-head !shrink-0 !static border-b border-gray-100" style="padding:16px 20px;">
       <h2 id="mq-h">Pembayaran QRIS</h2>
       <button id="close-qris" class="modal-close-btn" aria-label="Tutup">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -302,26 +290,16 @@ const scriptVars = {
         </svg>
       </button>
     </div>
-
     <div class="flex-1 overflow-y-auto px-5 py-4 custom-scrollbar">
       <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
-
         <div style="width:100%;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 14px;text-align:center">
-          <div style="font-size:.7rem;color:#16a34a;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">
-            Total Tagihan
-          </div>
+          <div style="font-size:.7rem;color:#16a34a;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Total Tagihan</div>
           <div id="qris-total-disp" style="font-size:1.5rem;font-weight:800;color:#15803d"></div>
         </div>
-
-        <img
-            id="qris-img"
-            src={QRIS_IMAGE_URL}
-            alt="QR Code QRIS"
-            style="width:100%;max-width:280px;border-radius:10px;border:1px solid #e5e7eb;object-fit:contain;cursor:zoom-in;"
-            onclick="document.getElementById('qris-lightbox').classList.add('open')"
-            onerror="this.style.display='none';document.getElementById('qris-no-img').style.display='flex'"
-          />
-
+        <img id="qris-img" src={QRIS_IMAGE_URL} alt="QR Code QRIS"
+          style="width:100%;max-width:280px;border-radius:10px;border:1px solid #e5e7eb;object-fit:contain;cursor:zoom-in;"
+          onclick="document.getElementById('qris-lightbox').classList.add('open')"
+          onerror="this.style.display='none';document.getElementById('qris-no-img').style.display='flex'" />
         <div id="qris-no-img" style="display:none;flex-direction:column;padding:24px;text-align:center;color:#9ca3af;font-size:.8rem;border:1px dashed #d1d5db;border-radius:10px;width:100%;max-width:280px">
           <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="margin:0 auto 8px;display:block" aria-hidden="true">
             <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
@@ -330,7 +308,6 @@ const scriptVars = {
           <p style="margin:0 0 4px;font-weight:600;color:#6b7280">Foto QRIS belum tersedia</p>
           <p style="margin:0;font-size:.72rem">Simpan file di folder <code>public/qris.jpeg</code></p>
         </div>
-
         <div class="text-center space-y-2 pb-2">
           <p style="font-size:.75rem;color:#6b7280;line-height:1.4">
             1. Buka aplikasi e-wallet (Gopay/OVO/Dana) atau M-Banking.<br/>
@@ -340,14 +317,13 @@ const scriptVars = {
         </div>
       </div>
     </div>
-
-    <div class="!shrink-0 border-t border-gray-100 bg-gray-50/50" style="padding:16px; display:flex; gap:8px;">
+    <div class="!shrink-0 border-t border-gray-100 bg-gray-50/50" style="padding:16px;display:flex;gap:8px;">
       <button id="qris-confirm-btn"
-        style="flex:1; padding:12px; background:#000000; color:#ffffff; border:none; border-radius:8px; font-size:.85rem; font-weight:700; cursor:pointer; transition: 0.2s;">
+        style="flex:1;padding:12px;background:#000;color:#fff;border:none;border-radius:8px;font-size:.85rem;font-weight:700;cursor:pointer;transition:.2s;">
         ✓ Konfirmasi Sudah Bayar
       </button>
       <button id="close-qris-bottom"
-        style="flex:1; padding:12px; background:#f3f4f6; color:#374151; border:none; border-radius:8px; font-size:.85rem; font-weight:600; cursor:pointer;">
+        style="flex:1;padding:12px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;font-size:.85rem;font-weight:600;cursor:pointer;">
         Batal
       </button>
     </div>
@@ -395,13 +371,8 @@ const scriptVars = {
 <div id="qris-lightbox"
   style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;align-items:center;justify-content:center;cursor:zoom-out;"
   onclick="document.getElementById('qris-lightbox').classList.remove('open')">
-
-  <img
-    src={QRIS_IMAGE_URL}
-    alt="QR Code QRIS fullscreen"
-    style="max-width:92vw;max-height:92vh;border-radius:12px;object-fit:contain;pointer-events:none;box-shadow:0 8px 40px rgba(0,0,0,.5);"
-  />
-
+  <img src={QRIS_IMAGE_URL} alt="QR Code QRIS fullscreen"
+    style="max-width:92vw;max-height:92vh;border-radius:12px;object-fit:contain;pointer-events:none;box-shadow:0 8px 40px rgba(0,0,0,.5);"/>
   <button
     style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.2);border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;transition:background .15s;"
     onclick="event.stopPropagation();document.getElementById('qris-lightbox').classList.remove('open')"
@@ -422,83 +393,19 @@ const scriptVars = {
   <span id="toast-msg"></span>
 </div>
 
-<script is:inline nonce={nonce} define:vars={scriptVars}>
-window.__playSuccess = function() {
-  try {
-    var ctx = new (window.AudioContext || window.webkitAudioContext)();
-    [659.25, 830.61, 987.77].forEach(function(f, i) {
-      var o = ctx.createOscillator(), g = ctx.createGain();
-      o.connect(g); g.connect(ctx.destination);
-      o.frequency.value = f;
-      o.type = 'triangle';
-      var t = ctx.currentTime + i * 0.13;
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.35, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
-      o.start(t); o.stop(t + 0.42);
-    });
-  } catch(e) {}
-};
+<!--
+  Data Supabase disimpan di meta tags — menggantikan define:vars.
+  define:vars menyebabkan Astro inject script internal tanpa nonce → CSP violation.
+-->
+<meta id="sb-url"  content={PUBLIC_SUPABASE_URL} />
+<meta id="sb-anon" content={PUBLIC_SUPABASE_ANON_KEY} />
 
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') {
-    document.getElementById('qris-lightbox').classList.remove('open');
-  }
-});
-
-/* ── QC Bar scroll hint ─────────────────────────────────────────── */
-(function() {
-  var bar = document.getElementById('qc-bar');
-  if (!bar) return;
-
-  function updateFade() {
-    var atEnd = bar.scrollLeft + bar.clientWidth >= bar.scrollWidth - 4;
-    // Kalau sudah di ujung kanan, hilangkan mask sepenuhnya — tidak ada warna putih menggantung
-    bar.style.webkitMaskImage = atEnd
-      ? 'none'
-      : 'linear-gradient(to right, black 0%, black 85%, transparent 100%)';
-    bar.style.maskImage = bar.style.webkitMaskImage;
-  }
-  bar.addEventListener('scroll', updateFade, { passive: true });
-  updateFade();
-
-  // Mouse drag scroll (desktop)
-  var isDown = false, startX, scrollLeft;
-  bar.addEventListener('mousedown', function(e) {
-    isDown = true;
-    startX = e.pageX - bar.offsetLeft;
-    scrollLeft = bar.scrollLeft;
-    bar.style.cursor = 'grabbing';
-  });
-  document.addEventListener('mouseup', function() {
-    isDown = false;
-    bar.style.cursor = '';
-  });
-  bar.addEventListener('mousemove', function(e) {
-    if (!isDown) return;
-    e.preventDefault();
-    var x = e.pageX - bar.offsetLeft;
-    bar.scrollLeft = scrollLeft - (x - startX) * 1.2;
-  });
-})();
-</script>
-
-<script is:inline nonce={nonce} define:vars={{ produk, PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY }}>
+<script is:inline nonce={nonce}>
 'use strict';
 
-var SUPABASE_URL  = PUBLIC_SUPABASE_URL;
-var SUPABASE_ANON = PUBLIC_SUPABASE_ANON_KEY;
-var BUCKET        = 'produk-foto';
-
-/* ── STATE ─────────────────────────────────────────────────────────────── */
-var cart      = [];
-var activeKat = 'semua';
-var searchQ   = '';
-var sheetOpen = false;
-
-var _qrisTotal = 0;
-
-/* ── FORMAT ─────────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   HELPERS — pure functions, defined once
+══════════════════════════════════════════════════════════════════════════ */
 function rp(n) {
   return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n);
 }
@@ -509,11 +416,28 @@ function timeStr(iso) {
   return new Date(iso).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
 }
 
-/* ── TOAST ─────────────────────────────────────────────────────────────── */
+/* ── Sound ─────────────────────────────────────────────────────────────── */
+window.__playSuccess = function() {
+  try {
+    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [659.25, 830.61, 987.77].forEach(function(f, i) {
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = f; o.type = 'triangle';
+      var t = ctx.currentTime + i * 0.13;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.35, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+      o.start(t); o.stop(t + 0.42);
+    });
+  } catch(e) {}
+};
+
+/* ── Toast ─────────────────────────────────────────────────────────────── */
 var _tt;
 function toast(msg, ok) {
-  var t  = document.getElementById('toast');
-  var ic = document.getElementById('toast-ico');
+  var t = document.getElementById('toast'), ic = document.getElementById('toast-ico');
+  if (!t || !ic) return;
   document.getElementById('toast-msg').textContent = msg;
   ic.style.color = ok === false ? '#f87171' : '#4ade80';
   ic.innerHTML   = ok === false
@@ -537,439 +461,29 @@ async function api(method, path, body) {
   return d;
 }
 
-/* ── LAZY IMAGES ────────────────────────────────────────────────────────── */
-var _imgLoaded = new Set();
-
-function loadImages() {
-  document.querySelectorAll('.prod-card:not(.card-hidden)').forEach(function(card) {
-    var id = card.dataset.id;
-    if (_imgLoaded.has(id)) return;
-
-    var thumb = card.querySelector('.prod-thumb');
-    if (!thumb) return;
-    if (thumb.querySelector('img')) return;
-
-    _imgLoaded.add(id);
-
-    var img = document.createElement('img');
-    img.alt      = card.dataset.namaAsli || '';
-    img.loading  = 'lazy';
-    img.decoding = 'async';
-    img.onload  = function() {
-      img.classList.add('loaded');
-      var ph = thumb.querySelector('.prod-thumb-icon');
-      if (ph) ph.style.display = 'none';
-    };
-    img.onerror = function() {
-      _imgLoaded.delete(id);
-    };
-    img.src = SUPABASE_URL + '/storage/v1/object/public/' + BUCKET + '/' + id + '.webp';
-    thumb.insertBefore(img, thumb.querySelector('.prod-qty-badge'));
-  });
-}
-
-/* ── FILTER ─────────────────────────────────────────────────────────────── */
-function applyFilter() {
-  var q   = searchQ.toLowerCase().trim();
-  var vis = 0;
-  document.querySelectorAll('.prod-card').forEach(function(card) {
-    var ok = (activeKat === 'semua' || card.dataset.kat === activeKat)
-          && (!q || card.dataset.nama.includes(q));
-    card.classList.toggle('card-hidden', !ok);
-    if (ok) vis++;
-  });
-  var el = document.getElementById('no-hasil');
-  if (el) el.classList.toggle('show', vis === 0);
-  setTimeout(loadImages, 40);
-}
-
-document.getElementById('s-produk').addEventListener('input', function() {
-  searchQ = this.value; applyFilter();
-});
-
-document.getElementById('kat-bar').addEventListener('click', function(e) {
-  var btn = e.target.closest('.kat-btn');
-  if (!btn) return;
-  document.querySelectorAll('.kat-btn').forEach(function(b) {
-    b.classList.remove('on'); b.setAttribute('aria-selected','false');
-  });
-  btn.classList.add('on'); btn.setAttribute('aria-selected','true');
-  activeKat = btn.dataset.kat;
-  applyFilter();
-});
-
-/* ── SYNC PRODUCT CARD BADGES ───────────────────────────────────────────── */
-function syncCards() {
-  document.querySelectorAll('.prod-card').forEach(function(card) {
-    var item   = cart.find(function(i){ return i.id === card.dataset.id; });
-    var badge  = card.querySelector('.prod-qty-badge');
-    var inCart = !!item;
-    card.classList.toggle('in-cart', inCart);
-    if (badge) {
-      var prev = badge.textContent;
-      badge.textContent = item ? String(item.qty) : '';
-      if (item && prev !== String(item.qty)) {
-        badge.classList.remove('pop');
-        void badge.offsetWidth;
-        badge.classList.add('pop');
-        setTimeout(function(){ badge.classList.remove('pop'); }, 250);
-      }
-    }
-  });
-}
-
-/* ── RENDER CART LIST ───────────────────────────────────────────────────── */
-function makeCartRows() {
-  if (!cart.length) return '';
-  return cart.map(function(item, idx) {
-    return '<div class="cart-row">' +
-      '<div class="cr-info">' +
-        '<div class="cr-name">' + esc(item.nama) + '</div>' +
-        '<div class="cr-price">' + rp(item.jual) + ' / item</div>' +
-      '</div>' +
-      '<div class="cr-qty">' +
-        '<button class="qty-btn" data-a="dec" data-i="' + idx + '" aria-label="Kurangi">−</button>' +
-        '<span class="qty-n">' + item.qty + '</span>' +
-        '<button class="qty-btn" data-a="inc" data-i="' + idx + '" aria-label="Tambah">+</button>' +
-      '</div>' +
-      '<div class="cr-sub">' + rp(item.jual * item.qty) + '</div>' +
-      '<button class="cr-del" data-a="del" data-i="' + idx + '" aria-label="Hapus">' +
-        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">' +
-          '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' +
-        '</svg>' +
-      '</button>' +
-    '</div>';
-  }).join('');
-}
-
-function bindCartActions(container) {
-  container.querySelectorAll('[data-a]').forEach(function(btn) {
-    btn.addEventListener('click', function(e) {
-      e.stopPropagation();
-      var idx = parseInt(this.dataset.i);
-      var act = this.dataset.a;
-      if (act === 'inc') { cart[idx].qty++; }
-      else if (act === 'dec') { cart[idx].qty--; if (cart[idx].qty <= 0) cart.splice(idx, 1); }
-      else if (act === 'del') { cart.splice(idx, 1); }
-      renderAll();
-    });
-  });
-}
-
-/* ── RENDER ALL VIEWS ───────────────────────────────────────────────────── */
-function renderAll() {
-  syncCards();
-
-  var total = cart.reduce(function(s,i){ return s + i.jual * i.qty; }, 0);
-  var count = cart.length;
-  var items = cart.reduce(function(s,i){ return s + i.qty; }, 0);
-  var html  = makeCartRows();
-
-  /* Desktop */
-  var dList  = document.getElementById('d-list');
-  var dEmpty = document.getElementById('d-empty');
-  var dCount = document.getElementById('d-count');
-  var dTotal = document.getElementById('d-total');
-  var dItems = document.getElementById('d-items');
-  var dQris  = document.getElementById('d-qris');
-  var dCash  = document.getElementById('d-cash');
-
-  if (dCount) { dCount.textContent = count; dCount.classList.toggle('live', count > 0); }
-  if (dTotal) dTotal.textContent = rp(total);
-  if (dItems) dItems.textContent = items;
-  if (dQris)  dQris.disabled  = count === 0;
-  if (dCash)  dCash.disabled  = count === 0;
-
-  if (dList) {
-    if (count === 0) {
-      dEmpty.style.display = '';
-      dList.querySelectorAll('.cart-row').forEach(function(r){ r.remove(); });
-    } else {
-      dEmpty.style.display = 'none';
-      dList.querySelectorAll('.cart-row').forEach(function(r){ r.remove(); });
-      var tmp = document.createElement('div');
-      tmp.innerHTML = html;
-      while (tmp.firstChild) dList.appendChild(tmp.firstChild);
-      bindCartActions(dList);
-    }
-  }
-
-  /* Mobile sheet */
-  var mList  = document.getElementById('m-list');
-  var mEmpty = document.getElementById('m-empty');
-  var mCount = document.getElementById('m-count');
-  var mTotal = document.getElementById('m-total');
-  var mItems = document.getElementById('m-items');
-  var mQris  = document.getElementById('m-qris');
-  var mCash  = document.getElementById('m-cash');
-
-  if (mCount) { mCount.textContent = count; mCount.classList.toggle('live', count > 0); }
-  if (mTotal) mTotal.textContent = rp(total);
-  if (mItems) mItems.textContent = items;
-  if (mQris)  mQris.disabled  = count === 0;
-  if (mCash)  mCash.disabled  = count === 0;
-
-  if (mList) {
-    if (count === 0) {
-      mEmpty.style.display = '';
-      mList.querySelectorAll('.cart-row').forEach(function(r){ r.remove(); });
-    } else {
-      mEmpty.style.display = 'none';
-      mList.querySelectorAll('.cart-row').forEach(function(r){ r.remove(); });
-      var tmp2 = document.createElement('div');
-      tmp2.innerHTML = html;
-      while (tmp2.firstChild) mList.appendChild(tmp2.firstChild);
-      bindCartActions(mList);
-    }
-  }
-
-  /* FAB */
-  var fabLbl   = document.getElementById('fab-label');
-  var fabBadge = document.getElementById('fab-badge');
-  if (fabLbl)   fabLbl.textContent   = count > 0 ? rp(total) : 'Keranjang';
-  if (fabBadge) {
-    fabBadge.textContent   = items;
-    fabBadge.style.display = items > 0 ? '' : 'none';
-  }
-}
-
-/* ── ADD TO CART ────────────────────────────────────────────────────────── */
-function addToCart(id, nama, jual, beli) {
-  var ex = cart.find(function(i){ return i.id === id; });
-  if (ex) ex.qty++;
-  else    cart.push({ id:id, nama:nama, jual:+jual, beli:+beli, qty:1 });
-  renderAll();
-}
-
-/* ── PRODUCT GRID ───────────────────────────────────────────────────────── */
-document.getElementById('prod-grid').addEventListener('click', function(e) {
-  var card = e.target.closest('.prod-card');
-  if (!card) return;
-  addToCart(card.dataset.id, card.dataset.namaAsli, card.dataset.jual, card.dataset.beli);
-});
-document.getElementById('prod-grid').addEventListener('keydown', function(e) {
-  if (e.key !== 'Enter' && e.key !== ' ') return;
-  var card = e.target.closest('.prod-card');
-  if (!card) return;
-  e.preventDefault();
-  addToCart(card.dataset.id, card.dataset.namaAsli, card.dataset.jual, card.dataset.beli);
-});
-
-/* ── QUICK CASH ─────────────────────────────────────────────────────────── */
-var qcBar = document.getElementById('qc-bar');
-if (qcBar) {
-  qcBar.addEventListener('click', function(e) {
-    var btn = e.target.closest('.qc-item');
-    if (!btn) return;
-    addToCart(btn.dataset.id, btn.dataset.nama, btn.dataset.jual, btn.dataset.beli);
-    toast('+ ' + btn.dataset.nama);
-  });
-}
-
-/* ── CLEAR CART ─────────────────────────────────────────────────────────── */
-function clearCart() {
-  if (!cart.length) return;
-  if (!confirm('Kosongkan keranjang?')) return;
-  cart = []; renderAll();
-}
-document.getElementById('d-clear').addEventListener('click', clearCart);
-document.getElementById('m-clear').addEventListener('click', clearCart);
-
-/* ── SHEET (mobile) ──────────────────────────────────────────────────────── */
-var sheetEl    = document.getElementById('cart-sheet');
-var backdropEl = document.getElementById('sheet-backdrop');
-
-function openSheet() {
-  sheetEl.classList.add('open');
-  backdropEl.classList.add('visible');
-  document.body.style.overflow = 'hidden';
-  sheetOpen = true;
-}
-function closeSheet() {
-  sheetEl.classList.remove('open');
-  backdropEl.classList.remove('visible');
-  document.body.style.overflow = '';
-  sheetOpen = false;
-}
-
-document.getElementById('cart-fab').addEventListener('click', openSheet);
-document.getElementById('sheet-close').addEventListener('click', closeSheet);
-backdropEl.addEventListener('click', closeSheet);
-
-(function() {
-  var startY = 0; var isDragging = false;
-  sheetEl.addEventListener('touchstart', function(e) {
-    startY = e.touches[0].clientY; isDragging = true;
-  }, { passive: true });
-  sheetEl.addEventListener('touchend', function(e) {
-    if (!isDragging) return;
-    if (e.changedTouches[0].clientY - startY > 80) closeSheet();
-    isDragging = false;
-  }, { passive: true });
-})();
-
-/* ── MODALS ─────────────────────────────────────────────────────────────── */
-function openModal(id) {
-  document.getElementById('modal-' + id).classList.add('open');
-  document.body.style.overflow = 'hidden';
-}
-function closeModal(id) {
-  document.getElementById('modal-' + id).classList.remove('open');
-  if (!sheetOpen) document.body.style.overflow = '';
-}
-
-/* ── CHECKOUT: QRIS Statis ──────────────────────────────────────────────── */
-function doQris() {
-  if (!cart.length) return;
-  closeSheet();
-  _qrisTotal = cart.reduce(function(s,i){ return s + i.jual * i.qty; }, 0);
-  document.getElementById('qris-total-disp').textContent = rp(_qrisTotal);
-  openModal('qris');
-}
-
-document.getElementById('d-qris').addEventListener('click', doQris);
-document.getElementById('m-qris').addEventListener('click', doQris);
-
-function handleCloseQris() {
-  closeModal('qris');
-  _qrisTotal = 0;
-}
-document.getElementById('close-qris').addEventListener('click', handleCloseQris);
-document.getElementById('close-qris-bottom').addEventListener('click', handleCloseQris);
-
-document.getElementById('qris-confirm-btn').addEventListener('click', async function() {
-  if (!_qrisTotal) return;
-  this.disabled = true;
-  this.textContent = 'Menyimpan…';
-  try {
-    await saveTrx(_qrisTotal, 'qris', 'paid');
-    closeModal('qris');
-    showSukses(_qrisTotal, 'QRIS');
-    _qrisTotal = 0;
-  } catch(e) {
-    toast('Gagal menyimpan: ' + e.message, false);
-    this.disabled = false;
-    this.textContent = '✓ Konfirmasi Sudah Bayar';
-  }
-});
-
-/* ── CHECKOUT: CASH ─────────────────────────────────────────────────────── */
-function doCash() {
-  if (!cart.length) return;
-  closeSheet();
-  var total = cart.reduce(function(s,i){ return s + i.jual * i.qty; }, 0);
-  document.getElementById('cash-disp').textContent = rp(total);
-  openModal('cash');
-}
-
-document.getElementById('d-cash').addEventListener('click', doCash);
-document.getElementById('m-cash').addEventListener('click', doCash);
-document.getElementById('cash-cancel').addEventListener('click', function() { closeModal('cash'); });
-document.getElementById('cash-confirm').addEventListener('click', async function() {
-  var total = cart.reduce(function(s,i){ return s + i.jual * i.qty; }, 0);
-  this.disabled = true; this.textContent = 'Menyimpan…';
-  try {
-    await saveTrx(total, 'cash', 'paid');
-    closeModal('cash');
-    showSukses(total, 'Cash');
-  } catch(e) {
-    toast('Gagal: ' + e.message, false);
-  } finally {
-    this.disabled = false; this.textContent = 'Konfirmasi Lunas';
-  }
-});
-
-/* ── SAVE TRANSACTION ───────────────────────────────────────────────────── */
-async function saveTrx(total, metode, status) {
-  var items = cart.map(function(i) {
-    return { produk_id:i.id, nama_produk:i.nama, harga_jual:i.jual, harga_beli:i.beli, qty:i.qty };
-  });
-  await api('POST', '/api/kasir/transaksi', {
-    total: total,
-    metode_bayar: metode,
-    status: status,
-    items: items
-  });
-}
-
-/* ── SUCCESS ────────────────────────────────────────────────────────────── */
-function showSukses(total, metode) {
-  window.__playSuccess && window.__playSuccess();
-  document.getElementById('sukses-total').textContent  = rp(total);
-  document.getElementById('sukses-metode').textContent = 'Metode: ' + metode;
-  openModal('sukses');
-  cart = []; renderAll(); loadHistory();
-}
-document.getElementById('close-sukses').addEventListener('click', function() {
-  closeModal('sukses');
-  document.getElementById('s-produk').focus();
-});
-
-/* ── HISTORY ────────────────────────────────────────────────────────────── */
-var _histLoaded = false;
-document.getElementById('hist-btn').addEventListener('click', function() {
-  var body = document.getElementById('hist-body');
-  var chev = document.getElementById('hist-chev');
-  var open = body.classList.contains('open');
-  body.classList.toggle('open', !open);
-  this.setAttribute('aria-expanded', String(!open));
-  chev.classList.toggle('open', !open);
-  if (!open && !_histLoaded) loadHistory();
-});
-
-async function loadHistory() {
-  _histLoaded = true;
-  try {
-    var data = await api('GET', '/api/kasir/transaksi');
-    renderHistory(data);
-    updateStat(data);
-  } catch(e) {
-    document.getElementById('hist-list').innerHTML =
-      '<div style="padding:1rem;text-align:center;font-size:.69rem;color:#f87171">Gagal memuat histori</div>';
-  }
-}
-
-function renderHistory(data) {
-  var el = document.getElementById('hist-list');
-  if (!data || !data.length) {
-    el.innerHTML = '<div style="padding:1.5rem;text-align:center;font-size:.69rem;color:#bbb">Belum ada transaksi hari ini</div>';
-    return;
-  }
-  el.innerHTML = data.map(function(trx) {
-    var isQ  = trx.metode_bayar === 'qris';
-    var itms = (trx.transaksi_item || []);
-    var summ = itms.slice(0, 2).map(function(i){ return esc(i.nama_produk) + '×' + i.qty; }).join(', ');
-    if (itms.length > 2) summ += ' +' + (itms.length - 2) + ' lainnya';
-    return '<div class="hist-row-item">' +
-      '<div class="hri-top">' +
-        '<span class="hri-amt">' + rp(trx.total) + '</span>' +
-        '<div class="hri-meta">' +
-          '<span class="hri-badge ' + (isQ ? 'badge-qris' : 'badge-cash') + '">' + (isQ ? 'QRIS' : 'Cash') + '</span>' +
-          '<span class="hri-time">' + timeStr(trx.created_at) + '</span>' +
-        '</div>' +
-      '</div>' +
-      (summ ? '<div class="hri-prods">' + summ + '</div>' : '') +
-    '</div>';
-  }).join('');
-}
-
-function updateStat(data) {
-  var total = (data || []).reduce(function(s, t){ return s + t.total; }, 0);
-  var el = document.getElementById('stat-today');
-  if (el) el.textContent = rp(total);
-}
-
-/* ── REALTIME ───────────────────────────────────────────────────────────── */
-(function() {
+/* ══════════════════════════════════════════════════════════════════════════
+   REALTIME WebSocket
+   Guard via window.__kasirWsConnected — hanya connect SATU KALI selama
+   tab terbuka, tidak reconnect saat ViewTransitions bolak-balik ke kasir.
+   Callback di-update ke instance initKasir() terbaru tiap navigasi.
+══════════════════════════════════════════════════════════════════════════ */
+function initRealtime(SUPABASE_URL, SUPABASE_ANON, onInsert) {
+  window.__kasirWsCallback = onInsert; // update callback ke instance baru
+  if (window.__kasirWsConnected) return;
   if (!SUPABASE_URL || !SUPABASE_ANON) return;
-  var wsUrl = SUPABASE_URL.replace('https://','wss://') + '/realtime/v1/websocket?apikey=' + SUPABASE_ANON + '&vsn=1.0.0';
+  window.__kasirWsConnected = true;
+
+  var wsUrl = SUPABASE_URL.replace('https://','wss://') +
+    '/realtime/v1/websocket?apikey=' + SUPABASE_ANON + '&vsn=1.0.0';
+
   function connect() {
     try {
       var ws = new WebSocket(wsUrl);
       ws.onopen = function() {
         ws.send(JSON.stringify({
           topic:'realtime:public:transaksi', event:'phx_join',
-          payload:{config:{postgres_changes:[{event:'INSERT',schema:'public',table:'transaksi'}]}}, ref:'1'
+          payload:{config:{postgres_changes:[{event:'INSERT',schema:'public',table:'transaksi'}]}},
+          ref:'1'
         }));
       };
       ws.onmessage = function(msg) {
@@ -978,7 +492,7 @@ function updateStat(data) {
           if (d.event === 'phx_reply' && d.ref === 'heartbeat')
             ws.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:'hb'}));
           if (d.event === 'postgres_changes' || (d.payload && d.payload.type === 'INSERT'))
-            if (_histLoaded) loadHistory();
+            if (window.__kasirWsCallback) window.__kasirWsCallback();
         } catch(e) {}
       };
       ws.onclose = function() { setTimeout(connect, 5000); };
@@ -989,11 +503,385 @@ function updateStat(data) {
     } catch(e) { setTimeout(connect, 8000); }
   }
   connect();
-})();
+}
 
-/* ── INIT ───────────────────────────────────────────────────────────────── */
-renderAll();
-setTimeout(loadImages, 100);
+/* ══════════════════════════════════════════════════════════════════════════
+   INIT — dipanggil tiap astro:page-load
+   Semua state di-declare di dalam → reset bersih tiap navigasi ke kasir
+══════════════════════════════════════════════════════════════════════════ */
+function initKasir() {
+  /* Baca config dari meta tags (bukan define:vars) */
+  var SUPABASE_URL  = (document.getElementById('sb-url')  || {}).content || '';
+  var SUPABASE_ANON = (document.getElementById('sb-anon') || {}).content || '';
+  var BUCKET = 'produk-foto';
+
+  /* State — reset tiap navigasi */
+  var cart        = [];
+  var activeKat   = 'semua';
+  var searchQ     = '';
+  var sheetOpen   = false;
+  var _qrisTotal  = 0;
+  var _histLoaded = false;
+  var _imgLoaded  = new Set();
+
+  /* ── Lazy images ─────────────────────────────────────────────────────── */
+  function loadImages() {
+    document.querySelectorAll('.prod-card:not(.card-hidden)').forEach(function(card) {
+      var id = card.dataset.id;
+      if (_imgLoaded.has(id)) return;
+      var thumb = card.querySelector('.prod-thumb');
+      if (!thumb || thumb.querySelector('img')) return;
+      _imgLoaded.add(id);
+      var img = document.createElement('img');
+      img.alt = card.dataset.namaAsli || '';
+      img.loading = 'lazy'; img.decoding = 'async';
+      img.onload  = function() {
+        img.classList.add('loaded');
+        var ph = thumb.querySelector('.prod-thumb-icon');
+        if (ph) ph.style.display = 'none';
+      };
+      img.onerror = function() { _imgLoaded.delete(id); };
+      img.src = SUPABASE_URL + '/storage/v1/object/public/' + BUCKET + '/' + id + '.webp';
+      thumb.insertBefore(img, thumb.querySelector('.prod-qty-badge'));
+    });
+  }
+
+  /* ── Filter ──────────────────────────────────────────────────────────── */
+  function applyFilter() {
+    var q = searchQ.toLowerCase().trim(), vis = 0;
+    document.querySelectorAll('.prod-card').forEach(function(card) {
+      var ok = (activeKat === 'semua' || card.dataset.kat === activeKat)
+            && (!q || card.dataset.nama.includes(q));
+      card.classList.toggle('card-hidden', !ok);
+      if (ok) vis++;
+    });
+    var el = document.getElementById('no-hasil');
+    if (el) el.classList.toggle('show', vis === 0);
+    setTimeout(loadImages, 40);
+  }
+
+  /* ── Sync badges ─────────────────────────────────────────────────────── */
+  function syncCards() {
+    document.querySelectorAll('.prod-card').forEach(function(card) {
+      var item  = cart.find(function(i){ return i.id === card.dataset.id; });
+      var badge = card.querySelector('.prod-qty-badge');
+      card.classList.toggle('in-cart', !!item);
+      if (badge) {
+        var prev = badge.textContent;
+        badge.textContent = item ? String(item.qty) : '';
+        if (item && prev !== String(item.qty)) {
+          badge.classList.remove('pop');
+          void badge.offsetWidth;
+          badge.classList.add('pop');
+          setTimeout(function(){ badge.classList.remove('pop'); }, 250);
+        }
+      }
+    });
+  }
+
+  /* ── Cart HTML ───────────────────────────────────────────────────────── */
+  function makeCartRows() {
+    return cart.map(function(item, idx) {
+      return '<div class="cart-row">' +
+        '<div class="cr-info"><div class="cr-name">' + esc(item.nama) + '</div>' +
+        '<div class="cr-price">' + rp(item.jual) + ' / item</div></div>' +
+        '<div class="cr-qty">' +
+          '<button class="qty-btn" data-a="dec" data-i="' + idx + '" aria-label="Kurangi">−</button>' +
+          '<span class="qty-n">' + item.qty + '</span>' +
+          '<button class="qty-btn" data-a="inc" data-i="' + idx + '" aria-label="Tambah">+</button>' +
+        '</div>' +
+        '<div class="cr-sub">' + rp(item.jual * item.qty) + '</div>' +
+        '<button class="cr-del" data-a="del" data-i="' + idx + '" aria-label="Hapus">' +
+          '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">' +
+            '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+        '</button></div>';
+    }).join('');
+  }
+
+  function bindCartActions(container) {
+    container.querySelectorAll('[data-a]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var idx = parseInt(this.dataset.i), act = this.dataset.a;
+        if (act === 'inc')      cart[idx].qty++;
+        else if (act === 'dec') { cart[idx].qty--; if (cart[idx].qty <= 0) cart.splice(idx,1); }
+        else if (act === 'del') cart.splice(idx, 1);
+        renderAll();
+      });
+    });
+  }
+
+  function setList(listEl, emptyEl, html) {
+    if (!listEl) return;
+    listEl.querySelectorAll('.cart-row').forEach(function(r){ r.remove(); });
+    if (!cart.length) { if (emptyEl) emptyEl.style.display = ''; return; }
+    if (emptyEl) emptyEl.style.display = 'none';
+    var tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    while (tmp.firstChild) listEl.appendChild(tmp.firstChild);
+    bindCartActions(listEl);
+  }
+
+  /* ── Render ──────────────────────────────────────────────────────────── */
+  function renderAll() {
+    syncCards();
+    var total = cart.reduce(function(s,i){ return s+i.jual*i.qty; },0);
+    var count = cart.length;
+    var items = cart.reduce(function(s,i){ return s+i.qty; },0);
+    var html  = makeCartRows();
+
+    ['d','m'].forEach(function(p) {
+      var cnt = document.getElementById(p+'-count');
+      var tot = document.getElementById(p+'-total');
+      var itm = document.getElementById(p+'-items');
+      var qr  = document.getElementById(p+'-qris');
+      var ca  = document.getElementById(p+'-cash');
+      if (cnt) { cnt.textContent = count; cnt.classList.toggle('live', count>0); }
+      if (tot) tot.textContent = rp(total);
+      if (itm) itm.textContent = items;
+      if (qr)  qr.disabled  = count===0;
+      if (ca)  ca.disabled  = count===0;
+    });
+
+    setList(document.getElementById('d-list'), document.getElementById('d-empty'), html);
+    setList(document.getElementById('m-list'), document.getElementById('m-empty'), html);
+
+    var fabLbl   = document.getElementById('fab-label');
+    var fabBadge = document.getElementById('fab-badge');
+    if (fabLbl)   fabLbl.textContent   = count>0 ? rp(total) : 'Keranjang';
+    if (fabBadge) { fabBadge.textContent = items; fabBadge.style.display = items>0 ? '' : 'none'; }
+  }
+
+  /* ── Add to cart ─────────────────────────────────────────────────────── */
+  function addToCart(id, nama, jual, beli) {
+    var ex = cart.find(function(i){ return i.id===id; });
+    if (ex) ex.qty++; else cart.push({id:id, nama:nama, jual:+jual, beli:+beli, qty:1});
+    renderAll();
+  }
+
+  /* ── Modal / Sheet ───────────────────────────────────────────────────── */
+  function openModal(id) {
+    var el = document.getElementById('modal-'+id);
+    if (el) el.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeModal(id) {
+    var el = document.getElementById('modal-'+id);
+    if (el) el.classList.remove('open');
+    if (!sheetOpen) document.body.style.overflow = '';
+  }
+  function openSheet() {
+    var se = document.getElementById('cart-sheet'), bd = document.getElementById('sheet-backdrop');
+    if (se) se.classList.add('open');
+    if (bd) bd.classList.add('visible');
+    document.body.style.overflow = 'hidden'; sheetOpen = true;
+  }
+  function closeSheet() {
+    var se = document.getElementById('cart-sheet'), bd = document.getElementById('sheet-backdrop');
+    if (se) se.classList.remove('open');
+    if (bd) bd.classList.remove('visible');
+    document.body.style.overflow = ''; sheetOpen = false;
+  }
+
+  /* ── Checkout ────────────────────────────────────────────────────────── */
+  function doQris() {
+    if (!cart.length) return;
+    closeSheet();
+    _qrisTotal = cart.reduce(function(s,i){ return s+i.jual*i.qty; },0);
+    document.getElementById('qris-total-disp').textContent = rp(_qrisTotal);
+    openModal('qris');
+  }
+  function doCash() {
+    if (!cart.length) return;
+    closeSheet();
+    document.getElementById('cash-disp').textContent = rp(cart.reduce(function(s,i){ return s+i.jual*i.qty; },0));
+    openModal('cash');
+  }
+  async function saveTrx(total, metode, status) {
+    var items = cart.map(function(i){ return {produk_id:i.id,nama_produk:i.nama,harga_jual:i.jual,harga_beli:i.beli,qty:i.qty}; });
+    await api('POST','/api/kasir/transaksi',{total:total,metode_bayar:metode,status:status,items:items});
+  }
+  function showSukses(total, metode) {
+    window.__playSuccess && window.__playSuccess();
+    document.getElementById('sukses-total').textContent  = rp(total);
+    document.getElementById('sukses-metode').textContent = 'Metode: ' + metode;
+    openModal('sukses');
+    cart = []; renderAll(); loadHistory();
+  }
+
+  /* ── History ─────────────────────────────────────────────────────────── */
+  async function loadHistory() {
+    _histLoaded = true;
+    try {
+      var data = await api('GET','/api/kasir/transaksi');
+      var el = document.getElementById('hist-list');
+      if (!el) return;
+      if (!data || !data.length) {
+        el.innerHTML = '<div style="padding:1.5rem;text-align:center;font-size:.69rem;color:#bbb">Belum ada transaksi hari ini</div>';
+      } else {
+        el.innerHTML = data.map(function(trx) {
+          var isQ = trx.metode_bayar==='qris', itms = trx.transaksi_item||[];
+          var summ = itms.slice(0,2).map(function(i){ return esc(i.nama_produk)+'×'+i.qty; }).join(', ');
+          if (itms.length>2) summ += ' +'+(itms.length-2)+' lainnya';
+          return '<div class="hist-row-item"><div class="hri-top">' +
+            '<span class="hri-amt">'+rp(trx.total)+'</span>' +
+            '<div class="hri-meta"><span class="hri-badge '+(isQ?'badge-qris':'badge-cash')+'">'+(isQ?'QRIS':'Cash')+'</span>' +
+            '<span class="hri-time">'+timeStr(trx.created_at)+'</span></div></div>' +
+            (summ?'<div class="hri-prods">'+summ+'</div>':'')+'</div>';
+        }).join('');
+      }
+      var tot = (data||[]).reduce(function(s,t){ return s+t.total; },0);
+      var st  = document.getElementById('stat-today');
+      if (st) st.textContent = rp(tot);
+    } catch(e) {
+      var el2 = document.getElementById('hist-list');
+      if (el2) el2.innerHTML = '<div style="padding:1rem;text-align:center;font-size:.69rem;color:#f87171">Gagal memuat histori</div>';
+    }
+  }
+
+  function clearCart() {
+    if (!cart.length || !confirm('Kosongkan keranjang?')) return;
+    cart = []; renderAll();
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     EVENT LISTENERS
+  ══════════════════════════════════════════════════════════════════════ */
+
+  /* QC Bar */
+  var bar = document.getElementById('qc-bar');
+  if (bar) {
+    var updateFade = function() {
+      var atEnd = bar.scrollLeft + bar.clientWidth >= bar.scrollWidth - 4;
+      var mask = atEnd ? 'none' : 'linear-gradient(to right,black 0%,black 85%,transparent 100%)';
+      bar.style.webkitMaskImage = mask; bar.style.maskImage = mask;
+    };
+    bar.addEventListener('scroll', updateFade, {passive:true}); updateFade();
+    var isDn=false, stX, scL;
+    bar.addEventListener('mousedown', function(e){ isDn=true; stX=e.pageX-bar.offsetLeft; scL=bar.scrollLeft; bar.style.cursor='grabbing'; });
+    document.addEventListener('mouseup', function(){ isDn=false; bar.style.cursor=''; });
+    bar.addEventListener('mousemove', function(e){ if(!isDn) return; e.preventDefault(); bar.scrollLeft=scL-(e.pageX-bar.offsetLeft-stX)*1.2; });
+    bar.addEventListener('click', function(e) {
+      var btn = e.target.closest('.qc-item');
+      if (!btn) return;
+      addToCart(btn.dataset.id, btn.dataset.nama, btn.dataset.jual, btn.dataset.beli);
+      toast('+ ' + btn.dataset.nama);
+    });
+  }
+
+  /* Search */
+  var sp = document.getElementById('s-produk');
+  if (sp) sp.addEventListener('input', function(){ searchQ=this.value; applyFilter(); });
+
+  /* Kategori */
+  var kb = document.getElementById('kat-bar');
+  if (kb) kb.addEventListener('click', function(e) {
+    var btn = e.target.closest('.kat-btn');
+    if (!btn) return;
+    document.querySelectorAll('.kat-btn').forEach(function(b){ b.classList.remove('on'); b.setAttribute('aria-selected','false'); });
+    btn.classList.add('on'); btn.setAttribute('aria-selected','true');
+    activeKat = btn.dataset.kat; applyFilter();
+  });
+
+  /* Produk grid */
+  var pg = document.getElementById('prod-grid');
+  if (pg) {
+    pg.addEventListener('click', function(e) {
+      var c = e.target.closest('.prod-card');
+      if (c) addToCart(c.dataset.id, c.dataset.namaAsli, c.dataset.jual, c.dataset.beli);
+    });
+    pg.addEventListener('keydown', function(e) {
+      if (e.key!=='Enter'&&e.key!==' ') return;
+      var c = e.target.closest('.prod-card');
+      if (c) { e.preventDefault(); addToCart(c.dataset.id, c.dataset.namaAsli, c.dataset.jual, c.dataset.beli); }
+    });
+  }
+
+  /* Clear */
+  var dc = document.getElementById('d-clear'); if (dc) dc.addEventListener('click', clearCart);
+  var mc = document.getElementById('m-clear'); if (mc) mc.addEventListener('click', clearCart);
+
+  /* Mobile sheet */
+  var fab = document.getElementById('cart-fab');       if (fab) fab.addEventListener('click', openSheet);
+  var sc  = document.getElementById('sheet-close');    if (sc)  sc.addEventListener('click', closeSheet);
+  var bd  = document.getElementById('sheet-backdrop'); if (bd)  bd.addEventListener('click', closeSheet);
+  var she = document.getElementById('cart-sheet');
+  if (she) {
+    var sy=0, isd=false;
+    she.addEventListener('touchstart', function(e){ sy=e.touches[0].clientY; isd=true; }, {passive:true});
+    she.addEventListener('touchend',   function(e){ if(isd&&e.changedTouches[0].clientY-sy>80) closeSheet(); isd=false; }, {passive:true});
+  }
+
+  /* QRIS */
+  var dq=document.getElementById('d-qris'); if(dq) dq.addEventListener('click',doQris);
+  var mq=document.getElementById('m-qris'); if(mq) mq.addEventListener('click',doQris);
+  var cq=document.getElementById('close-qris');
+  var cqb=document.getElementById('close-qris-bottom');
+  function hcq(){ closeModal('qris'); _qrisTotal=0; }
+  if(cq)  cq.addEventListener('click',hcq);
+  if(cqb) cqb.addEventListener('click',hcq);
+  var qcb = document.getElementById('qris-confirm-btn');
+  if (qcb) qcb.addEventListener('click', async function() {
+    if (!_qrisTotal) return;
+    this.disabled=true; this.textContent='Menyimpan…';
+    try {
+      await saveTrx(_qrisTotal,'qris','paid');
+      closeModal('qris'); showSukses(_qrisTotal,'QRIS'); _qrisTotal=0;
+    } catch(e) {
+      toast('Gagal: '+e.message,false); this.disabled=false; this.textContent='✓ Konfirmasi Sudah Bayar';
+    }
+  });
+
+  /* Cash */
+  var dca=document.getElementById('d-cash'); if(dca) dca.addEventListener('click',doCash);
+  var mca=document.getElementById('m-cash'); if(mca) mca.addEventListener('click',doCash);
+  var cc=document.getElementById('cash-cancel');   if(cc) cc.addEventListener('click',function(){ closeModal('cash'); });
+  var cf=document.getElementById('cash-confirm');
+  if(cf) cf.addEventListener('click', async function() {
+    var total=cart.reduce(function(s,i){return s+i.jual*i.qty;},0);
+    this.disabled=true; this.textContent='Menyimpan…';
+    try { await saveTrx(total,'cash','paid'); closeModal('cash'); showSukses(total,'Cash'); }
+    catch(e){ toast('Gagal: '+e.message,false); }
+    finally{ this.disabled=false; this.textContent='Konfirmasi Lunas'; }
+  });
+
+  /* Sukses */
+  var cs=document.getElementById('close-sukses');
+  if(cs) cs.addEventListener('click',function(){
+    closeModal('sukses');
+    var s=document.getElementById('s-produk'); if(s) s.focus();
+  });
+
+  /* Histori */
+  var hb=document.getElementById('hist-btn');
+  if(hb) hb.addEventListener('click',function(){
+    var body=document.getElementById('hist-body'), chev=document.getElementById('hist-chev');
+    var open=body.classList.contains('open');
+    body.classList.toggle('open',!open);
+    this.setAttribute('aria-expanded',String(!open));
+    if(chev) chev.classList.toggle('open',!open);
+    if(!open && !_histLoaded) loadHistory();
+  });
+
+  /* ESC */
+  document.addEventListener('keydown', function(e) {
+    if (e.key!=='Escape') return;
+    var lb=document.getElementById('qris-lightbox');
+    if (lb&&lb.classList.contains('open')) lb.classList.remove('open');
+  });
+
+  /* Realtime — update callback ke closure ini yg punya akses ke _histLoaded */
+  initRealtime(SUPABASE_URL, SUPABASE_ANON, function() {
+    if (_histLoaded) loadHistory();
+  });
+
+  /* Render & load images */
+  renderAll();
+  setTimeout(loadImages, 100);
+
+} /* end initKasir */
+
+document.addEventListener('astro:page-load', initKasir);
 </script>
 
 </Layout>

@@ -1,5 +1,5 @@
 ---
-// margin renndah
+// margin-rendah.astro
 export const prerender = false;
 import Layout from "../../layouts/Layout.astro";
 import "../../styles/global.css";
@@ -28,6 +28,9 @@ function margin(beli: number, jual: number) {
   if (!beli) return 0;
   return Math.round(((jual - beli) / beli) * 100);
 }
+
+// Daftar kategori unik dari produk margin rendah
+const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].sort();
 ---
 
 <Layout title="Margin Rendah" active="margin-rendah" nonce={nonce}>
@@ -39,8 +42,6 @@ function margin(beli: number, jual: number) {
             flex items-center justify-between sticky top-0 z-20">
 
   <div class="flex items-center gap-3">
-
-    <!-- Tombol hamburger — hanya mobile, memanggil window.openSidebar() dari Sidebar.astro -->
     <button
       onclick="window.openSidebar && window.openSidebar()"
       class="lg:hidden w-8 h-8 flex items-center justify-center rounded-[4px]
@@ -48,30 +49,46 @@ function margin(beli: number, jual: number) {
       aria-label="Buka menu navigasi"
     >
       <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M4 6h16M4 12h16M4 18h16"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
       </svg>
     </button>
-
     <div>
-      <h1 style="font-family:'DM Serif Display',serif"
-          class="text-[1.25rem] leading-tight text-[#0f0d0b]">
+      <h1 style="font-family:'DM Serif Display',serif" class="text-[1.25rem] leading-tight text-[#0f0d0b]">
         Produk Margin Rendah
       </h1>
       <p class="text-[0.72rem] text-gray-400 hidden sm:block">Margin keuntungan &lt; 10%</p>
     </div>
   </div>
 
-  <div class="flex items-center gap-2.5">
+  <div class="flex items-center gap-2">
     {produk.length > 0 && (
-      <span class="px-2.5 py-1.5 bg-red-50 text-red-700 text-[0.73rem] font-semibold rounded-[4px] border border-red-200 hide-mobile">
+      <span class="px-2.5 py-1.5 bg-red-50 text-red-700 text-[0.73rem] font-semibold rounded-[4px] border border-red-200 hidden sm:inline-block">
         {produk.length} perlu perhatian
       </span>
     )}
-    <a
-      href="/dashboard/produk"
-      class="flex items-center gap-1.5 px-3.5 py-2 border border-black/15 bg-white text-[#0f0d0b] text-[0.78rem] font-medium rounded-[4px] hover:bg-[#f7f3ee] transition-colors"
-    >
+    {produk.length > 0 && (
+      <button type="button" id="btn-bulk"
+        class="flex items-center gap-1.5 px-3.5 py-2 border border-amber-400 bg-amber-50 text-amber-800 text-[0.78rem] font-semibold rounded-[4px] hover:bg-amber-100 transition-colors"
+        aria-haspopup="dialog">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
+        </svg>
+        <span class="hidden sm:inline">Naikan Semua</span>
+      </button>
+    )}
+    {produk.length > 0 && (
+      <button type="button" id="btn-export"
+        class="flex items-center gap-1.5 px-3.5 py-2 border border-black/15 bg-white text-[#0f0d0b] text-[0.78rem] font-medium rounded-[4px] hover:bg-[#f7f3ee] transition-colors"
+        aria-label="Export ke CSV">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        <span class="hidden sm:inline">Export CSV</span>
+      </button>
+    )}
+    <a href="/dashboard/produk"
+      class="flex items-center gap-1.5 px-3.5 py-2 border border-black/15 bg-white text-[#0f0d0b] text-[0.78rem] font-medium rounded-[4px] hover:bg-[#f7f3ee] transition-colors">
       <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
       </svg>
@@ -86,7 +103,7 @@ function margin(beli: number, jual: number) {
   {produk.length === 0 ? (
     <div class="bg-white border border-black/[0.07] rounded-[6px] shadow-sm px-8 py-20 text-center">
       <div class="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4" aria-hidden="true">
-        <svg class="w-7 h-7 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg class="w-7 h-7 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="20 6 9 17 4 12"/>
         </svg>
       </div>
@@ -110,33 +127,55 @@ function margin(beli: number, jual: number) {
       <!-- Tabel -->
       <div class="bg-white border border-black/[0.07] rounded-[6px] shadow-sm overflow-hidden fade-up delay-2">
 
-        <!-- Search bar -->
-        <div class="px-4 py-3 border-b border-black/[0.06] flex items-center gap-3">
-          <svg class="w-4 h-4 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <label for="searchInput" class="sr-only">Cari produk</label>
-          <input
-            id="searchInput" type="search"
-            placeholder="Cari nama produk…" autocomplete="off"
-            class="flex-1 text-[0.875rem] text-[#0f0d0b] bg-transparent outline-none placeholder:text-gray-400"
-          />
-          <span id="count-label" class="text-[0.73rem] text-gray-400 flex-shrink-0" aria-live="polite" aria-atomic="true">
+        <!-- Search + Filter bar -->
+        <div class="px-4 py-3 border-b border-black/[0.06] flex flex-wrap items-center gap-3">
+          <!-- Search -->
+          <div class="flex items-center gap-2 flex-1 min-w-[160px]">
+            <svg class="w-4 h-4 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <label for="searchInput" class="sr-only">Cari produk</label>
+            <input id="searchInput" type="search" placeholder="Cari nama produk…" autocomplete="off"
+              class="flex-1 text-[0.875rem] text-[#0f0d0b] bg-transparent outline-none placeholder:text-gray-400" />
+          </div>
+
+          <!-- Filter kategori -->
+          {kategoriList.length > 1 && (
+            <div class="flex items-center gap-1.5 flex-shrink-0">
+              <label for="filterKat" class="text-[0.72rem] text-gray-400 font-medium">Kategori:</label>
+              <select id="filterKat"
+                class="text-[0.78rem] text-[#0f0d0b] bg-[#f7f3ee] border border-black/15 rounded-[4px] px-2 py-1.5 outline-none focus:border-[#c84b1f] cursor-pointer">
+                <option value="">Semua</option>
+                {kategoriList.map(k => <option value={k}>{k}</option>)}
+              </select>
+            </div>
+          )}
+
+          <span id="count-label" class="text-[0.73rem] text-gray-400 flex-shrink-0 ml-auto"
+                aria-live="polite" aria-atomic="true">
             {produk.length} produk
           </span>
         </div>
 
         <div class="overflow-x-auto">
-          <table class="data-table">
+          <table class="data-table" id="main-table">
             <caption class="sr-only">Produk dengan margin rendah. {produk.length} produk.</caption>
             <thead>
               <tr>
-                <th style="padding-left:1.375rem">Nama Produk</th>
+                <th class="sortable" data-col="nama" style="padding-left:1.375rem;cursor:pointer;user-select:none">
+                  Nama Produk <span class="sort-icon" aria-hidden="true">↕</span>
+                </th>
                 <th class="hide-mobile">Kategori</th>
-                <th class="text-right">Harga Beli</th>
-                <th class="text-right">Harga Jual</th>
+                <th class="sortable text-right" data-col="beli" style="cursor:pointer;user-select:none">
+                  Harga Beli <span class="sort-icon" aria-hidden="true">↕</span>
+                </th>
+                <th class="sortable text-right" data-col="jual" style="cursor:pointer;user-select:none">
+                  Harga Jual <span class="sort-icon" aria-hidden="true">↕</span>
+                </th>
                 <th class="text-right hide-mobile">Untung</th>
-                <th class="text-right">Margin</th>
+                <th class="sortable text-right" data-col="margin" style="cursor:pointer;user-select:none">
+                  Margin <span class="sort-icon" aria-hidden="true">↕</span>
+                </th>
                 <th style="padding-right:1.375rem"><span class="sr-only">Aksi</span></th>
               </tr>
             </thead>
@@ -145,11 +184,13 @@ function margin(beli: number, jual: number) {
                 const m      = margin(p.harga_beli, p.harga_jual);
                 const untung = p.harga_jual - p.harga_beli;
                 return (
-                  <tr
-                    class="data-row"
-                    data-id={p.id}
-                    data-nama={p.nama_produk.toLowerCase()}
-                  >
+                  <tr class="data-row" data-id={p.id}
+                      data-nama={p.nama_produk.toLowerCase()}
+                      data-nama-asli={p.nama_produk}
+                      data-kat={p.kategori}
+                      data-beli={p.harga_beli}
+                      data-jual={p.harga_jual}
+                      data-margin={m}>
                     <td style="padding-left:1.375rem;font-weight:500;color:#0f0d0b">{p.nama_produk}</td>
                     <td class="hide-mobile">
                       <span class="badge-gray inline-block px-2 py-0.5 rounded text-[0.63rem] font-semibold">{p.kategori}</span>
@@ -158,20 +199,14 @@ function margin(beli: number, jual: number) {
                     <td style="text-align:right;font-weight:600;color:#0f0d0b;font-family:monospace;font-size:0.78rem">{rp(p.harga_jual)}</td>
                     <td class="hide-mobile" style="text-align:right;color:#4b5563;font-family:monospace;font-size:0.78rem">{rp(untung)}</td>
                     <td style="text-align:right">
-                      <span class="badge-red inline-block px-2 py-0.5 rounded text-[0.65rem] font-bold">{m}%</span>
+                      <span class={`inline-block px-2 py-0.5 rounded text-[0.65rem] font-bold ${m <= 0 ? 'bg-red-100 text-red-700' : 'badge-red'}`}>{m}%</span>
                     </td>
                     <td style="padding-right:1.375rem">
-                      <button
-                        type="button"
-                        class="edit-btn flex items-center gap-1 px-3 py-1.5 text-[0.72rem] font-medium text-[#c84b1f] border border-[#c84b1f]/30 hover:bg-[#fff5f2] rounded-[4px] transition-colors whitespace-nowrap"
-                        data-id={p.id}
-                        data-nama={p.nama_produk}
-                        data-beli={p.harga_beli}
-                        data-jual={p.harga_jual}
+                      <button type="button" class="edit-btn flex items-center gap-1 px-3 py-1.5 text-[0.72rem] font-medium text-[#c84b1f] border border-[#c84b1f]/30 hover:bg-[#fff5f2] rounded-[4px] transition-colors whitespace-nowrap"
+                        data-id={p.id} data-nama={p.nama_produk}
+                        data-beli={p.harga_beli} data-jual={p.harga_jual}
                         data-kat={p.kategori}
-                        aria-label={`Edit harga ${p.nama_produk}`}
-                        aria-haspopup="dialog"
-                      >
+                        aria-label={`Edit harga ${p.nama_produk}`} aria-haspopup="dialog">
                         <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -194,7 +229,7 @@ function margin(beli: number, jual: number) {
   )}
 </main>
 
-<!-- ── Modal Edit Harga ────────────────────────────────────────────────────── -->
+<!-- ── Modal Edit Harga (satu produk) ─────────────────────────────────────── -->
 <div id="modal-edit" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-edit-title">
   <div class="modal-box">
     <div class="px-6 py-5 border-b border-black/[0.07] flex items-center justify-between">
@@ -237,6 +272,77 @@ function margin(beli: number, jual: number) {
   </div>
 </div>
 
+<!-- ── Modal Bulk Edit ─────────────────────────────────────────────────────── -->
+<div id="modal-bulk" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-bulk-title">
+  <div class="modal-box" style="max-width:420px">
+    <div class="px-6 py-5 border-b border-black/[0.07] flex items-center justify-between">
+      <h2 class="font-semibold text-[0.95rem] text-[#0f0d0b]" id="modal-bulk-title">Naikan Harga Massal</h2>
+      <button type="button" class="btn-bulk-close text-gray-400 hover:text-gray-700 p-1 rounded cursor-pointer transition-colors" aria-label="Tutup">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="px-6 py-5 space-y-4">
+      <!-- Scope -->
+      <div>
+        <label class="block text-[0.72rem] font-semibold text-[#3d3530] uppercase tracking-wider mb-1.5">Target</label>
+        <div class="flex gap-2">
+          <label class="flex items-center gap-1.5 text-[0.8rem] cursor-pointer">
+            <input type="radio" name="bulk-scope" value="all" checked style="accent-color:#c84b1f" />
+            Semua ({produk.length})
+          </label>
+          {kategoriList.length > 1 && (
+            <label class="flex items-center gap-1.5 text-[0.8rem] cursor-pointer">
+              <input type="radio" name="bulk-scope" value="visible" style="accent-color:#c84b1f" />
+              Terfilter
+            </label>
+          )}
+        </div>
+      </div>
+      <!-- Tipe -->
+      <div>
+        <label class="block text-[0.72rem] font-semibold text-[#3d3530] uppercase tracking-wider mb-1.5">Tipe Kenaikan</label>
+        <select id="bulk-type"
+          class="w-full text-[0.8rem] text-[#0f0d0b] bg-[#f7f3ee] border border-black/15 rounded-[4px] px-3 py-2 outline-none focus:border-[#c84b1f] cursor-pointer">
+          <option value="pct">Persentase (% dari harga jual)</option>
+          <option value="rp">Nominal tetap (Rp)</option>
+          <option value="target-margin">Target margin (%)</option>
+        </select>
+      </div>
+      <!-- Nilai -->
+      <div>
+        <label for="bulk-val" class="block text-[0.72rem] font-semibold text-[#3d3530] uppercase tracking-wider mb-1.5">
+          Nilai <span id="bulk-val-unit" class="font-normal text-gray-400 normal-case tracking-normal">(%)</span>
+        </label>
+        <input id="bulk-val" type="number" placeholder="cth: 10" min="0" max="999"
+          class="w-full px-3 py-2.5 bg-[#f7f3ee] border-[1.5px] border-black/15 rounded-[4px] text-[0.875rem] text-[#0f0d0b] outline-none focus:border-[#c84b1f] focus:bg-white transition-all font-mono" />
+      </div>
+      <!-- Preview -->
+      <div id="bulk-preview" class="hidden px-3 py-2.5 bg-[#f7f3ee] rounded-[4px] text-[0.75rem] text-gray-600 space-y-1"
+           aria-live="polite" aria-atomic="true"></div>
+      <!-- Warning -->
+      <div class="px-3 py-2 bg-red-50 border border-red-200 rounded-[4px] flex items-start gap-2 text-[0.75rem] text-red-700">
+        <svg class="w-3.5 h-3.5 mt-0.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        Aksi ini akan mengupdate harga di database. Tidak dapat diundo.
+      </div>
+    </div>
+    <div class="px-6 py-4 border-t border-black/[0.06] flex items-center justify-end gap-2">
+      <button type="button" class="btn-bulk-close px-4 py-2 text-[0.8rem] text-gray-600 hover:text-gray-800 cursor-pointer rounded transition-colors">Batal</button>
+      <button type="button" id="btn-bulk-ok"
+        class="flex items-center gap-1.5 px-5 py-2 bg-[#c84b1f] hover:bg-[#a33c18] text-white text-[0.8rem] font-semibold rounded-[4px] transition-colors cursor-pointer">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+        </svg>
+        Terapkan
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Toast ──────────────────────────────────────────────────────────────── -->
 <div id="toast"
      class="px-4 py-3 bg-[#0f0d0b] text-white text-[0.8rem] font-medium shadow-lg items-center gap-2"
@@ -250,75 +356,30 @@ function margin(beli: number, jual: number) {
 <script is:inline nonce={nonce} define:vars={{ produk }}>
 'use strict';
 
-// ── Search ────────────────────────────────────────────────────────────────────
-var _rows = null;
-function rows() { return _rows || (_rows = Array.from(document.querySelectorAll('#tbody tr.data-row'))); }
-var activeQ = '';
-function applyFilter() {
-  var q = activeQ.toLowerCase(), vis = 0;
-  rows().forEach(function(r) {
-    var show = !q || r.dataset.nama.indexOf(q) !== -1;
-    r.classList.toggle('hidden-row', !show);
-    if (show) vis++;
-  });
-  var lbl = document.getElementById('count-label');
-  if (lbl) lbl.textContent = vis + ' produk';
-  var noRes = document.getElementById('no-results');
-  if (noRes) noRes.classList.toggle('hidden', vis > 0 || rows().length === 0);
+/* ══════════════════════════════════════════════════════════════════════════
+   HELPERS (di luar init — tidak memerlukan DOM)
+══════════════════════════════════════════════════════════════════════════ */
+function rpFmt(n) {
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n);
 }
-var si = document.getElementById('searchInput');
-if (si) si.addEventListener('input', function() { activeQ = this.value; applyFilter(); });
-
-// ── Modal ─────────────────────────────────────────────────────────────────────
-var prevFocus = null;
-var FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select,[tabindex]:not([tabindex="-1"])';
-function trapFocus(el) {
-  var els = Array.from(el.querySelectorAll(FOCUSABLE));
-  if (!els.length) return;
-  el._trap = function(e) {
-    if (e.key !== 'Tab') return;
-    var f = els[0], l = els[els.length - 1];
-    if (e.shiftKey) { if (document.activeElement === f) { e.preventDefault(); l.focus(); } }
-    else            { if (document.activeElement === l) { e.preventDefault(); f.focus(); } }
-  };
-  el.addEventListener('keydown', el._trap);
-  setTimeout(function() { els[0].focus(); }, 40);
-}
-function openModal() {
-  prevFocus = document.activeElement;
-  var m = document.getElementById('modal-edit');
-  m.classList.add('open');
-  document.body.style.overflow = 'hidden';
-  trapFocus(m);
-}
-function closeModal() {
-  var m = document.getElementById('modal-edit');
-  m.classList.remove('open');
-  document.body.style.overflow = '';
-  if (m._trap) { m.removeEventListener('keydown', m._trap); m._trap = null; }
-  if (prevFocus) { prevFocus.focus(); prevFocus = null; }
-}
-document.querySelectorAll('.btn-close').forEach(function(b) { b.addEventListener('click', closeModal); });
-document.getElementById('modal-edit').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') { var m = document.getElementById('modal-edit'); if (m && m.classList.contains('open')) closeModal(); }
-});
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
-var toastTimer;
+var _toastTimer;
 function toast(msg, ok) {
-  var t = document.getElementById('toast'), icon = document.getElementById('toast-icon');
+  var t = document.getElementById('toast');
+  var icon = document.getElementById('toast-icon');
+  if (!t || !icon) return;
   document.getElementById('toast-msg').textContent = msg;
   icon.style.color = ok === false ? '#f87171' : '#4ade80';
-  icon.innerHTML   = ok === false
+  icon.innerHTML = ok === false
     ? '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
     : '<polyline points="20 6 9 17 4 12"/>';
   t.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(function() { t.classList.remove('show'); }, 3500);
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function () { t.classList.remove('show'); }, 3500);
 }
 
-// ── API helper ────────────────────────────────────────────────────────────────
+// ── API ───────────────────────────────────────────────────────────────────────
 async function api(method, path, body) {
   var r = await fetch(path, {
     method: method,
@@ -326,66 +387,352 @@ async function api(method, path, body) {
     body: body !== undefined ? JSON.stringify(body) : undefined,
     credentials: 'same-origin'
   });
-  var d = await r.json().catch(function() { return {}; });
+  var d = await r.json().catch(function () { return {}; });
   if (!r.ok) throw new Error(d.error || r.statusText);
   return d;
 }
 
-// ── Preview margin ────────────────────────────────────────────────────────────
-var fBeli  = document.getElementById('f-beli');
-var fJual  = document.getElementById('f-jual');
-var mPrev  = document.getElementById('margin-preview');
-function updMargin() {
-  var b = parseInt(fBeli.value) || 0, j = parseInt(fJual.value) || 0;
-  if (b > 0 && j > 0) {
-    var pct = Math.round(((j - b) / b) * 100);
-    mPrev.textContent = 'Untung: Rp ' + (j - b).toLocaleString('id-ID') + ' (' + pct + '%)';
-    mPrev.style.color = pct < 10 ? '#7f1d1d' : pct < 20 ? '#713f12' : '#14532d';
-    mPrev.classList.remove('hidden');
-  } else {
-    mPrev.classList.add('hidden');
-  }
-}
-fBeli.addEventListener('input', updMargin);
-fJual.addEventListener('input', updMargin);
+/* ══════════════════════════════════════════════════════════════════════════
+   INIT — dipanggil tiap page-load agar berfungsi setelah ViewTransitions
+══════════════════════════════════════════════════════════════════════════ */
+function initMarginRendah() {
 
-// ── Edit ──────────────────────────────────────────────────────────────────────
-document.querySelectorAll('.edit-btn').forEach(function(btn) {
-  btn.addEventListener('click', function() {
-    document.getElementById('edit-id').value = this.dataset.id;
-    document.getElementById('edit-nama-display').textContent = this.dataset.nama;
-    fBeli.value = this.dataset.beli;
-    fJual.value = this.dataset.jual;
-    updMargin();
-    openModal();
+  // ── State ───────────────────────────────────────────────────────────────────
+  var activeQ    = '';
+  var activeKat  = '';
+  var sortCol    = '';
+  var sortDir    = 1; // 1 = asc, -1 = desc
+  var prevFocus  = null;
+
+  var FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select,[tabindex]:not([tabindex="-1"])';
+
+  // ── Modal helpers ───────────────────────────────────────────────────────────
+  function trapFocus(el) {
+    var els = Array.from(el.querySelectorAll(FOCUSABLE));
+    if (!els.length) return;
+    el._trap = function (e) {
+      if (e.key !== 'Tab') return;
+      var f = els[0], l = els[els.length - 1];
+      if (e.shiftKey) { if (document.activeElement === f) { e.preventDefault(); l.focus(); } }
+      else            { if (document.activeElement === l) { e.preventDefault(); f.focus(); } }
+    };
+    el.addEventListener('keydown', el._trap);
+    setTimeout(function () { els[0].focus(); }, 40);
+  }
+  function openModal(id) {
+    prevFocus = document.activeElement;
+    var m = document.getElementById(id);
+    if (!m) return;
+    m.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    trapFocus(m);
+  }
+  function closeModal(id) {
+    var m = document.getElementById(id);
+    if (!m) return;
+    m.classList.remove('open');
+    document.body.style.overflow = '';
+    if (m._trap) { m.removeEventListener('keydown', m._trap); m._trap = null; }
+    if (prevFocus) { prevFocus.focus(); prevFocus = null; }
+  }
+
+  // Close buttons - modal edit
+  document.querySelectorAll('.btn-close').forEach(function (b) {
+    b.addEventListener('click', function () { closeModal('modal-edit'); });
   });
-});
+  var mEdit = document.getElementById('modal-edit');
+  if (mEdit) mEdit.addEventListener('click', function (e) { if (e.target === this) closeModal('modal-edit'); });
 
-document.getElementById('btn-simpan').addEventListener('click', async function() {
-  var id   = document.getElementById('edit-id').value;
-  var beli = parseInt(fBeli.value) || 0;
-  var jual = parseInt(fJual.value) || 0;
-  if (jual <= 0) { toast('Harga jual harus > 0', false); fJual.focus(); return; }
-  this.disabled = true;
-  this.setAttribute('aria-busy', 'true');
-  this.textContent = 'Menyimpan…';
-  try {
-    await api('PATCH', '/api/produk/produk?id=' + encodeURIComponent(id), { harga_beli: beli, harga_jual: jual });
-    toast('Harga berhasil diupdate');
-    closeModal();
-    _rows = null;
-    setTimeout(function() { location.reload(); }, 500);
-  } catch (e) {
-    toast('Error: ' + e.message, false);
-    this.disabled = false;
-    this.removeAttribute('aria-busy');
-    this.textContent = 'Simpan';
+  // Close buttons - modal bulk
+  document.querySelectorAll('.btn-bulk-close').forEach(function (b) {
+    b.addEventListener('click', function () { closeModal('modal-bulk'); });
+  });
+  var mBulk = document.getElementById('modal-bulk');
+  if (mBulk) mBulk.addEventListener('click', function (e) { if (e.target === this) closeModal('modal-bulk'); });
+
+  // ESC key
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (mEdit && mEdit.classList.contains('open'))  closeModal('modal-edit');
+    if (mBulk && mBulk.classList.contains('open')) closeModal('modal-bulk');
+  });
+
+  // ── Filter & Sort ────────────────────────────────────────────────────────────
+  function getRows() {
+    return Array.from(document.querySelectorAll('#tbody tr.data-row'));
   }
-});
 
-fJual.addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-simpan').click(); }
-});
+  function applyFilterSort() {
+    var allRows = getRows();
+    var q = activeQ.toLowerCase();
+
+    // Filter
+    var visible = allRows.filter(function (r) {
+      var matchQ   = !q   || r.dataset.nama.indexOf(q) !== -1;
+      var matchKat = !activeKat || r.dataset.kat === activeKat;
+      return matchQ && matchKat;
+    });
+    allRows.forEach(function (r) { r.classList.add('hidden-row'); });
+    visible.forEach(function (r) { r.classList.remove('hidden-row'); });
+
+    // Sort (on visible only — re-insert sorted rows in tbody)
+    if (sortCol) {
+      visible.sort(function (a, b) {
+        var va, vb;
+        if (sortCol === 'nama')   { va = a.dataset.nama;   vb = b.dataset.nama;   return va < vb ? -sortDir : va > vb ? sortDir : 0; }
+        if (sortCol === 'beli')   { va = +a.dataset.beli;  vb = +b.dataset.beli;  return (va - vb) * sortDir; }
+        if (sortCol === 'jual')   { va = +a.dataset.jual;  vb = +b.dataset.jual;  return (va - vb) * sortDir; }
+        if (sortCol === 'margin') { va = +a.dataset.margin; vb = +b.dataset.margin; return (va - vb) * sortDir; }
+        return 0;
+      });
+      var tbody = document.getElementById('tbody');
+      visible.forEach(function (r) { tbody.appendChild(r); });
+    }
+
+    // Count label
+    var lbl = document.getElementById('count-label');
+    if (lbl) lbl.textContent = visible.length + ' produk';
+
+    // No results
+    var noRes = document.getElementById('no-results');
+    if (noRes) noRes.classList.toggle('hidden', visible.length > 0 || allRows.length === 0);
+
+    // Update sort icons
+    document.querySelectorAll('.sortable').forEach(function (th) {
+      var ic = th.querySelector('.sort-icon');
+      if (!ic) return;
+      if (th.dataset.col === sortCol) {
+        ic.textContent = sortDir === 1 ? '↑' : '↓';
+        th.style.color = '#c84b1f';
+      } else {
+        ic.textContent = '↕';
+        th.style.color = '';
+      }
+    });
+  }
+
+  // Search
+  var si = document.getElementById('searchInput');
+  if (si) si.addEventListener('input', function () { activeQ = this.value; applyFilterSort(); });
+
+  // Filter kategori
+  var fk = document.getElementById('filterKat');
+  if (fk) fk.addEventListener('change', function () { activeKat = this.value; applyFilterSort(); });
+
+  // Sort headers
+  document.querySelectorAll('.sortable').forEach(function (th) {
+    th.addEventListener('click', function () {
+      if (sortCol === this.dataset.col) { sortDir *= -1; }
+      else { sortCol = this.dataset.col; sortDir = 1; }
+      applyFilterSort();
+    });
+  });
+
+  // ── Export CSV ───────────────────────────────────────────────────────────────
+  var btnExport = document.getElementById('btn-export');
+  if (btnExport) btnExport.addEventListener('click', function () {
+    var rows = getRows().filter(function (r) { return !r.classList.contains('hidden-row'); });
+    if (!rows.length) { toast('Tidak ada data untuk diekspor', false); return; }
+
+    var header = ['Nama Produk', 'Kategori', 'Harga Beli', 'Harga Jual', 'Untung', 'Margin (%)'];
+    var lines  = [header.join(',')];
+    rows.forEach(function (r) {
+      var beli   = +r.dataset.beli;
+      var jual   = +r.dataset.jual;
+      var untung = jual - beli;
+      var mgn    = +r.dataset.margin;
+      lines.push([
+        '"' + (r.dataset.namaAsli || r.dataset.nama).replace(/"/g, '""') + '"',
+        '"' + (r.dataset.kat || '') + '"',
+        beli, jual, untung, mgn
+      ].join(','));
+    });
+
+    var blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href   = url;
+    a.download = 'margin-rendah-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('CSV berhasil diexport (' + rows.length + ' produk)');
+  });
+
+  // ── Edit satu produk ─────────────────────────────────────────────────────────
+  var fBeli  = document.getElementById('f-beli');
+  var fJual  = document.getElementById('f-jual');
+  var mPrev  = document.getElementById('margin-preview');
+
+  function updMargin() {
+    if (!fBeli || !fJual || !mPrev) return;
+    var b = parseInt(fBeli.value) || 0, j = parseInt(fJual.value) || 0;
+    if (b > 0 && j > 0) {
+      var pct = Math.round(((j - b) / b) * 100);
+      mPrev.textContent = 'Untung: Rp ' + (j - b).toLocaleString('id-ID') + ' (' + pct + '%)';
+      mPrev.style.color = pct < 10 ? '#7f1d1d' : pct < 20 ? '#713f12' : '#14532d';
+      mPrev.classList.remove('hidden');
+    } else {
+      mPrev.classList.add('hidden');
+    }
+  }
+  if (fBeli) fBeli.addEventListener('input', updMargin);
+  if (fJual) fJual.addEventListener('input', updMargin);
+
+  document.querySelectorAll('.edit-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.getElementById('edit-id').value = this.dataset.id;
+      document.getElementById('edit-nama-display').textContent = this.dataset.nama;
+      fBeli.value = this.dataset.beli;
+      fJual.value = this.dataset.jual;
+      updMargin();
+      openModal('modal-edit');
+    });
+  });
+
+  var btnSimpan = document.getElementById('btn-simpan');
+  if (btnSimpan) btnSimpan.addEventListener('click', async function () {
+    var id   = document.getElementById('edit-id').value;
+    var beli = parseInt(fBeli.value) || 0;
+    var jual = parseInt(fJual.value) || 0;
+    if (jual <= 0) { toast('Harga jual harus > 0', false); fJual.focus(); return; }
+    this.disabled = true;
+    this.setAttribute('aria-busy', 'true');
+    this.textContent = 'Menyimpan…';
+    try {
+      await api('PATCH', '/api/produk/produk?id=' + encodeURIComponent(id), { harga_beli: beli, harga_jual: jual });
+      toast('Harga berhasil diupdate');
+      closeModal('modal-edit');
+      setTimeout(function () { location.reload(); }, 500);
+    } catch (e) {
+      toast('Error: ' + e.message, false);
+      this.disabled = false;
+      this.removeAttribute('aria-busy');
+      this.textContent = 'Simpan';
+    }
+  });
+
+  if (fJual) fJual.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); if (btnSimpan) btnSimpan.click(); }
+  });
+
+  // ── Bulk Edit ────────────────────────────────────────────────────────────────
+  var btnBulk = document.getElementById('btn-bulk');
+  if (btnBulk) btnBulk.addEventListener('click', function () {
+    // Reset form
+    var bv = document.getElementById('bulk-val');
+    if (bv) bv.value = '';
+    var bp = document.getElementById('bulk-preview');
+    if (bp) bp.classList.add('hidden');
+    openModal('modal-bulk');
+  });
+
+  function updBulkUnit() {
+    var t = document.getElementById('bulk-type');
+    var u = document.getElementById('bulk-val-unit');
+    if (!t || !u) return;
+    var map = { pct: '(%)', rp: '(Rp)', 'target-margin': '(% target margin)' };
+    u.textContent = map[t.value] || '';
+    updBulkPreview();
+  }
+
+  function getTargetRows() {
+    var scopeEl = document.querySelector('[name="bulk-scope"]:checked');
+    var scope   = scopeEl ? scopeEl.value : 'all';
+    return getRows().filter(function (r) {
+      if (scope === 'visible') return !r.classList.contains('hidden-row');
+      return true;
+    });
+  }
+
+  function calcNewJual(row, type, val) {
+    var beli = +row.dataset.beli;
+    var jual = +row.dataset.jual;
+    if (type === 'pct')           return Math.round(jual * (1 + val / 100));
+    if (type === 'rp')            return jual + val;
+    if (type === 'target-margin') return beli > 0 ? Math.round(beli * (1 + val / 100)) : jual;
+    return jual;
+  }
+
+  function updBulkPreview() {
+    var bp  = document.getElementById('bulk-preview');
+    var bv  = document.getElementById('bulk-val');
+    var bt  = document.getElementById('bulk-type');
+    if (!bp || !bv || !bt) return;
+    var val = parseFloat(bv.value);
+    if (!val || val <= 0) { bp.classList.add('hidden'); return; }
+    var type = bt.value;
+    var rows = getTargetRows();
+    if (!rows.length) { bp.classList.add('hidden'); return; }
+
+    // Show 3 sample rows
+    var samples = rows.slice(0, 3);
+    var html = '<div style="font-weight:600;color:#374151;margin-bottom:.25rem">Preview (' + rows.length + ' produk):</div>';
+    samples.forEach(function (r) {
+      var newJual = calcNewJual(r, type, val);
+      var newM    = +r.dataset.beli > 0 ? Math.round(((newJual - +r.dataset.beli) / +r.dataset.beli) * 100) : 0;
+      var color   = newM >= 10 ? '#15803d' : '#dc2626';
+      html += '<div style="display:flex;justify-content:space-between;gap:.5rem;margin-top:.2rem">'
+        + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (r.dataset.namaAsli || r.dataset.nama) + '</span>'
+        + '<span style="flex-shrink:0;font-weight:600">'
+          + rpFmt(+r.dataset.jual) + ' → <span style="color:' + color + '">' + rpFmt(newJual) + ' (' + newM + '%)</span>'
+        + '</span>'
+      + '</div>';
+    });
+    if (rows.length > 3) html += '<div style="color:#9ca3af;font-size:.7rem;margin-top:.3rem">…dan ' + (rows.length - 3) + ' produk lainnya</div>';
+    bp.innerHTML = html;
+    bp.classList.remove('hidden');
+  }
+
+  var bulkType = document.getElementById('bulk-type');
+  var bulkVal  = document.getElementById('bulk-val');
+  if (bulkType) bulkType.addEventListener('change', updBulkUnit);
+  if (bulkVal)  bulkVal.addEventListener('input',  updBulkPreview);
+  document.querySelectorAll('[name="bulk-scope"]').forEach(function (r) {
+    r.addEventListener('change', updBulkPreview);
+  });
+
+  var btnBulkOk = document.getElementById('btn-bulk-ok');
+  if (btnBulkOk) btnBulkOk.addEventListener('click', async function () {
+    var val  = parseFloat(document.getElementById('bulk-val').value);
+    var type = document.getElementById('bulk-type').value;
+    if (!val || val <= 0) { toast('Masukkan nilai yang valid', false); return; }
+
+    var rows = getTargetRows();
+    if (!rows.length) { toast('Tidak ada produk untuk diupdate', false); return; }
+
+    this.disabled = true;
+    this.textContent = 'Menerapkan…';
+
+    try {
+      var updates = rows.map(function (r) {
+        return {
+          id:        r.dataset.id,
+          harga_jual: calcNewJual(r, type, val)
+        };
+      });
+
+      // Batch: kirim satu per satu (pakai PATCH individual, sama seperti produk.astro)
+      var ok = 0;
+      for (var i = 0; i < updates.length; i++) {
+        await api('PATCH', '/api/produk/produk?id=' + encodeURIComponent(updates[i].id), { harga_jual: updates[i].harga_jual });
+        ok++;
+      }
+      toast(ok + ' harga berhasil diupdate');
+      closeModal('modal-bulk');
+      setTimeout(function () { location.reload(); }, 600);
+    } catch (e) {
+      toast('Gagal: ' + e.message, false);
+      this.disabled = false;
+      this.textContent = 'Terapkan';
+    }
+  });
+
+} // end initMarginRendah
+
+/* Jalankan saat load pertama DAN setiap navigasi ViewTransitions */
+document.addEventListener('astro:page-load', initMarginRendah);
 </script>
 
 </Layout>

@@ -690,181 +690,174 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
 </div>
 
 <!-- ── Script Modal Hapus Histori ─────────────────────────────────────────── -->
-<script is:inline nonce={nonce} define:vars={{ days7, maxOmset7 }}>
+<script is:inline nonce={nonce}>
 (function () {
   "use strict";
 
-  var modal      = document.getElementById("modalHapus");
-  var btnBuka    = document.getElementById("btnHapusHistori");
-  var btnTutup   = document.getElementById("modalHapusClose");
-  var btnBatal   = document.getElementById("hapusCancelBtn");
-  var btnKonfirm = document.getElementById("hapusKonfirmasiBtn");
-  var spinner    = document.getElementById("hapusSpinner");
-  var btnLabel   = document.getElementById("hapusBtnLabel");
-  var warnText   = document.getElementById("hapusWarningText");
-  var toast      = document.getElementById("toastNotif");
-  var toastTxt   = document.getElementById("toastText");
-  var toastIco   = document.getElementById("toastIcon");
+  /* ══════════════════════════════════════════════════════════════════
+     INIT — semua addEventListener dipasang di sini, dipanggil tiap
+     page-load agar berfungsi setelah navigasi ViewTransitions
+  ══════════════════════════════════════════════════════════════════ */
+  function initDashboard() {
+    var modal      = document.getElementById("modalHapus");
+    var btnBuka    = document.getElementById("btnHapusHistori");
+    var btnTutup   = document.getElementById("modalHapusClose");
+    var btnBatal   = document.getElementById("hapusCancelBtn");
+    var btnKonfirm = document.getElementById("hapusKonfirmasiBtn");
+    var spinner    = document.getElementById("hapusSpinner");
+    var btnLabel   = document.getElementById("hapusBtnLabel");
+    var warnText   = document.getElementById("hapusWarningText");
+    var toast      = document.getElementById("toastNotif");
+    var toastTxt   = document.getElementById("toastText");
+    var toastIco   = document.getElementById("toastIcon");
 
-  if (!modal || !btnBuka) return;
+    if (!modal || !btnBuka) return;
 
-  // ── Warning messages ─────────────────────────────────────────────
-  var WARN = {
-    transaksi: {
-      hari_ini:  "Histori transaksi hari ini akan dihapus permanen, termasuk seluruh item transaksi terkait.",
-      "7_hari":  "Histori transaksi 7 hari terakhir akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.",
-      "30_hari": "Histori transaksi 30 hari terakhir akan dihapus permanen. Pastikan data sudah dicatat sebelum melanjutkan.",
-      semua:     "⚠️ SELURUH histori transaksi akan dihapus permanen. Data tidak dapat dipulihkan sama sekali!",
-    },
-    harga_log: {
-      hari_ini:  "Log perubahan harga hari ini akan dihapus permanen.",
-      "7_hari":  "Log perubahan harga 7 hari terakhir akan dihapus permanen.",
-      "30_hari": "Log perubahan harga 30 hari terakhir akan dihapus permanen.",
-      semua:     "⚠️ SELURUH log perubahan harga akan dihapus permanen. Riwayat harga tidak dapat dipulihkan!",
-    },
-  };
+    // ── Warning messages ───────────────────────────────────────────
+    var WARN = {
+      transaksi: {
+        hari_ini:  "Histori transaksi hari ini akan dihapus permanen, termasuk seluruh item transaksi terkait.",
+        "7_hari":  "Histori transaksi 7 hari terakhir akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.",
+        "30_hari": "Histori transaksi 30 hari terakhir akan dihapus permanen. Pastikan data sudah dicatat sebelum melanjutkan.",
+        semua:     "⚠️ SELURUH histori transaksi akan dihapus permanen. Data tidak dapat dipulihkan sama sekali!",
+      },
+      harga_log: {
+        hari_ini:  "Log perubahan harga hari ini akan dihapus permanen.",
+        "7_hari":  "Log perubahan harga 7 hari terakhir akan dihapus permanen.",
+        "30_hari": "Log perubahan harga 30 hari terakhir akan dihapus permanen.",
+        semua:     "⚠️ SELURUH log perubahan harga akan dihapus permanen. Riwayat harga tidak dapat dipulihkan!",
+      },
+    };
 
-  function getSelected(name) {
-    var el = document.querySelector('[name="' + name + '"]:checked');
-    return el ? el.value : null;
-  }
-
-  function updateWarning() {
-    var type  = getSelected("hapusType")  || "transaksi";
-    var range = getSelected("hapusRange") || "hari_ini";
-    if (warnText && WARN[type] && WARN[type][range]) {
-      warnText.textContent = WARN[type][range];
-      // Lebih merah dan bold jika "semua"
-      warnText.style.fontWeight = range === "semua" ? "700" : "400";
-    }
-  }
-
-  // Update border radio saat berubah
-  function syncRadioStyles() {
-    document.querySelectorAll('[name="hapusType"]').forEach(function (radio) {
-      var lbl = radio.closest("label");
-      if (!lbl) return;
-      lbl.style.borderColor   = radio.checked ? "#c84b1f" : "#e5e7eb";
-      lbl.style.background    = radio.checked ? "#fdf6f3" : "#fff";
-    });
-    document.querySelectorAll('[name="hapusRange"]').forEach(function (radio) {
-      var lbl = radio.closest("label");
-      if (!lbl) return;
-      lbl.style.borderColor   = radio.checked ? "#c84b1f" : "#e5e7eb";
-      lbl.style.background    = radio.checked ? "#fdf6f3" : "#fff";
-    });
-    updateWarning();
-  }
-
-  // ── Toast helper ─────────────────────────────────────────────────
-  var toastTimer = null;
-  function showToast(msg, ok) {
-    if (!toast || !toastTxt || !toastIco) return;
-    toastTxt.textContent  = msg;
-    toastIco.textContent  = ok ? "✓" : "✕";
-    toast.style.background = ok ? "#0f0d0b" : "#dc2626";
-    toast.style.color      = "#fff";
-    toast.style.display    = "flex";
-    // Force reflow agar transisi berjalan
-    toast.offsetHeight; // eslint-disable-line
-    toast.style.opacity    = "1";
-    toast.style.pointerEvents = "auto";
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () {
-      toast.style.opacity = "0";
-      toast.style.pointerEvents = "none";
-      setTimeout(function () { toast.style.display = "none"; }, 220);
-    }, 3500);
-  }
-
-  // ── Buka / tutup modal ───────────────────────────────────────────
-  function bukaModal() {
-    modal.style.display = "block";
-    syncRadioStyles();
-    document.addEventListener("keydown", onEsc);
-    // Focus ke tombol batal untuk aksesibilitas
-    setTimeout(function () { if (btnBatal) btnBatal.focus(); }, 50);
-  }
-
-  function tutupModal() {
-    modal.style.display = "none";
-    document.removeEventListener("keydown", onEsc);
-  }
-
-  function onEsc(e) {
-    if (e.key === "Escape") tutupModal();
-  }
-
-  btnBuka.addEventListener("click",  bukaModal);
-  btnTutup.addEventListener("click", tutupModal);
-  btnBatal.addEventListener("click", tutupModal);
-
-  // Tutup modal saat klik backdrop
-  modal.addEventListener("click", function (e) {
-    if (e.target === modal) tutupModal();
-  });
-
-  // Sync radio
-  document.querySelectorAll('[name="hapusType"],[name="hapusRange"]').forEach(function (el) {
-    el.addEventListener("change", syncRadioStyles);
-  });
-
-  // ── Eksekusi hapus ───────────────────────────────────────────────
-  btnKonfirm.addEventListener("click", function () {
-    var type  = getSelected("hapusType");
-    var range = getSelected("hapusRange");
-
-    if (!type || !range) return;
-
-    // Konfirmasi ekstra untuk "semua"
-    if (range === "semua") {
-      var label = type === "transaksi" ? "SELURUH histori transaksi" : "SELURUH log perubahan harga";
-      if (!window.confirm("⚠️ Yakin ingin menghapus " + label + "?\n\nData tidak dapat dipulihkan!")) return;
+    function getSelected(name) {
+      var el = document.querySelector('[name="' + name + '"]:checked');
+      return el ? el.value : null;
     }
 
-    // Loading state
-    btnKonfirm.disabled      = true;
-    btnBatal.disabled        = true;
-    spinner.style.display    = "block";
-    btnLabel.textContent     = "Menghapus...";
+    function updateWarning() {
+      var type  = getSelected("hapusType")  || "transaksi";
+      var range = getSelected("hapusRange") || "hari_ini";
+      if (warnText && WARN[type] && WARN[type][range]) {
+        warnText.textContent  = WARN[type][range];
+        warnText.style.fontWeight = range === "semua" ? "700" : "400";
+      }
+    }
 
-    /*
-     * Gunakan fetch DELETE dengan credentials: "same-origin"
-     * agar cookie dikirim dan CSRF middleware tidak memblokir.
-     * Content-Type: application/json wajib — middleware validasi CT.
-     */
-    fetch("/api/admin/hapus-histori", {
-      method:      "DELETE",
-      credentials: "same-origin",
-      headers:     { "Content-Type": "application/json" },
-      body:        JSON.stringify({ type: type, range: range }),
-    })
-    .then(function (res) {
-      return res.json().then(function (data) {
-        if (res.ok && data.ok) {
-          tutupModal();
-          var deleted = data.deleted || 0;
-          var typeLabel = type === "transaksi" ? "transaksi" : "log harga";
-          showToast("✓ " + deleted + " " + typeLabel + " berhasil dihapus", true);
-          // Reload halaman setelah 1.5 detik agar statistik terupdate
-          setTimeout(function () { window.location.reload(); }, 1500);
-        } else {
-          showToast((data.error || "Gagal menghapus data."), false);
-        }
+    function syncRadioStyles() {
+      document.querySelectorAll('[name="hapusType"]').forEach(function (radio) {
+        var lbl = radio.closest("label");
+        if (!lbl) return;
+        lbl.style.borderColor = radio.checked ? "#c84b1f" : "#e5e7eb";
+        lbl.style.background  = radio.checked ? "#fdf6f3" : "#fff";
       });
-    })
-    .catch(function () {
-      showToast("Gagal terhubung ke server.", false);
-    })
-    .finally(function () {
-      btnKonfirm.disabled   = false;
-      btnBatal.disabled     = false;
-      spinner.style.display = "none";
-      btnLabel.textContent  = "Hapus Sekarang";
-    });
-  });
+      document.querySelectorAll('[name="hapusRange"]').forEach(function (radio) {
+        var lbl = radio.closest("label");
+        if (!lbl) return;
+        lbl.style.borderColor = radio.checked ? "#c84b1f" : "#e5e7eb";
+        lbl.style.background  = radio.checked ? "#fdf6f3" : "#fff";
+      });
+      updateWarning();
+    }
 
-})();
+    // ── Toast helper ───────────────────────────────────────────────
+    var toastTimer = null;
+    function showToast(msg, ok) {
+      if (!toast || !toastTxt || !toastIco) return;
+      toastTxt.textContent      = msg;
+      toastIco.textContent      = ok ? "✓" : "✕";
+      toast.style.background    = ok ? "#0f0d0b" : "#dc2626";
+      toast.style.color         = "#fff";
+      toast.style.display       = "flex";
+      toast.offsetHeight; // force reflow
+      toast.style.opacity       = "1";
+      toast.style.pointerEvents = "auto";
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () {
+        toast.style.opacity       = "0";
+        toast.style.pointerEvents = "none";
+        setTimeout(function () { toast.style.display = "none"; }, 220);
+      }, 3500);
+    }
+
+    // ── Buka / tutup modal ─────────────────────────────────────────
+    function onEsc(e) {
+      if (e.key === "Escape") tutupModal();
+    }
+
+    function bukaModal() {
+      modal.style.display = "block";
+      syncRadioStyles();
+      document.addEventListener("keydown", onEsc);
+      setTimeout(function () { if (btnBatal) btnBatal.focus(); }, 50);
+    }
+
+    function tutupModal() {
+      modal.style.display = "none";
+      document.removeEventListener("keydown", onEsc);
+    }
+
+    btnBuka.addEventListener("click",  bukaModal);
+    btnTutup.addEventListener("click", tutupModal);
+    btnBatal.addEventListener("click", tutupModal);
+
+    modal.addEventListener("click", function (e) {
+      if (e.target === modal) tutupModal();
+    });
+
+    document.querySelectorAll('[name="hapusType"],[name="hapusRange"]').forEach(function (el) {
+      el.addEventListener("change", syncRadioStyles);
+    });
+
+    // ── Eksekusi hapus ─────────────────────────────────────────────
+    btnKonfirm.addEventListener("click", function () {
+      var type  = getSelected("hapusType");
+      var range = getSelected("hapusRange");
+      if (!type || !range) return;
+
+      if (range === "semua") {
+        var label = type === "transaksi" ? "SELURUH histori transaksi" : "SELURUH log perubahan harga";
+        if (!window.confirm("⚠️ Yakin ingin menghapus " + label + "?\n\nData tidak dapat dipulihkan!")) return;
+      }
+
+      btnKonfirm.disabled   = true;
+      btnBatal.disabled     = true;
+      spinner.style.display = "block";
+      btnLabel.textContent  = "Menghapus...";
+
+      fetch("/api/admin/hapus-histori", {
+        method:      "DELETE",
+        credentials: "same-origin",
+        headers:     { "Content-Type": "application/json" },
+        body:        JSON.stringify({ type: type, range: range }),
+      })
+      .then(function (res) {
+        return res.json().then(function (data) {
+          if (res.ok && data.ok) {
+            tutupModal();
+            var deleted   = data.deleted || 0;
+            var typeLabel = type === "transaksi" ? "transaksi" : "log harga";
+            showToast("✓ " + deleted + " " + typeLabel + " berhasil dihapus", true);
+            setTimeout(function () { window.location.reload(); }, 1500);
+          } else {
+            showToast((data.error || "Gagal menghapus data."), false);
+          }
+        });
+      })
+      .catch(function () {
+        showToast("Gagal terhubung ke server.", false);
+      })
+      .finally(function () {
+        btnKonfirm.disabled   = false;
+        btnBatal.disabled     = false;
+        spinner.style.display = "none";
+        btnLabel.textContent  = "Hapus Sekarang";
+      });
+    });
+  }
+
+  /* Jalankan saat pertama load DAN setiap navigasi ViewTransitions */
+  document.addEventListener("astro:page-load", initDashboard);
+}());
 </script>
 
 </Layout>
