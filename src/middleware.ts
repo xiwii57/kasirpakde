@@ -508,13 +508,13 @@ function buildCSP(nonce: string): string {
         // [FIX] Semua baris sekarang template literal agar nonce ter-interpolasi
         return [
             "default-src 'self'",
-            `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://challenges.cloudflare.com ws://localhost:* http://localhost:*`,
+            `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://challenges.cloudflare.com ws://localhost:* http://localhost:* https://static.cloudflareinsights.com`,
             "script-src-attr 'unsafe-inline'",
             `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
             "style-src-attr 'unsafe-inline'",
             "font-src 'self' https://fonts.gstatic.com data:",
             "frame-src https://challenges.cloudflare.com",
-            `connect-src 'self' ${supabaseOrigin} wss://*.supabase.co https://challenges.cloudflare.com ws://localhost:* http://localhost:*`,
+            `connect-src 'self' ${supabaseOrigin} wss://*.supabase.co https://challenges.cloudflare.com ws://localhost:* http://localhost:* https://static.cloudflareinsights.com`,
             `img-src 'self' data: blob: ${supabaseOrigin} https://*.supabase.co`,
             "form-action 'self'",
             "frame-ancestors 'none'",
@@ -527,13 +527,13 @@ function buildCSP(nonce: string): string {
 
     return [
         "default-src 'self'",
-        `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' https://challenges.cloudflare.com`,
+        `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' https://challenges.cloudflare.com https://static.cloudflareinsights.com`,
         "script-src-attr 'unsafe-inline'",
         `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
         "style-src-attr 'unsafe-inline'",
         "font-src 'self' https://fonts.gstatic.com data:",
         "frame-src https://challenges.cloudflare.com",
-        `connect-src 'self' ${supabaseOrigin} wss://*.supabase.co https://challenges.cloudflare.com`,
+        `connect-src 'self' ${supabaseOrigin} wss://*.supabase.co https://challenges.cloudflare.com https://static.cloudflareinsights.com`,
         `img-src 'self' data: blob: ${supabaseOrigin} https://*.supabase.co`,
         "form-action 'self'",
         "frame-ancestors 'none'",
