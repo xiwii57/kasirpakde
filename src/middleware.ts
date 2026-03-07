@@ -10,6 +10,8 @@ const ADMIN_EMAIL       = import.meta.env.ADMIN_EMAIL               as string;
 const SUPABASE_URL      = import.meta.env.PUBLIC_SUPABASE_URL       as string;
 const SUPABASE_ANON_KEY = import.meta.env.PUBLIC_SUPABASE_ANON_KEY  as string;
 const IS_PROD           = import.meta.env.PROD                      as boolean;
+const CANONICAL_HOST = "www.karsip.my.id";
+const VERCEL_HOST_RE = /(?:\.vercel\.app)$/i;
 
 for (const [key, val] of Object.entries({
     ADMIN_EMAIL,
@@ -47,7 +49,7 @@ const PUBLIC_ROUTES    = new Set<string>(ROUTE_CONFIG.public);
 const AUTH_FORM_ROUTES = new Set<string>(ROUTE_CONFIG.authForms);
 
 const PROTECTED_PREFIXES = [
-    "/dashboard",
+"/dashboard",
 "/kasir",
 "/produk",
 "/api/kasir",
@@ -81,6 +83,24 @@ function jsonError(message: string, status: number, retryAfter?: number): Respon
     };
     if (retryAfter) headers["Retry-After"] = String(retryAfter);
     return new Response(JSON.stringify({ error: message }), { status, headers });
+}
+
+function isVercelHost(host: string): boolean {
+    const hostname = host.split(":")[0]!.toLowerCase();
+    return VERCEL_HOST_RE.test(hostname);
+}
+
+function redirectToCanonical(url: URL): Response {
+    const canonical = new URL(url.pathname + url.search + url.hash);
+    canonical.protocol = "https:";
+    canonical.host     = CANONICAL_HOST;
+    return new Response(null, {
+        status:  301,
+        headers: {
+            "Location":      canonical.toString(),
+                        "Cache-Control": "max-age=31536000",
+        },
+    });
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -616,6 +636,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
     const nonce = generateNonce();
     (locals as App.Locals).nonce = nonce;
+
+    // ── 0. Redirect domain Vercel → canonical ────────────────────────
+    const requestHost = request.headers.get("host") ?? "";
+    if (isVercelHost(requestHost)) {
+        return redirectToCanonical(url);
+    }
 
     // ── 1. Aset statis ────────────────────────────────────────────
     if (isStaticAsset(pathname)) return next();
