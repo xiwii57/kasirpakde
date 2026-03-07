@@ -20,7 +20,8 @@ const { data: produkRaw } = await sb
   .order("nama_produk");
 const produk = produkRaw ?? [];
 
-const PUBLIC_SUPABASE_URL = import.meta.env.PUBLIC_SUPABASE_URL;
+const PUBLIC_SUPABASE_URL      = import.meta.env.PUBLIC_SUPABASE_URL;
+const PUBLIC_TURNSTILE_SITEKEY = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY as string;
 const STORAGE_BUCKET = "produk-foto";
 
 function rp(n: number) {
@@ -38,6 +39,100 @@ function fmtDate(s: string) {
 
 <Layout title="Daftar Produk" active="produk" nonce={nonce}>
 
+<style nonce={nonce}>
+  .page-title { font-family: 'DM Serif Display', serif; }
+  .btn-danger-outline { color: #dc2626; border-color: #fecaca; }
+  .td-img { padding: .5rem .75rem .5rem 1rem; }
+  .td-actions { padding: .5rem 1rem .5rem .5rem; }
+  .td-num-muted { font-variant-numeric: tabular-nums; color: var(--muted); font-size: .77rem; }
+  .td-num-bold { font-variant-numeric: tabular-nums; font-weight: 700; font-size: .82rem; }
+  .badge-qc-name { margin-left: .4rem; font-size: .58rem; }
+  .table-actions-row { display: flex; gap: .2rem; justify-content: flex-end; }
+  .card-overlay-label { font-size: .65rem; font-weight: 600; margin-top: .25rem; }
+  .card-beli-label { font-size: .68rem; color: var(--muted); }
+  .card-footer-actions { display: flex; gap: .2rem; }
+  .card-img-ph-inner { display: none; align-items: center; justify-content: center; width: 100%; height: 100%; position: absolute; inset: 0; background: var(--cream); }
+  .card-img-ph-icon { color: #d1c9be; }
+  .d-none { display: none; }
+  .btn-hapus-detail { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+  .detail-footer-actions { display: flex; gap: .5rem; }
+  .modal-foto-box { max-width: 400px; }
+  .foto-drop-preview { display: none; position: relative; }
+  .foto-drop-img { max-width: 100%; max-height: 200px; border-radius: 6px; display: block; margin: 0 auto; }
+  .btn-foto-clear { position: absolute; top: -8px; right: -8px; width: 22px; height: 22px; border-radius: 50%; background: #dc2626; color: #fff; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: .7rem; }
+  .dropzone-icon { color: var(--muted); margin: 0 auto; }
+  .dropzone-hint { margin: .5rem 0 0; font-size: .8rem; }
+  .dropzone-sub { font-size: .7rem; color: var(--muted); }
+
+  /* ── Modal Import ── */
+  .modal-import-box {
+    max-width: 520px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-import-box .modal-bd {
+    overflow-y: auto;
+    flex: 1;
+    overscroll-behavior: contain;
+  }
+
+  .import-info-box { padding: .6rem .85rem; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; font-size: .75rem; color: #1e40af; margin-bottom: .9rem; }
+  .import-template-row { display: flex; gap: .5rem; margin-top: .5rem; align-items: center; }
+  .btn-template-dl { display: inline-flex; align-items: center; gap: .3rem; color: #1e40af; font-weight: 600; text-decoration: underline; background: none; border: none; cursor: pointer; padding: 0; font-size: inherit; font-family: inherit; }
+  .import-sep { color: #93c5fd; }
+  .csv-preview-table { width: 100%; font-size: .72rem; border-collapse: collapse; }
+  .csv-preview-thead { background: var(--cream); position: sticky; top: 0; z-index: 1; }
+  .csv-th { padding: .4rem .65rem; font-weight: 600; color: var(--muted); }
+  .csv-th-center { text-align: center; width: 32px; }
+  .csv-th-left   { text-align: left; }
+  .csv-th-right  { text-align: right; }
+  .mp-hint-box { display: none; padding: .5rem .75rem; border-radius: 4px; font-size: .75rem; background: var(--cream); margin-top: .5rem; }
+  .hapus-icon-wrap { width: 44px; height: 44px; background: #fee2e2; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 1rem; }
+  .hapus-title { font-size: .92rem; font-weight: 700; margin-bottom: .35rem; }
+  .hapus-desc { font-size: .8rem; color: var(--muted); }
+  .hapus-nama-produk { color: var(--ink); }
+  .hapus-massal-modal { max-width: 440px; display: flex; flex-direction: column; max-height: 90vh; }
+  .hapus-massal-modal .modal-bd { overflow-y: auto; overscroll-behavior: contain; }
+  .hapus-massal-title { color: #dc2626; }
+  .hapus-massal-warning { display: flex; gap: .6rem; align-items: flex-start; padding: .65rem .85rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; margin-bottom: 1rem; }
+  .hapus-massal-warn-ico { flex-shrink: 0; margin-top: .05rem; }
+  .hapus-massal-warn-txt { font-size: .75rem; color: #991b1b; margin: 0; }
+  .btn-hapus-massal-ok { background: #dc2626; color: #fff; opacity: .5; cursor: not-allowed; }
+  .hm-confirm-kw { color: #dc2626; font-family: monospace; letter-spacing: .04em; }
+  .foto-preview-box { width: 96px; height: 96px; border: 1.5px dashed var(--border); border-radius: 8px; overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--cream); }
+  .foto-current { display: none; width: 100%; height: 100%; object-fit: cover; }
+  .foto-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .35rem; color: var(--muted); }
+  .foto-placeholder-txt { font-size: .72rem; }
+  .foto-upload-wrap { display: flex; gap: 1rem; align-items: flex-start; }
+  .foto-btn-col { display: flex; flex-direction: column; gap: .4rem; }
+  .btn-hapus-foto { display: none; color: #dc2626; }
+  .foto-hint { font-size: .67rem; color: var(--muted); margin-top: .25rem; }
+  .field-foto { margin-bottom: 1rem; }
+  .field-quick { display: flex; align-items: center; gap: .5rem; }
+  .quick-label { font-size: .8rem; cursor: pointer; }
+  .quick-checkbox { width: 16px; height: 16px; accent-color: var(--rust); cursor: pointer; }
+  .hm-kat-wrap-hidden { display: none; }
+  .hm-info-box { padding: .5rem .75rem; background: var(--cream); border-radius: 4px; font-size: .75rem; color: var(--muted); margin-bottom: .5rem; }
+  .csv-preview-scroll { max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; }
+  .csv-preview-wrap { display: none; margin-top: .75rem; }
+  .csv-count-txt { font-size: .75rem; font-weight: 600; color: var(--muted); margin-bottom: .4rem; }
+
+  /* ── Turnstile wrapper ── */
+  .hm-turnstile-wrap {
+    display: flex;
+    justify-content: center;
+    margin: .75rem 0 .25rem;
+    min-height: 65px;
+  }
+  .hm-turnstile-wrap:empty::after {
+    content: 'Memuat verifikasi…';
+    font-size: .72rem;
+    color: var(--muted);
+    align-self: center;
+  }
+</style>
+
   <a href="#main" class="skip">Lewati navigasi</a>
 
   <!-- ── TOP BAR ── -->
@@ -54,7 +149,7 @@ function fmtDate(s: string) {
         </svg>
       </button>
       <div>
-        <h1 style="font-family:'DM Serif Display',serif">Daftar Produk</h1>
+        <h1 class="page-title">Daftar Produk</h1>
         <p><span id="count-lbl" aria-live="polite">{produk.length} produk</span></p>
       </div>
     </div>
@@ -67,8 +162,7 @@ function fmtDate(s: string) {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         <span class="btn-label">Sesuaikan Harga</span>
       </button>
-      <button type="button" id="btn-hapus-massal" class="btn btn-ghost btn-sm" aria-haspopup="dialog"
-        style="color:#dc2626;border-color:#fecaca">
+      <button type="button" id="btn-hapus-massal" class="btn btn-ghost btn-sm btn-danger-outline" aria-haspopup="dialog">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="3 6 5 6 21 6"/>
           <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
@@ -152,11 +246,11 @@ function fmtDate(s: string) {
                   data-created={p.created_at}
                   data-updated={p.updated_at}
                   data-img={imgUrl}>
-                <td style="padding:.5rem .75rem .5rem 1rem">
+                <td class="td-img">
                   <div class="thumb-wrap" data-id={p.id} title="Klik untuk ganti foto" tabindex="0" role="button" aria-label={`Ganti foto ${p.nama_produk}`}>
                     <img class="prod-thumb" src={imgUrl} alt={p.nama_produk} loading="lazy" decoding="async"
                       onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
-                    <div class="prod-thumb-placeholder" style="display:none">
+                    <div class="prod-thumb-placeholder d-none">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 9 4-4 4 4 4-5 6 7"/></svg>
                     </div>
                     <div class="thumb-overlay" aria-hidden="true">
@@ -166,12 +260,12 @@ function fmtDate(s: string) {
                 </td>
                 <td class="name name-clickable" tabindex="0" role="button" aria-label={`Lihat detail ${p.nama_produk}`} title="Klik untuk detail">
                   <span>{p.nama_produk}</span>
-                  {p.quick_cash && <span class="badge badge-qc" style="margin-left:.4rem;font-size:.58rem">QC</span>}
+                  {p.quick_cash && <span class="badge badge-qc badge-qc-name">QC</span>}
                 </td>
                 <td><span class="badge badge-k">{p.kategori}</span></td>
-                <td class="r" style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:.77rem">{rp(p.harga_beli)}</td>
-                <td class="r" style="font-variant-numeric:tabular-nums;font-weight:700;font-size:.82rem">{rp(p.harga_jual)}</td>
-                <td class="r" style="font-variant-numeric:tabular-nums;color:var(--muted);font-size:.77rem">{rp(u)}</td>
+                <td class="r td-num-muted">{rp(p.harga_beli)}</td>
+                <td class="r td-num-bold">{rp(p.harga_jual)}</td>
+                <td class="r td-num-muted">{rp(u)}</td>
                 <td class="r"><span class={`badge ${bCls}`}>{m !== null ? `${m}%` : '—'}</span></td>
                 <td class="c">
                   <button type="button"
@@ -183,8 +277,8 @@ function fmtDate(s: string) {
                     <span class="thumb"></span>
                   </button>
                 </td>
-                <td style="padding:.5rem 1rem .5rem .5rem">
-                  <div style="display:flex;gap:.2rem;justify-content:flex-end">
+                <td class="td-actions">
+                  <div class="table-actions-row">
                     <button type="button" class="icon-btn edit"
                       data-id={p.id} data-nama={p.nama_produk}
                       data-beli={p.harga_beli} data-jual={p.harga_jual}
@@ -204,7 +298,7 @@ function fmtDate(s: string) {
           })}
         </tbody>
       </table>
-      <div id="no-results" class="empty" style="display:none" role="status" aria-live="polite">
+      <div id="no-results" class="empty d-none" role="status" aria-live="polite">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <h3>Tidak ditemukan</h3>
         <p>Coba kata kunci atau kategori lain.</p>
@@ -213,7 +307,7 @@ function fmtDate(s: string) {
   </div>
 
   <!-- ── CARD VIEW ── -->
-  <div id="view-card" style="display:none">
+  <div id="view-card" class="d-none">
     <div class="card-grid" id="card-grid">
       {produk.map(p => {
         const m = margin(p.harga_beli, p.harga_jual);
@@ -230,12 +324,12 @@ function fmtDate(s: string) {
               <img class="card-prod-img" src={imgUrl} alt={p.nama_produk} loading="lazy" decoding="async"
                 onload="this.classList.add('loaded')"
                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
-              <div class="card-img-placeholder" style="display:none;align-items:center;justify-content:center;width:100%;height:100%;position:absolute;inset:0;background:var(--cream)">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="color:#d1c9be"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 9 4-4 4 4 4-5 6 7"/></svg>
+              <div class="card-img-placeholder card-img-ph-inner">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" class="card-img-ph-icon"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 9 4-4 4 4 4-5 6 7"/></svg>
               </div>
               <div class="thumb-overlay thumb-overlay-card" aria-hidden="true">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                <span style="font-size:.65rem;font-weight:600;margin-top:.25rem">Ganti Foto</span>
+                <span class="card-overlay-label">Ganti Foto</span>
               </div>
             </div>
             <div class="card-body card-body-clickable" role="button" tabindex="0" aria-label={`Lihat detail ${p.nama_produk}`} title="Klik untuk detail">
@@ -248,8 +342,8 @@ function fmtDate(s: string) {
               </div>
             </div>
             <div class="card-footer">
-              <span style="font-size:.68rem;color:var(--muted)">Beli: {rp(p.harga_beli)}</span>
-              <div style="display:flex;gap:.2rem">
+              <span class="card-beli-label">Beli: {rp(p.harga_beli)}</span>
+              <div class="card-footer-actions">
                 <button type="button" class="icon-btn edit btn-sm" title="Klik untuk edit"
                   data-id={p.id} data-nama={p.nama_produk} data-beli={p.harga_beli}
                   data-jual={p.harga_jual} data-kat={p.kategori} data-quick={p.quick_cash}
@@ -266,7 +360,7 @@ function fmtDate(s: string) {
         );
       })}
     </div>
-    <div id="no-results-card" class="empty" style="display:none" role="status" aria-live="polite">
+    <div id="no-results-card" class="empty d-none" role="status" aria-live="polite">
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <h3>Tidak ditemukan</h3>
       <p>Coba kata kunci atau kategori lain.</p>
@@ -281,7 +375,7 @@ function fmtDate(s: string) {
       </button>
       <div class="detail-img-section">
         <img id="d-img" src="" alt="" class="detail-img" onerror="this.style.display='none';document.getElementById('d-img-placeholder').style.display='flex'" />
-        <div id="d-img-placeholder" class="detail-img-placeholder" style="display:none">
+        <div id="d-img-placeholder" class="detail-img-placeholder d-none">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 9 4-4 4 4 4-5 6 7"/></svg>
         </div>
       </div>
@@ -306,12 +400,12 @@ function fmtDate(s: string) {
       </div>
       <div class="detail-footer">
         <button type="button" class="btn btn-ghost close-modal" data-m="detail">Tutup</button>
-        <div style="display:flex;gap:.5rem">
+        <div class="detail-footer-actions">
           <button type="button" id="d-btn-edit" class="btn btn-dark">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             Edit
           </button>
-          <button type="button" id="d-btn-hapus" class="btn" style="background:#fee2e2;color:#dc2626;border:1px solid #fecaca">
+          <button type="button" id="d-btn-hapus" class="btn btn-hapus-detail">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
             Hapus
           </button>
@@ -331,30 +425,30 @@ function fmtDate(s: string) {
       </div>
       <div class="modal-bd">
         <input type="hidden" id="edit-id" />
-        <div style="margin-bottom:1rem">
+        <div class="field-foto">
           <label class="label">Foto Produk</label>
-          <div style="display:flex;gap:1rem;align-items:flex-start">
-            <div id="foto-preview-box" style="width:96px;height:96px;border:1.5px dashed var(--border);border-radius:8px;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--cream)">
-              <img id="foto-current" src="" alt="Foto produk" style="display:none;width:100%;height:100%;object-fit:cover" />
-              <div id="foto-placeholder" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.35rem;color:var(--muted)">
+          <div class="foto-upload-wrap">
+            <div id="foto-preview-box" class="foto-preview-box">
+              <img id="foto-current" src="" alt="Foto produk" class="foto-current" />
+              <div id="foto-placeholder" class="foto-placeholder">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="m3 9 4-4 4 4 4-5 6 7"/><circle cx="8.5" cy="8.5" r="1.5"/></svg>
-                <span style="font-size:.72rem">Belum ada foto</span>
+                <span class="foto-placeholder-txt">Belum ada foto</span>
               </div>
             </div>
-            <div style="display:flex;flex-direction:column;gap:.4rem">
+            <div class="foto-btn-col">
               <button type="button" id="btn-pilih-foto" class="btn btn-ghost btn-sm">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                 Pilih Foto
               </button>
-              <button type="button" id="btn-hapus-foto" class="btn btn-ghost btn-sm" style="display:none;color:#dc2626">
+              <button type="button" id="btn-hapus-foto" class="btn btn-ghost btn-sm btn-hapus-foto">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
                 Hapus Foto
               </button>
-              <input id="f-foto" type="file" accept="image/*" style="display:none" aria-label="Pilih foto produk" />
-              <p style="font-size:.67rem;color:var(--muted);margin-top:.25rem">Max 5 MB · JPG, PNG, WebP</p>
+              <input id="f-foto" type="file" accept="image/*" class="d-none" aria-label="Pilih foto produk" />
+              <p class="foto-hint">Max 5 MB · JPG, PNG, WebP</p>
             </div>
           </div>
-          <canvas id="resize-canvas" style="display:none" aria-hidden="true"></canvas>
+          <canvas id="resize-canvas" class="d-none" aria-hidden="true"></canvas>
         </div>
         <div class="field">
           <label for="f-nama" class="label">Nama Produk<span>*</span></label>
@@ -379,9 +473,9 @@ function fmtDate(s: string) {
             {KATEGORI_LIST.map(k => <option value={k}>{k}</option>)}
           </select>
         </div>
-        <div class="field" style="display:flex;align-items:center;gap:.5rem">
-          <input id="f-quick" type="checkbox" style="width:16px;height:16px;accent-color:var(--rust);cursor:pointer" />
-          <label for="f-quick" style="font-size:.8rem;cursor:pointer">Tampilkan sebagai tombol Quick Cash di kasir</label>
+        <div class="field field-quick">
+          <input id="f-quick" type="checkbox" class="quick-checkbox" />
+          <label for="f-quick" class="quick-label">Tampilkan sebagai tombol Quick Cash di kasir</label>
         </div>
       </div>
       <div class="modal-ft">
@@ -393,7 +487,7 @@ function fmtDate(s: string) {
 
   <!-- ══ MODAL GANTI FOTO CEPAT ══ -->
   <div id="m-foto" class="overlay" role="dialog" aria-modal="true" aria-labelledby="m-foto-title">
-    <div class="modal" style="max-width:400px">
+    <div class="modal modal-foto-box">
       <div class="modal-hd">
         <h2 id="m-foto-title">Ganti Foto Produk</h2>
         <button type="button" class="icon-btn close-modal" data-m="foto" aria-label="Tutup">
@@ -403,18 +497,18 @@ function fmtDate(s: string) {
       <div class="modal-bd">
         <input type="hidden" id="foto-target-id" />
         <div id="foto-drop" class="dropzone" role="button" tabindex="0" aria-label="Klik atau drop gambar">
-          <div id="foto-drop-preview" style="display:none;position:relative">
-            <img id="foto-drop-img" src="" alt="Preview" style="max-width:100%;max-height:200px;border-radius:6px;display:block;margin:0 auto" />
-            <button type="button" id="btn-foto-clear" style="position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:#dc2626;color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.7rem" aria-label="Hapus pilihan">✕</button>
+          <div id="foto-drop-preview" class="foto-drop-preview">
+            <img id="foto-drop-img" src="" alt="Preview" class="foto-drop-img" />
+            <button type="button" id="btn-foto-clear" class="btn-foto-clear" aria-label="Hapus pilihan">✕</button>
           </div>
           <div id="foto-drop-empty">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--muted);margin:0 auto"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-            <p style="margin:.5rem 0 0;font-size:.8rem">Klik atau drop gambar di sini</p>
-            <p style="font-size:.7rem;color:var(--muted)">Max 5 MB · JPG, PNG, WebP</p>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="dropzone-icon"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            <p class="dropzone-hint">Klik atau drop gambar di sini</p>
+            <p class="dropzone-sub">Max 5 MB · JPG, PNG, WebP</p>
           </div>
-          <input id="f-foto-quick" type="file" accept="image/*" style="display:none" />
+          <input id="f-foto-quick" type="file" accept="image/*" class="d-none" />
         </div>
-        <canvas id="resize-canvas-quick" style="display:none" aria-hidden="true"></canvas>
+        <canvas id="resize-canvas-quick" class="d-none" aria-hidden="true"></canvas>
       </div>
       <div class="modal-ft">
         <button type="button" class="btn btn-ghost close-modal" data-m="foto">Batal</button>
@@ -423,7 +517,7 @@ function fmtDate(s: string) {
     </div>
   </div>
 
-  <!-- ══ MODAL IMPORT CSV ══ -->
+    <!-- ══ MODAL IMPORT CSV ══ -->
   <div id="m-import" class="overlay" role="dialog" aria-modal="true" aria-labelledby="m-import-title">
     <div class="modal" style="max-width:520px">
       <div class="modal-hd">
@@ -437,13 +531,13 @@ function fmtDate(s: string) {
           Kolom wajib: <strong>nama_produk, harga_beli, harga_jual, kategori</strong>
           · Opsional: <strong>quick_cash</strong>
           <div style="display:flex;gap:.5rem;margin-top:.5rem">
-            <a href="/api/produk/template-excel" download="template_import_produk.xlsx"
+            <a href="/template_import_produk.xlsx" download="template_import_produk.xlsx"
               style="display:inline-flex;align-items:center;gap:.3rem;color:#1e40af;font-weight:600;text-decoration:underline">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Template Excel (.xlsx)
             </a>
             <span style="color:#93c5fd">·</span>
-            <a href="/api/produk/template-csv" download="template_import_produk.csv"
+            <a href="/template_import_produk.csv" download="template_import_produk.csv"
               style="display:inline-flex;align-items:center;gap:.3rem;color:#1e40af;font-weight:600;text-decoration:underline">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Template CSV (.csv)
@@ -523,7 +617,7 @@ function fmtDate(s: string) {
           <label for="mp-val" class="label">Nilai</label>
           <input id="mp-val" class="input" type="number" placeholder="cth: 500" min="0" />
         </div>
-        <div id="mp-hint" style="display:none;padding:.5rem .75rem;border-radius:4px;font-size:.75rem;background:var(--cream);margin-top:.5rem" aria-live="polite"></div>
+        <div id="mp-hint" class="mp-hint-box" aria-live="polite"></div>
       </div>
       <div class="modal-ft">
         <button type="button" class="btn btn-ghost close-modal" data-m="mass">Batal</button>
@@ -536,24 +630,24 @@ function fmtDate(s: string) {
   <div id="m-hapus" class="overlay" role="alertdialog" aria-modal="true" aria-labelledby="m-hapus-title">
     <div class="modal modal-sm">
       <div class="modal-bd" style="padding-top:1.5rem">
-        <div style="width:44px;height:44px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:1rem">
+        <div class="hapus-icon-wrap">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
         </div>
-        <h2 id="m-hapus-title" style="font-size:.92rem;font-weight:700;margin-bottom:.35rem">Hapus Produk?</h2>
-        <p style="font-size:.8rem;color:var(--muted)">Produk <strong id="hapus-nama" style="color:var(--ink)"></strong> akan dihapus permanen.</p>
+        <h2 id="m-hapus-title" class="hapus-title">Hapus Produk?</h2>
+        <p class="hapus-desc">Produk <strong id="hapus-nama" class="hapus-nama-produk"></strong> akan dihapus permanen.</p>
       </div>
       <div class="modal-ft">
         <button type="button" class="btn btn-ghost close-modal" data-m="hapus">Batal</button>
-        <button type="button" id="btn-hapus-ok" class="btn" style="background:#dc2626;color:#fff">Hapus</button>
+        <button type="button" id="btn-hapus-ok" class="btn btn-hapus-detail">Hapus</button>
       </div>
     </div>
   </div>
 
   <!-- ══ MODAL HAPUS MASSAL ══ -->
   <div id="m-hapus-massal" class="overlay" role="alertdialog" aria-modal="true" aria-labelledby="m-hapus-massal-title">
-    <div class="modal" style="max-width:440px">
+    <div class="modal hapus-massal-modal">
       <div class="modal-hd">
-        <h2 id="m-hapus-massal-title" style="color:#dc2626">Hapus Produk Massal</h2>
+        <h2 id="m-hapus-massal-title" class="hapus-massal-title">Hapus Produk Massal</h2>
         <button type="button" class="icon-btn close-modal" data-m="hapus-massal" aria-label="Tutup">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -561,12 +655,12 @@ function fmtDate(s: string) {
         </button>
       </div>
       <div class="modal-bd">
-        <div style="display:flex;gap:.6rem;align-items:flex-start;padding:.65rem .85rem;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;margin-bottom:1rem">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" style="flex-shrink:0;margin-top:.05rem">
+        <div class="hapus-massal-warning">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" class="hapus-massal-warn-ico">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
             <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
-          <p style="font-size:.75rem;color:#991b1b;margin:0">Aksi ini <strong>tidak dapat dibatalkan</strong>. Semua produk yang dihapus akan hilang permanen.</p>
+          <p class="hapus-massal-warn-txt">Aksi ini <strong>tidak dapat dibatalkan</strong>. Semua produk yang dihapus akan hilang permanen.</p>
         </div>
         <div class="field">
           <label for="hm-mode" class="label">Target Penghapusan</label>
@@ -581,18 +675,20 @@ function fmtDate(s: string) {
             {KATEGORI_LIST.map(k => <option value={k}>{k}</option>)}
           </select>
         </div>
-        <div id="hm-info" style="padding:.5rem .75rem;background:var(--cream);border-radius:4px;font-size:.75rem;color:var(--muted);margin-bottom:.5rem" aria-live="polite"></div>
+        <div id="hm-info" class="hm-info-box" aria-live="polite"></div>
         <div class="field">
           <label for="hm-confirm" class="label">
-            Ketik <strong style="color:#dc2626;font-family:monospace;letter-spacing:.04em">HAPUS</strong> untuk konfirmasi
+            Ketik <strong class="hm-confirm-kw">HAPUS</strong> untuk konfirmasi
           </label>
           <input id="hm-confirm" class="input" type="text" placeholder="HAPUS" autocomplete="off" />
+        </div>
+        <div class="hm-turnstile-wrap">
+          <div id="hm-turnstile-container"></div>
         </div>
       </div>
       <div class="modal-ft">
         <button type="button" class="btn btn-ghost close-modal" data-m="hapus-massal">Batal</button>
-        <button type="button" id="btn-hapus-massal-ok" class="btn" disabled
-          style="background:#dc2626;color:#fff;opacity:.5;cursor:not-allowed">
+        <button type="button" id="btn-hapus-massal-ok" class="btn btn-hapus-massal-ok" disabled>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="3 6 5 6 21 6"/>
             <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
@@ -609,7 +705,9 @@ function fmtDate(s: string) {
     <span id="t-msg"></span>
   </div>
 
-  <script define:vars={{ KATEGORI_LIST }} nonce={nonce}>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+
+  <script define:vars={{ KATEGORI_LIST, PUBLIC_TURNSTILE_SITEKEY }} nonce={nonce}>
   'use strict';
 
   // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -634,7 +732,7 @@ function fmtDate(s: string) {
   }
 
   // ─── API JSON ─────────────────────────────────────────────────────────────────
-  async function api(method,path,body){
+  async function api(method, path, body){
     var opts={
       method:method,
       credentials:'same-origin',
@@ -679,11 +777,12 @@ function fmtDate(s: string) {
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
-     INIT — semua addEventListener dipasang di sini
+     INIT
   ══════════════════════════════════════════════════════════════════════════ */
   function initProduk() {
 
-    // State yang di-reset tiap init
+    if (!document.getElementById('btn-tambah')) return;
+
     var _q='', _kat='';
     var _pendingFotoBlob=null, _fotoHapus=false;
     var _fotoQuickBlob=null;
@@ -691,8 +790,27 @@ function fmtDate(s: string) {
     var _hapusId='';
     var _csvData=[];
     var _pf=null;
+
+    var _turnstileWidgetId = null;
+    var _turnstileToken    = null;
+
     var FOCUSABLE='button:not([disabled]),[href],input:not([disabled]),select,[tabindex]:not([tabindex="-1"])';
     var ALL_MODALS=['detail','tambah','import','mass','hapus','hapus-massal','foto'];
+
+    // ─── RESET IMPORT MODAL ──────────────────────────────────────────────────────
+    function resetImportModal(){
+      var dz=document.getElementById('dropzone');
+      var previewWrap=document.getElementById('csv-preview');
+      if(dz) dz.style.display='';
+      if(previewWrap) previewWrap.style.display='none';
+      _csvData=[];
+      var btnImp=document.getElementById('btn-do-import');
+      if(btnImp) btnImp.disabled=true;
+      var fCsvEl=document.getElementById('f-csv');
+      if(fCsvEl) fCsvEl.value='';
+      var tb=document.getElementById('csv-tbody');
+      if(tb) tb.innerHTML='';
+    }
 
     // ─── MODAL ──────────────────────────────────────────────────────────────────
     function openM(id){
@@ -719,6 +837,7 @@ function fmtDate(s: string) {
       if(id==='tambah') resetForm();
       if(id==='foto')   resetFotoModal();
       if(id==='hapus-massal') resetHapusMassal();
+      if(id==='import') resetImportModal();
     }
 
     document.addEventListener('keydown',function(e){
@@ -743,9 +862,54 @@ function fmtDate(s: string) {
     var btnMass   = document.getElementById('btn-mass');
     var btnHapusMassal = document.getElementById('btn-hapus-massal');
     if(btnTambah) btnTambah.onclick=function(){openM('tambah');};
-    if(btnImport) btnImport.onclick=function(){openM('import');};
+    if(btnImport) btnImport.onclick=function(){resetImportModal();openM('import');};
     if(btnMass)   btnMass.onclick=function(){openM('mass');};
-    if(btnHapusMassal) btnHapusMassal.onclick=function(){ resetHapusMassal(); updateHmInfo(); openM('hapus-massal'); };
+    if(btnHapusMassal) btnHapusMassal.onclick=function(){
+      resetHapusMassal();
+      updateHmInfo();
+      renderTurnstile();
+      openM('hapus-massal');
+    };
+
+    // ─── TURNSTILE ───────────────────────────────────────────────────────────────
+    function renderTurnstile(){
+      var container = document.getElementById('hm-turnstile-container');
+      if(!container) return;
+      _turnstileToken = null;
+      if(_turnstileWidgetId !== null && window.turnstile){
+        try{ window.turnstile.remove(_turnstileWidgetId); } catch(e){}
+        _turnstileWidgetId = null;
+      }
+      container.innerHTML = '';
+      var attempts = 0;
+      var interval = setInterval(function(){
+        attempts++;
+        if(window.turnstile){
+          clearInterval(interval);
+          _turnstileWidgetId = window.turnstile.render(container, {
+            sitekey:  PUBLIC_TURNSTILE_SITEKEY,
+            theme:    'light',
+            size:     'normal',
+            callback: function(token){ _turnstileToken = token; syncHapusMassalBtn(); },
+            'expired-callback': function(){ _turnstileToken = null; syncHapusMassalBtn(); },
+            'error-callback': function(){ _turnstileToken = null; syncHapusMassalBtn(); },
+          });
+        } else if(attempts >= 20){
+          clearInterval(interval);
+          container.innerHTML = '<p style="font-size:.72rem;color:#dc2626;text-align:center">Gagal memuat verifikasi. Muat ulang halaman.</p>';
+        }
+      }, 200);
+    }
+
+    function syncHapusMassalBtn(){
+      var confirmed = (document.getElementById('hm-confirm')?.value ?? '').trim().toUpperCase() === 'HAPUS';
+      var okBtn = document.getElementById('btn-hapus-massal-ok');
+      if(!okBtn) return;
+      var active = confirmed && !!_turnstileToken;
+      okBtn.disabled = !active;
+      okBtn.style.opacity = active ? '1' : '.5';
+      okBtn.style.cursor  = active ? 'pointer' : 'not-allowed';
+    }
 
     // ─── MODAL DETAIL ───────────────────────────────────────────────────────────
     function openDetail(data){
@@ -1034,7 +1198,7 @@ function fmtDate(s: string) {
       var kat=document.getElementById('hm-kat').value;
       var infoEl=document.getElementById('hm-info');
       var katWrap=document.getElementById('hm-kat-wrap');
-      katWrap.style.display=mode==='kategori'?'':'none';
+      katWrap.style.display = mode==='kategori' ? 'block' : 'none';
       var count=countProdukByMode(mode,kat);
       if(count===0){
         infoEl.textContent=mode==='all'?'Tidak ada produk untuk dihapus.':'Tidak ada produk dalam kategori "'+kat+'".';
@@ -1049,33 +1213,41 @@ function fmtDate(s: string) {
       document.getElementById('hm-kat-wrap').style.display='none';
       document.getElementById('hm-confirm').value='';
       document.getElementById('hm-info').textContent='';
+      _turnstileToken = null;
       var okBtn=document.getElementById('btn-hapus-massal-ok');
-      okBtn.disabled=true; okBtn.style.opacity='.5'; okBtn.style.cursor='not-allowed';
+      if(okBtn){ okBtn.disabled=true; okBtn.style.opacity='.5'; okBtn.style.cursor='not-allowed'; }
     }
+
     var hmMode=document.getElementById('hm-mode');
     var hmKat=document.getElementById('hm-kat');
     var hmConfirm=document.getElementById('hm-confirm');
-    if(hmMode) hmMode.addEventListener('change',function(){ updateHmInfo(); hmConfirm.value=''; var ok=document.getElementById('btn-hapus-massal-ok'); ok.disabled=true; ok.style.opacity='.5'; ok.style.cursor='not-allowed'; });
-    if(hmKat) hmKat.addEventListener('change',function(){ updateHmInfo(); hmConfirm.value=''; var ok=document.getElementById('btn-hapus-massal-ok'); ok.disabled=true; ok.style.opacity='.5'; ok.style.cursor='not-allowed'; });
-    if(hmConfirm) hmConfirm.addEventListener('input',function(){
-      var ok=this.value.trim().toUpperCase()==='HAPUS';
-      var okBtn=document.getElementById('btn-hapus-massal-ok');
-      okBtn.disabled=!ok; okBtn.style.opacity=ok?'1':'.5'; okBtn.style.cursor=ok?'pointer':'not-allowed';
-    });
+    if(hmMode) hmMode.addEventListener('change',function(){ updateHmInfo(); hmConfirm.value=''; syncHapusMassalBtn(); });
+    if(hmKat) hmKat.addEventListener('change',function(){ updateHmInfo(); hmConfirm.value=''; syncHapusMassalBtn(); });
+    if(hmConfirm) hmConfirm.addEventListener('input', syncHapusMassalBtn);
+
     var btnHapusMassalOk=document.getElementById('btn-hapus-massal-ok');
     if(btnHapusMassalOk) btnHapusMassalOk.addEventListener('click',async function(){
-      if(this.disabled)return;
+      if(this.disabled) return;
+      if(!_turnstileToken){ toast('Selesaikan verifikasi terlebih dahulu',false); return; }
       var mode=document.getElementById('hm-mode').value;
       var kat=document.getElementById('hm-kat').value;
       this.disabled=true; this.textContent='Menghapus…'; this.style.opacity='.7';
       try{
         var url='/api/produk/produk?bulk='+mode;
         if(mode==='kategori') url+='&kategori='+encodeURIComponent(kat);
-        var res=await api('DELETE',url);
+        var res=await api('DELETE', url, { turnstile_token: _turnstileToken });
         toast((res.deleted||0)+' produk berhasil dihapus');
         closeM('hapus-massal');
         setTimeout(function(){location.reload();},600);
-      }catch(e){ toast('Gagal: '+e.message,false); this.disabled=false; this.textContent='Hapus Sekarang'; this.style.opacity='1'; }
+      }catch(e){
+        toast('Gagal: '+e.message,false);
+        _turnstileToken=null;
+        if(_turnstileWidgetId!==null && window.turnstile){
+          try{ window.turnstile.reset(_turnstileWidgetId); }catch(err){}
+        }
+        syncHapusMassalBtn();
+        this.disabled=false; this.textContent='Hapus Sekarang'; this.style.opacity='1';
+      }
     });
 
     // ─── MODAL FOTO CEPAT ───────────────────────────────────────────────────────
@@ -1162,35 +1334,64 @@ function fmtDate(s: string) {
       if(!validExt){toast('Hanya .csv atau .xlsx yang didukung',false);return;}
       if(file.size===0){toast('File kosong',false);return;}
       if(file.size>2*1024*1024){toast('Ukuran file maks 2 MB',false);return;}
+
       var dz=document.getElementById('dropzone');
-      var origHtml=dz.innerHTML;
-      dz.innerHTML='<p style="font-size:.8rem;color:var(--muted)">Memproses file…</p>';
       dz.style.pointerEvents='none';
+      dz.style.opacity='0.5';
+
       try{
         var fd=new FormData();
         fd.append('file',file);
         var r=await fetch('/api/produk/parse-xlsx',{method:'POST',body:fd,credentials:'same-origin'});
         var d=await r.json().catch(function(){return{};});
-        if(!r.ok){toast(d.error||'Gagal membaca file',false);return;}
-        renderParsed(d.produk||[],d.duplicates||0,d.skipped||0);
+        if(!r.ok){
+          console.error('[parseFile] Error:',r.status,d);
+          toast(d.error||'Gagal membaca file (status '+r.status+')',false);
+          return;
+        }
+        renderParsed(d.produk||[],d.duplicates||0,d.skipped||0,file.name);
       }catch(e){ toast('Gagal mengirim file: '+e.message,false); }
       finally{
-        dz.innerHTML=origHtml; dz.style.pointerEvents='';
-        var inp=dz.querySelector('#f-csv');
-        if(inp) inp.addEventListener('change',function(){ if(this.files&&this.files[0]) parseFile(this.files[0]); });
+        dz.style.pointerEvents='';
+        dz.style.opacity='';
       }
     }
 
-    function renderParsed(produk, dupCount, skipped){
+    function renderParsed(produk, dupCount, skipped, filename){
       _csvData=produk;
+
+      // Sembunyikan dropzone, tampilkan area preview
+      var dz=document.getElementById('dropzone');
+      dz.style.display='none';
+      var previewWrap=document.getElementById('csv-preview');
+      previewWrap.style.display='';
+
+      // Baris info + tombol ganti file
       var countEl=document.getElementById('csv-count');
-      var info=produk.length+' produk siap diimport';
+      var info='<strong>'+esc(filename||'')+'</strong> — '+produk.length+' produk siap diimport';
       if(dupCount>0) info+=' · <span style="color:#92400e">⚠ '+dupCount+' duplikat dihapus</span>';
-      if(skipped>0)  info+=' · <span style="color:#dc2626">✕ '+skipped+' baris tidak valid dilewati</span>';
+      if(skipped>0)  info+=' · <span style="color:#dc2626">✕ '+skipped+' baris dilewati</span>';
+      info+=' <button type="button" id="btn-ganti-file" style="margin-left:.4rem;font-size:.72rem;color:#1e40af;background:none;border:none;cursor:pointer;text-decoration:underline;padding:0;font-family:inherit">Ganti file</button>';
       countEl.innerHTML=info;
+
+      // Tombol ganti file → kembali ke dropzone
+      var btnGanti=document.getElementById('btn-ganti-file');
+      if(btnGanti) btnGanti.addEventListener('click',function(){
+        dz.style.display='';
+        previewWrap.style.display='none';
+        _csvData=[];
+        document.getElementById('btn-do-import').disabled=true;
+        document.getElementById('f-csv').value='';
+      });
+
+      // Render tabel preview
       var tb=document.getElementById('csv-tbody');
-      var headerInfo='<tr style="background:#f0fdf4;border-bottom:2px solid #86efac"><td colspan="6" style="padding:.4rem .65rem;font-size:.72rem;color:#15803d;font-weight:600">✓ Preview '+Math.min(produk.length,20)+' dari '+produk.length+' produk'+(produk.length>20?' (scroll untuk lihat semua)':'')+'</td></tr>';
-      tb.innerHTML=headerInfo+produk.slice(0,50).map(function(r,i){
+      var headerRow='<tr style="background:#f0fdf4;border-bottom:2px solid #86efac">'
+        +'<td colspan="6" style="padding:.4rem .65rem;font-size:.72rem;color:#15803d;font-weight:600">'
+        +'✓ '+produk.length+' produk ditemukan'+(produk.length>50?' · menampilkan 50 pertama':'')
+        +'</td></tr>';
+
+      tb.innerHTML=headerRow+produk.slice(0,50).map(function(r,i){
         var margin=r.harga_beli>0?Math.round(((r.harga_jual-r.harga_beli)/r.harga_beli)*100):null;
         var mColor=margin===null?'#9ca3af':margin>=20?'#15803d':margin>=10?'#92400e':'#dc2626';
         var isAlt=i%2===1;
@@ -1199,12 +1400,20 @@ function fmtDate(s: string) {
           +'<td style="padding:.35rem .65rem;font-weight:500">'+esc(r.nama_produk)+'</td>'
           +'<td style="padding:.35rem .65rem;text-align:right;color:var(--muted);font-size:.75rem">'+(r.harga_beli>0?r.harga_beli.toLocaleString('id-ID'):'—')+'</td>'
           +'<td style="padding:.35rem .65rem;text-align:right;font-weight:600">'+r.harga_jual.toLocaleString('id-ID')+'</td>'
-          +'<td style="padding:.35rem .65rem;text-align:center">'+(margin!==null?'<span style="font-size:.68rem;font-weight:600;color:'+mColor+'">'+margin+'%</span>':'<span style="color:#9ca3af;font-size:.68rem">—</span>')+'</td>'
-          +'<td style="padding:.35rem .65rem"><span style="font-size:.65rem;padding:.1rem .4rem;border-radius:3px;background:#f3f4f6;color:#374151">'+esc(r.kategori)+'</span>'+(r.quick_cash?' <span style="font-size:.62rem;padding:.1rem .35rem;border-radius:3px;background:#c84b1f;color:#fff">QC</span>':'')+'</td>'
+          +'<td style="padding:.35rem .65rem;text-align:center">'
+            +(margin!==null?'<span style="font-size:.68rem;font-weight:600;color:'+mColor+'">'+margin+'%</span>':'<span style="color:#9ca3af;font-size:.68rem">—</span>')
+          +'</td>'
+          +'<td style="padding:.35rem .65rem">'
+            +'<span style="font-size:.65rem;padding:.1rem .4rem;border-radius:3px;background:#f3f4f6;color:#374151">'+esc(r.kategori)+'</span>'
+            +(r.quick_cash?' <span style="font-size:.62rem;padding:.1rem .35rem;border-radius:3px;background:#c84b1f;color:#fff">QC</span>':'')
+          +'</td>'
           +'</tr>';
       }).join('');
-      if(produk.length>50) tb.innerHTML+='<tr><td colspan="6" style="padding:.5rem;text-align:center;color:var(--muted);font-size:.7rem;font-style:italic">…dan '+(produk.length-50)+' produk lainnya tidak ditampilkan</td></tr>';
-      document.getElementById('csv-preview').style.display='';
+
+      if(produk.length>50){
+        tb.innerHTML+='<tr><td colspan="6" style="padding:.5rem;text-align:center;color:var(--muted);font-size:.7rem;font-style:italic">…dan '+(produk.length-50)+' produk lainnya</td></tr>';
+      }
+
       document.getElementById('btn-do-import').disabled=produk.length===0;
     }
 
@@ -1255,8 +1464,19 @@ function fmtDate(s: string) {
 
   } // end initProduk
 
-  /* Jalankan saat pertama load DAN setiap navigasi ViewTransitions */
-  document.addEventListener('astro:page-load', initProduk);
+  /* ══════════════════════════════════════════════════════════════════════
+     BOOTSTRAP
+  ══════════════════════════════════════════════════════════════════════ */
+  if (!window.__produkScriptMounted) {
+    window.__produkScriptMounted = true;
+    document.addEventListener('astro:page-load', initProduk);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initProduk);
+  } else {
+    initProduk();
+  }
   </script>
 
 </Layout>

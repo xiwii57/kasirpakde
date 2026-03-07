@@ -1,5 +1,5 @@
 ---
-// dashboard/index.astro
+// src/pages/dashboard/index.astro
 export const prerender = false;
 import Layout from "../../layouts/Layout.astro";
 import { createServiceClient } from "../../lib/supabase";
@@ -12,6 +12,7 @@ if (!accessToken?.value) return Astro.redirect("/");
 
 const nonce = (Astro.locals as App.Locals).nonce ?? "";
 const sb    = createServiceClient();
+const PUBLIC_TURNSTILE_SITEKEY = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY as string;
 
 // ── Time helpers ───────────────────────────────────────────────────────────
 function toWIB(iso: string) {
@@ -161,104 +162,491 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
 
 <Layout title="Dashboard" active="dashboard" nonce={nonce}>
 
+<style nonce={nonce}>
+
+  /* ── Turnstile wrapper ── */
+  .hm-turnstile-wrap {
+    display: flex;
+    justify-content: center;
+    margin: .75rem 0 .25rem;
+    min-height: 65px;
+  }
+  .hm-turnstile-wrap:empty::after {
+    content: 'Memuat verifikasi…';
+    font-size: .72rem;
+    color: var(--muted);
+    align-self: center;
+  }
+
+  /* ── Turnstile loading state ── */
+  .ts-loading-msg {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .72rem;
+    color: #9ca3af;
+  }
+  .ts-loading-spinner {
+    width: 14px; height: 14px;
+    border: 2px solid #e5e7eb;
+    border-top-color: #c84b1f;
+    border-radius: 50%;
+    animation: ts-spin .7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes ts-spin { to { transform: rotate(360deg); } }
+
+  /* ── Turnstile error state ── */
+  .ts-error-msg {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .7rem;
+    color: #dc2626;
+  }
+  .ts-retry-btn {
+    font-size: .68rem;
+    font-weight: 600;
+    color: #c84b1f;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+  }
+  .ts-retry-btn:hover { color: #9a3412; }
+
+  /* ── Verified state indicator ── */
+  .ts-verified-msg {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .72rem;
+    color: #15803d;
+    font-weight: 600;
+  }
+  .ts-verified-icon {
+    width: 16px; height: 16px;
+    background: #dcfce7;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .6rem;
+    flex-shrink: 0;
+  }
+
+  /* ══ Modal ═══════════════════════════════════════════════════════════════ */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(0,0,0,.45);
+    backdrop-filter: blur(2px);
+  }
+  .modal-box {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    background: #fff;
+    border-radius: 10px;
+    width: min(440px, calc(100vw - 2rem));
+    box-shadow: 0 20px 60px rgba(0,0,0,.18);
+    overflow: hidden;
+  }
+  .modal-header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid rgba(15,13,11,.07);
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+  }
+  .modal-header-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: #fef2f2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .modal-title {
+    font-size: .9rem;
+    font-weight: 700;
+    color: #0f0d0b;
+    margin: 0;
+  }
+  .modal-subtitle {
+    font-size: .68rem;
+    color: #9ca3af;
+    margin: 1px 0 0;
+  }
+  .modal-close-btn {
+    margin-left: auto;
+    width: 28px; height: 28px;
+    border: none; background: none;
+    cursor: pointer;
+    color: #9ca3af;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: background .12s, color .12s;
+  }
+  .modal-close-btn:hover { background: #f3f4f6; color: #374151; }
+
+  .modal-body {
+    padding: 1.375rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .modal-field-label {
+    font-size: .7rem;
+    font-weight: 600;
+    color: #374151;
+    display: block;
+    margin-bottom: .5rem;
+  }
+  .radio-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .5rem;
+  }
+  .radio-label {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .6rem .75rem;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: border-color .12s, background .12s;
+  }
+  .radio-label-text-bold { font-size: .75rem; font-weight: 600; color: #0f0d0b; }
+  .radio-label-text      { font-size: .75rem; font-weight: 500; color: #374151; }
+
+  .warning-box {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 7px;
+    padding: .75rem 1rem;
+    display: flex;
+    gap: .5rem;
+    align-items: flex-start;
+  }
+  .warning-icon { flex-shrink: 0; margin-top: 1px; }
+  .warning-text { font-size: .7rem; color: #dc2626; margin: 0; line-height: 1.5; }
+
+  .modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid rgba(15,13,11,.07);
+    display: flex;
+    gap: .625rem;
+    justify-content: flex-end;
+  }
+  .btn-cancel {
+    padding: .5rem 1rem;
+    font-size: .78rem; font-weight: 600;
+    border: 1.5px solid #e5e7eb;
+    background: #fff; color: #374151;
+    border-radius: 7px; cursor: pointer;
+    transition: background .12s;
+  }
+  .btn-cancel:hover { background: #f9fafb; }
+  .btn-danger {
+    padding: .5rem 1.25rem;
+    font-size: .78rem; font-weight: 700;
+    border: none;
+    background: #dc2626; color: #fff;
+    border-radius: 7px; cursor: pointer;
+    display: flex; align-items: center; gap: .4rem;
+    transition: background .12s, opacity .12s;
+  }
+  .btn-danger:hover                          { background: #b91c1c; }
+  .btn-danger:disabled                       { opacity: .45; cursor: not-allowed; background: #dc2626; }
+  .btn-cancel:disabled                       { opacity: .6; cursor: not-allowed; }
+  .spinner { display: none; }
+
+  /* ══ Toast ═══════════════════════════════════════════════════════════════ */
+  .toast {
+    position: fixed;
+    bottom: 1.5rem; right: 1.5rem;
+    z-index: 100;
+    display: none;
+    padding: .75rem 1.125rem;
+    border-radius: 8px;
+    font-size: .78rem; font-weight: 600;
+    box-shadow: 0 8px 24px rgba(0,0,0,.15);
+    align-items: center; gap: .5rem;
+    transition: opacity .2s;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* ══ Today cards ═════════════════════════════════════════════════════════ */
+  .today-omset-label {
+    font-size: .62rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .07em;
+    opacity: .45; margin-bottom: 5px;
+  }
+  .today-omset-value {
+    font-size: 1.45rem; font-weight: 800; line-height: 1.1;
+  }
+  .today-omset-meta {
+    display: flex; align-items: center; gap: 6px; margin-top: 5px;
+  }
+  .today-omset-sub { font-size: .65rem; opacity: .55; }
+
+  .today-cash-label {
+    font-size: .62rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .07em;
+    color: #15803d; margin-bottom: 5px;
+  }
+  .today-cash-value { font-size: 1.35rem; font-weight: 800; color: #14532d; line-height: 1.1; }
+  .today-cash-sub   { font-size: .65rem; color: #16a34a; margin-top: 5px; }
+
+  .today-qris-label {
+    font-size: .62rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .07em;
+    color: #1d4ed8; margin-bottom: 5px;
+  }
+  .today-qris-value { font-size: 1.35rem; font-weight: 800; color: #1e3a8a; line-height: 1.1; }
+  .today-qris-sub   { font-size: .65rem; color: #2563eb; margin-top: 5px; }
+
+  .today-item-label {
+    font-size: .62rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .07em;
+    color: #b45309; margin-bottom: 5px;
+  }
+  .today-item-value { font-size: 1.35rem; font-weight: 800; color: #78350f; line-height: 1.1; }
+  .today-item-sub   { font-size: .65rem; color: #d97706; margin-top: 5px; }
+
+  /* ══ vs-kemarin badge ════════════════════════════════════════════════════ */
+  .badge-up   { font-size:.6rem;font-weight:700;padding:1px 5px;border-radius:99px;background:rgba(34,197,94,.2);color:#4ade80; }
+  .badge-down { font-size:.6rem;font-weight:700;padding:1px 5px;border-radius:99px;background:rgba(248,113,113,.2);color:#f87171; }
+
+  /* ══ Mini-chart bars ═════════════════════════════════════════════════════ */
+  .mc-bar-today  { background: #c84b1f; }
+  .mc-bar-normal { background: #f3d5cc; }
+
+  /* ══ Tren section header ═════════════════════════════════════════════════ */
+  .tren-header-right {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .tren-total-label { font-size: .68rem; color: #9ca3af; margin-top: 1px; }
+  .tren-total-val   { font-weight: 600; color: #0f0d0b; }
+
+  .mini-chart-pad { padding: 1.125rem 1.375rem .875rem; }
+
+  /* ══ Transaksi terbaru ═══════════════════════════════════════════════════ */
+  .trx-section-head {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .trx-count-note  { font-size: .62rem; color: #9ca3af; flex-shrink: 0; }
+  .trx-empty       { font-size: .75rem; color: #9ca3af; text-align: center; padding: 2rem 1rem; }
+
+  .trx-row-total   { font-size: .77rem; font-weight: 600; color: #0f0d0b; }
+  .trx-row-time    { font-size: .62rem; color: #9ca3af; }
+
+  /* ══ Ringkasan pembayaran ════════════════════════════════════════════════ */
+  .pay-section-head {
+    display: flex; align-items: center;
+    justify-content: space-between;
+  }
+  .pay-method-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: .85rem 1.375rem;
+    border-bottom: 1px solid rgba(15,13,11,.05);
+  }
+  .pay-method-icon {
+    width: 30px; height: 30px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .pay-method-icon-green { background: #dcfce7; }
+  .pay-method-icon-blue  { background: #dbeafe; }
+
+  .pay-method-detail   { flex: 1; min-width: 0; }
+  .pay-method-name-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+  .pay-method-name         { font-size: .77rem; font-weight: 600; color: #0f0d0b; }
+  .pay-method-amount-green { font-size: .77rem; font-weight: 700; color: #15803d; }
+  .pay-method-amount-blue  { font-size: .77rem; font-weight: 700; color: #1d4ed8; }
+  .pay-method-note         { font-size: .62rem; color: #9ca3af; margin-top: 3px; }
+
+  .pay-total-row {
+    padding: .8rem 1.375rem;
+    background: #fdf9f6;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .pay-total-label { font-size: .72rem; color: #6b7280; font-weight: 500; }
+  .pay-total-value { font-size: .95rem; font-weight: 800; color: #0f0d0b; }
+
+  /* ══ Stat mini grid ══════════════════════════════════════════════════════ */
+  .stat-mini-card { padding: 1.1rem 1.375rem; }
+  .stat-mini-card-border-b { border-bottom: 1px solid rgba(15,13,11,.06); }
+  .stat-mini-card-border-r { border-right: 1px solid rgba(15,13,11,.06); }
+
+  .stat-mini-label {
+    font-size: .62rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .06em;
+    color: #9ca3af; margin-bottom: 5px;
+  }
+  .stat-mini-val { font-size: 1.15rem; font-weight: 800; line-height: 1.15; }
+  .stat-mini-sub { font-size: .62rem; color: #9ca3af; margin-top: 2px; }
+
+  .stat-mini-color-primary { color: #0f0d0b; }
+  .stat-mini-color-accent  { color: #c84b1f; }
+  .stat-mini-color-green   { color: #15803d; }
+  .stat-mini-color-blue    { color: #1d4ed8; }
+
+  /* ══ Stat cards produk ═══════════════════════════════════════════════════ */
+  .stat-top { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
+
+  .stat-label {
+    font-size: .65rem; font-weight: 600;
+    color: #9ca3af;
+    text-transform: uppercase; letter-spacing: .05em;
+  }
+  .stat-value {
+    font-size: 1.9rem; font-weight: 700;
+    color: #0f0d0b;
+    line-height: 1; margin-top: .5rem;
+  }
+  .stat-value-danger { color: #ef4444; }
+  .stat-sub { font-size: .68rem; color: #9ca3af; margin-top: .375rem; }
+
+  .stat-icon-wrap         { background: #fdf6f3; }
+  .stat-icon-wrap-danger  { background: #fef2f2; }
+
+  /* ══ Tabel produk ════════════════════════════════════════════════════════ */
+  .prod-name-cell  { display: flex; align-items: center; gap: .5rem; }
+  .prod-name-text  { font-weight: 500; color: #0f0d0b; }
+  .quick-cash-dot  { width: 5px; height: 5px; border-radius: 50%; background: #c84b1f; flex-shrink: 0; display: inline-block; }
+
+  .tabel-produk-empty { padding: 2.5rem 1.375rem; text-align: center; color: #9ca3af; font-size: .8rem; }
+  .tabel-produk-link  { color: #c84b1f; font-weight: 600; }
+  .tabel-produk-link:hover { text-decoration: underline; }
+
+  /* ══ Top Seller ══════════════════════════════════════════════════════════ */
+  .top-seller-row   { display: flex; align-items: center; gap: .6rem; }
+  .top-seller-rank  { font-size: .65rem; font-weight: 700; color: #d1d5db; width: 1rem; text-align: right; flex-shrink: 0; }
+  .top-seller-info  { flex: 1; min-width: 0; }
+  .top-seller-name  { font-size: .77rem; font-weight: 500; color: #0f0d0b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top-seller-qty   { font-size: .7rem; font-weight: 600; color: #6b7280; flex-shrink: 0; }
+  .top-seller-pad   { padding: .875rem 1.375rem; display: flex; flex-direction: column; gap: .7rem; }
+  .top-seller-empty { font-size: .75rem; color: #9ca3af; text-align: center; padding: .75rem 0; }
+
+  /* ══ Log perubahan harga ═════════════════════════════════════════════════ */
+  .log-name      { font-size: .77rem; font-weight: 500; color: #0f0d0b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .log-price-row { display: flex; align-items: center; gap: .5rem; margin-top: 2px; }
+  .log-price-old { font-size: .65rem; color: #9ca3af; text-decoration: line-through; }
+  .log-price-arrow { width: 9px; height: 9px; color: #d1d5db; flex-shrink: 0; }
+  .log-price-new   { font-size: .65rem; font-weight: 700; color: #c84b1f; }
+  .log-price-date  { font-size: .6rem; color: #d1d5db; margin-left: auto; flex-shrink: 0; }
+  .log-empty       { font-size: .75rem; color: #9ca3af; text-align: center; padding: 1.25rem; }
+
+  /* ══ Breakdown kategori ══════════════════════════════════════════════════ */
+  .kat-card {
+    text-align: center; padding: 1rem;
+    border: 1px solid rgba(15,13,11,.07); border-radius: 6px;
+    transition: box-shadow .15s, transform .15s;
+  }
+  .kat-card:hover { box-shadow: 0 4px 14px rgba(15,13,11,.08); transform: translateY(-2px); }
+  .kat-count  { font-size: 1.7rem; font-weight: 700; color: #0f0d0b; margin: .5rem 0 0; }
+  .kat-sub    { font-size: .65rem; color: #9ca3af; margin: 1px 0 .375rem; }
+  .kat-margin { font-size: .68rem; font-weight: 600; color: #c84b1f; }
+  .kat-grid-pad { padding: 1.125rem 1.375rem; }
+
+  /* ══ Section head variants ═══════════════════════════════════════════════ */
+  .section-head-col {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+  }
+
+  /* ══ Heading font ════════════════════════════════════════════════════════ */
+  .dash-title { font-family: 'DM Serif Display', serif; }
+
+  /* ══ Tabel — padding kolom pertama & terakhir ════════════════════════════ */
+  .th-pad-left,  .td-pad-left  { padding-left:  1.375rem !important; }
+  .th-pad-right, .td-pad-right { padding-right: 1.375rem !important; }
+</style>
+
 <!-- ── Modal Hapus Histori ────────────────────────────────────────────────── -->
-<div id="modalHapus"
-  style="display:none;position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);backdrop-filter:blur(2px)"
+<div id="modalHapus" class="modal-backdrop"
   role="dialog" aria-modal="true" aria-labelledby="modalHapusTitle">
+  <div class="modal-box">
 
-  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-              background:#fff;border-radius:10px;width:min(440px,calc(100vw - 2rem));
-              box-shadow:0 20px 60px rgba(0,0,0,.18);overflow:hidden">
-
-    <!-- Header -->
-    <div style="padding:1.25rem 1.5rem;border-bottom:1px solid rgba(15,13,11,.07);display:flex;align-items:center;gap:.75rem">
-      <div style="width:32px;height:32px;border-radius:8px;background:#fef2f2;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+    <div class="modal-header">
+      <div class="modal-header-icon">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
           <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
         </svg>
       </div>
       <div>
-        <h3 id="modalHapusTitle" style="font-size:.9rem;font-weight:700;color:#0f0d0b;margin:0">Hapus Histori</h3>
-        <p style="font-size:.68rem;color:#9ca3af;margin:1px 0 0">Data yang dihapus tidak dapat dipulihkan</p>
+        <h3 id="modalHapusTitle" class="modal-title">Hapus Histori</h3>
+        <p class="modal-subtitle">Data yang dihapus tidak dapat dipulihkan</p>
       </div>
-      <button id="modalHapusClose" aria-label="Tutup"
-        style="margin-left:auto;width:28px;height:28px;border:none;background:none;cursor:pointer;
-               color:#9ca3af;display:flex;align-items:center;justify-content:center;border-radius:6px"
-        onmouseenter="this.style.background='#f3f4f6';this.style.color='#374151'"
-        onmouseleave="this.style.background='none';this.style.color='#9ca3af'">
+      <button id="modalHapusClose" class="modal-close-btn" aria-label="Tutup">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
       </button>
     </div>
 
-    <!-- Body -->
-    <div style="padding:1.375rem 1.5rem;display:flex;flex-direction:column;gap:1rem">
-
-      <!-- Pilih tipe -->
+    <div class="modal-body">
       <div>
-        <label style="font-size:.7rem;font-weight:600;color:#374151;display:block;margin-bottom:.5rem">Hapus data apa?</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
-          <label id="lbl-transaksi" style="display:flex;align-items:center;gap:.5rem;padding:.6rem .75rem;border:1.5px solid #e5e7eb;border-radius:7px;cursor:pointer;transition:all .12s">
+        <label class="modal-field-label">Hapus data apa?</label>
+        <div class="radio-grid">
+          <label id="lbl-transaksi" class="radio-label">
             <input type="radio" name="hapusType" value="transaksi" style="accent-color:#c84b1f" checked>
-            <span style="font-size:.75rem;font-weight:600;color:#0f0d0b">Histori Transaksi</span>
+            <span class="radio-label-text-bold">Histori Transaksi</span>
           </label>
-          <label id="lbl-harga_log" style="display:flex;align-items:center;gap:.5rem;padding:.6rem .75rem;border:1.5px solid #e5e7eb;border-radius:7px;cursor:pointer;transition:all .12s">
+          <label id="lbl-harga_log" class="radio-label">
             <input type="radio" name="hapusType" value="harga_log" style="accent-color:#c84b1f">
-            <span style="font-size:.75rem;font-weight:600;color:#0f0d0b">Log Perubahan Harga</span>
+            <span class="radio-label-text-bold">Log Perubahan Harga</span>
           </label>
         </div>
       </div>
 
-      <!-- Pilih range -->
       <div>
-        <label style="font-size:.7rem;font-weight:600;color:#374151;display:block;margin-bottom:.5rem">Rentang waktu</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+        <label class="modal-field-label">Rentang waktu</label>
+        <div class="radio-grid">
           {[
             { val: "hari_ini", label: "Hari Ini" },
             { val: "7_hari",   label: "7 Hari Terakhir" },
             { val: "30_hari",  label: "30 Hari Terakhir" },
             { val: "semua",    label: "Semua Waktu" },
           ].map(r => (
-            <label style="display:flex;align-items:center;gap:.5rem;padding:.6rem .75rem;border:1.5px solid #e5e7eb;border-radius:7px;cursor:pointer;transition:all .12s"
-              class="range-lbl">
+            <label class="radio-label range-lbl">
               <input type="radio" name="hapusRange" value={r.val} style="accent-color:#c84b1f" checked={r.val === "hari_ini"}>
-              <span style="font-size:.75rem;font-weight:500;color:#374151">{r.label}</span>
+              <span class="radio-label-text">{r.label}</span>
             </label>
           ))}
         </div>
       </div>
 
-      <!-- Warning box -->
-      <div id="hapusWarning" style="background:#fef2f2;border:1px solid #fecaca;border-radius:7px;padding:.75rem 1rem;display:flex;gap:.5rem;align-items:flex-start">
-        <svg style="flex-shrink:0;margin-top:1px" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <div class="warning-box">
+        <svg class="warning-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
           <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
-        <p id="hapusWarningText" style="font-size:.7rem;color:#dc2626;margin:0;line-height:1.5">
+        <p id="hapusWarningText" class="warning-text">
           Histori transaksi hari ini akan dihapus permanen, termasuk seluruh item transaksi terkait.
         </p>
       </div>
-
     </div>
 
-    <!-- Footer -->
-    <div style="padding:1rem 1.5rem;border-top:1px solid rgba(15,13,11,.07);display:flex;gap:.625rem;justify-content:flex-end">
-      <button id="hapusCancelBtn"
-        style="padding:.5rem 1rem;font-size:.78rem;font-weight:600;border:1.5px solid #e5e7eb;
-               background:#fff;color:#374151;border-radius:7px;cursor:pointer;transition:all .12s"
-        onmouseenter="this.style.background='#f9fafb'"
-        onmouseleave="this.style.background='#fff'">
-        Batal
-      </button>
-      <button id="hapusKonfirmasiBtn"
-        style="padding:.5rem 1.25rem;font-size:.78rem;font-weight:700;border:none;
-               background:#dc2626;color:#fff;border-radius:7px;cursor:pointer;
-               display:flex;align-items:center;gap:.4rem;transition:background .12s"
-        onmouseenter="this.style.background='#b91c1c'"
-        onmouseleave="this.style.background='#dc2626'">
-        <svg id="hapusSpinner" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none" aria-hidden="true">
+    <!-- ── Turnstile verification area ── -->
+    <div class="hm-turnstile-wrap">
+      <div id="hm-turnstile-container"></div>
+    </div>
+
+    <div class="modal-footer">
+      <button id="hapusCancelBtn" class="btn-cancel">Batal</button>
+      <button id="hapusKonfirmasiBtn" class="btn-danger" disabled>
+        <svg id="hapusSpinner" class="spinner" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
         </svg>
         <span id="hapusBtnLabel">Hapus Sekarang</span>
@@ -269,21 +657,16 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
 </div>
 
 <!-- ── Toast Notifikasi ───────────────────────────────────────────────────── -->
-<div id="toastNotif"
-  style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:100;display:none;
-         padding:.75rem 1.125rem;border-radius:8px;font-size:.78rem;font-weight:600;
-         box-shadow:0 8px 24px rgba(0,0,0,.15);display:flex;align-items:center;gap:.5rem;
-         transition:opacity .2s;opacity:0;pointer-events:none"
-  role="status" aria-live="polite">
+<div id="toastNotif" class="toast" role="status" aria-live="polite">
   <span id="toastIcon"></span>
   <span id="toastText"></span>
 </div>
 
-<!-- ── Sticky Header ────────────────────────────────────────────────────────── -->
+<!-- ── Sticky Header ─────────────────────────────────────────────────────── -->
 <div class="bg-white border-b border-black/[0.07] px-4 sm:px-6 lg:px-8 py-4
             flex items-center justify-between sticky top-0 z-20 fade-up">
   <div class="flex items-center gap-3">
-    <button onclick="window.openSidebar&&window.openSidebar()"
+    <button id="btnOpenSidebar"
       class="lg:hidden w-8 h-8 flex items-center justify-center rounded text-gray-500
              hover:text-gray-800 hover:bg-gray-100 transition-colors"
       aria-label="Buka menu">
@@ -292,7 +675,7 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
       </svg>
     </button>
     <div>
-      <h1 style="font-family:'DM Serif Display',serif" class="text-[1.2rem] leading-tight text-[#0f0d0b]">Dashboard</h1>
+      <h1 class="dash-title text-[1.2rem] leading-tight text-[#0f0d0b]">Dashboard</h1>
       <p class="text-[.7rem] text-gray-400 hidden sm:block">
         {salam}, <span class="font-medium text-gray-600">{userEmail.split("@")[0]}</span>
         <span class="text-gray-300 mx-1">·</span>
@@ -301,7 +684,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
     </div>
   </div>
   <div class="flex items-center gap-2">
-    <!-- Tombol Hapus Histori -->
     <button id="btnHapusHistori"
       class="flex items-center gap-1.5 px-3.5 py-2 border border-red-200 hover:border-red-400
              text-red-500 hover:text-red-700 hover:bg-red-50 text-[.78rem] font-semibold
@@ -325,59 +707,67 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
   </div>
 </div>
 
-<!-- ── Konten ────────────────────────────────────────────────────────────────── -->
+<!-- ── Konten ─────────────────────────────────────────────────────────────── -->
 <div class="page-pad p-5 lg:p-7 space-y-5 max-w-[1400px] mx-auto">
 
-  <!-- ①  HARI INI -->
+  <!-- ① HARI INI ────────────────────────────────────────────────────────── -->
   <div class="fade-up d1">
     <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Hari Ini</p>
     <div class="today-grid grid grid-cols-4 gap-3">
+
       <div class="today-card dark">
-        <p style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;opacity:.45;margin-bottom:5px">Omset</p>
-        <p style="font-size:1.45rem;font-weight:800;line-height:1.1">{rp(omsetHari)}</p>
-        <div style="display:flex;align-items:center;gap:6px;margin-top:5px">
-          <span style="font-size:.65rem;opacity:.55">{hari.length} transaksi · {itemHari} item</span>
+        <p class="today-omset-label">Omset</p>
+        <p class="today-omset-value">{rp(omsetHari)}</p>
+        <div class="today-omset-meta">
+          <span class="today-omset-sub">{hari.length} transaksi · {itemHari} item</span>
           {vsKemarin !== null && (
-            <span style={`font-size:.6rem;font-weight:700;padding:1px 5px;border-radius:99px;${vsKemarin >= 0 ? 'background:rgba(34,197,94,.2);color:#4ade80' : 'background:rgba(248,113,113,.2);color:#f87171'}`}>
+            <span class={vsKemarin >= 0 ? "badge-up" : "badge-down"}>
               {vsKemarin >= 0 ? "+" : ""}{vsKemarin}%
             </span>
           )}
         </div>
       </div>
+
       <div class="today-card green">
-        <p style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#15803d;margin-bottom:5px">Cash / Manual</p>
-        <p style="font-size:1.35rem;font-weight:800;color:#14532d;line-height:1.1">{rp(cashHari)}</p>
-        <p style="font-size:.65rem;color:#16a34a;margin-top:5px">{hari.filter(t=>t.metode_bayar!=="qris").length} transaksi</p>
+        <p class="today-cash-label">Cash / Manual</p>
+        <p class="today-cash-value">{rp(cashHari)}</p>
+        <p class="today-cash-sub">{hari.filter(t => t.metode_bayar !== "qris").length} transaksi</p>
       </div>
+
       <div class="today-card blue">
-        <p style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#1d4ed8;margin-bottom:5px">QRIS · Statis</p>
-        <p style="font-size:1.35rem;font-weight:800;color:#1e3a8a;line-height:1.1">{rp(qrisHari)}</p>
-        <p style="font-size:.65rem;color:#2563eb;margin-top:5px">{hari.filter(t=>t.metode_bayar==="qris").length} transaksi</p>
+        <p class="today-qris-label">QRIS · Statis</p>
+        <p class="today-qris-value">{rp(qrisHari)}</p>
+        <p class="today-qris-sub">{hari.filter(t => t.metode_bayar === "qris").length} transaksi</p>
       </div>
+
       <div class="today-card amber">
-        <p style="font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#b45309;margin-bottom:5px">Item Terjual</p>
-        <p style="font-size:1.35rem;font-weight:800;color:#78350f;line-height:1.1">{itemHari}</p>
-        <p style="font-size:.65rem;color:#d97706;margin-top:5px">
+        <p class="today-item-label">Item Terjual</p>
+        <p class="today-item-value">{itemHari}</p>
+        <p class="today-item-sub">
           {hari.length > 0 ? `~${(itemHari / hari.length).toFixed(1)} item/trx` : "belum ada transaksi"}
         </p>
       </div>
+
     </div>
   </div>
 
-  <!-- ② TREN 7 HARI + TRANSAKSI TERBARU -->
+  <!-- ② TREN 7 HARI + TRANSAKSI TERBARU ───────────────────────────────── -->
   <div class="trx-chart-grid grid grid-cols-5 gap-4 fade-up d2">
+
     <div class="col-span-3 section-card">
       <div class="section-head">
         <div>
           <h2>Tren Omset 7 Hari</h2>
-          <p>Total minggu ini: <strong style="color:#0f0d0b">{rp(omsetWeek)}</strong></p>
+          <p class="tren-total-label">
+            Total minggu ini: <strong class="tren-total-val">{rp(omsetWeek)}</strong>
+          </p>
         </div>
         <a href="/dashboard/analisis"
           class="text-[.72rem] font-semibold text-[#c84b1f] hover:underline whitespace-nowrap flex-shrink-0">
           Analisis lengkap →
         </a>
       </div>
-      <div style="padding:1.125rem 1.375rem .875rem">
+      <div class="mini-chart-pad">
         <div class="mini-chart">
           {days7.map(d => {
             const pct     = (d.omset / maxOmset7) * 100;
@@ -385,8 +775,8 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
             return (
               <div class={`mc-col${isToday ? " today" : ""}`} data-lbl={d.label}>
                 <div class="mc-tip">{rp(d.omset)}<br/>{d.trx} trx</div>
-                <div class="mc-bar"
-                  style={`height:${pct > 0 ? Math.max(pct, 4) : 0}%;background:${isToday ? "#c84b1f" : "#f3d5cc"}`}>
+                <div class={`mc-bar ${isToday ? "mc-bar-today" : "mc-bar-normal"}`}
+                  style={`height:${pct > 0 ? Math.max(pct, 4) : 0}%`}>
                 </div>
               </div>
             );
@@ -394,6 +784,7 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         </div>
       </div>
     </div>
+
     <div class="col-span-2 section-card" style="display:flex;flex-direction:column">
       <div class="section-head">
         <div>
@@ -401,16 +792,16 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
           <p>Hari ini · {hari.length} total</p>
         </div>
         {hari.length > 8 && (
-          <span style="font-size:.62rem;color:#9ca3af;flex-shrink:0">+{hari.length - 8} lainnya</span>
+          <span class="trx-count-note">+{hari.length - 8} lainnya</span>
         )}
       </div>
       {hari.length === 0
-        ? <p style="font-size:.75rem;color:#9ca3af;text-align:center;padding:2rem 1rem">Belum ada transaksi hari ini</p>
+        ? <p class="trx-empty">Belum ada transaksi hari ini</p>
         : hari.slice(0, 8).map(t => (
           <div class="trx-row">
             <div>
-              <p style="font-size:.77rem;font-weight:600;color:#0f0d0b">{rp(t.total)}</p>
-              <p style="font-size:.62rem;color:#9ca3af">{timeStr(t.created_at)}</p>
+              <p class="trx-row-total">{rp(t.total)}</p>
+              <p class="trx-row-time">{timeStr(t.created_at)}</p>
             </div>
             <span class={`trx-badge ${t.metode_bayar === "qris" ? "badge-qris" : "badge-cash"}`}>
               {t.metode_bayar === "qris" ? "QRIS" : "Cash"}
@@ -419,122 +810,133 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         ))
       }
     </div>
+
   </div>
 
-  <!-- ③  RINGKASAN PEMBAYARAN 30 HARI -->
+  <!-- ③ RINGKASAN PEMBAYARAN 30 HARI ───────────────────────────────────── -->
   <div class="fade-up d3">
-    <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Ringkasan Pembayaran · 30 Hari Terakhir</p>
+    <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-widest mb-2.5">
+      Ringkasan Pembayaran · 30 Hari Terakhir
+    </p>
     <div class="pay-grid grid grid-cols-2 gap-4">
+
       <div class="section-card">
-        <div class="section-head">
+        <div class="section-head pay-section-head">
           <div><h2>Total per Metode Bayar</h2></div>
-          <span style="font-size:.67rem;color:#9ca3af">{trx30.length} transaksi</span>
+          <span class="trx-count-note">{trx30.length} transaksi</span>
         </div>
-        <div style="display:flex;align-items:center;gap:12px;padding:.85rem 1.375rem;border-bottom:1px solid rgba(15,13,11,.05)">
-          <div style="width:30px;height:30px;border-radius:6px;background:#dcfce7;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+
+        <div class="pay-method-row">
+          <div class="pay-method-icon pay-method-icon-green">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5" aria-hidden="true">
               <rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/>
             </svg>
           </div>
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
-              <span style="font-size:.77rem;font-weight:600;color:#0f0d0b">Cash / Manual</span>
-              <span style="font-size:.77rem;font-weight:700;color:#15803d">{rp(cash30)}</span>
+          <div class="pay-method-detail">
+            <div class="pay-method-name-row">
+              <span class="pay-method-name">Cash / Manual</span>
+              <span class="pay-method-amount-green">{rp(cash30)}</span>
             </div>
             <div class="pay-bar-bg">
               <div class="pay-bar" style={`width:${omset30 > 0 ? (cash30/omset30)*100 : 0}%;background:#22c55e`}></div>
             </div>
-            <p style="font-size:.62rem;color:#9ca3af;margin-top:3px">{cashCnt30} transaksi · {omset30 > 0 ? Math.round((cash30/omset30)*100) : 0}%</p>
+            <p class="pay-method-note">
+              {cashCnt30} transaksi · {omset30 > 0 ? Math.round((cash30/omset30)*100) : 0}%
+            </p>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:12px;padding:.85rem 1.375rem;border-bottom:1px solid rgba(15,13,11,.05)">
-          <div style="width:30px;height:30px;border-radius:6px;background:#dbeafe;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+
+        <div class="pay-method-row">
+          <div class="pay-method-icon pay-method-icon-blue">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2.5" aria-hidden="true">
               <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
               <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
             </svg>
           </div>
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
-              <span style="font-size:.77rem;font-weight:600;color:#0f0d0b">QRIS · Statis</span>
-              <span style="font-size:.77rem;font-weight:700;color:#1d4ed8">{rp(qris30)}</span>
+          <div class="pay-method-detail">
+            <div class="pay-method-name-row">
+              <span class="pay-method-name">QRIS · Statis</span>
+              <span class="pay-method-amount-blue">{rp(qris30)}</span>
             </div>
             <div class="pay-bar-bg">
               <div class="pay-bar" style={`width:${omset30 > 0 ? (qris30/omset30)*100 : 0}%;background:#3b82f6`}></div>
             </div>
-            <p style="font-size:.62rem;color:#9ca3af;margin-top:3px">{qrisCnt30} transaksi · {omset30 > 0 ? Math.round((qris30/omset30)*100) : 0}%</p>
+            <p class="pay-method-note">
+              {qrisCnt30} transaksi · {omset30 > 0 ? Math.round((qris30/omset30)*100) : 0}%
+            </p>
           </div>
         </div>
-        <div style="padding:.8rem 1.375rem;background:#fdf9f6;display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:.72rem;color:#6b7280;font-weight:500">Total Omset 30 Hari</span>
-          <span style="font-size:.95rem;font-weight:800;color:#0f0d0b">{rp(omset30)}</span>
+
+        <div class="pay-total-row">
+          <span class="pay-total-label">Total Omset 30 Hari</span>
+          <span class="pay-total-value">{rp(omset30)}</span>
         </div>
       </div>
-      <div class="section-card" style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr">
+
+      <div class="section-card"
+        style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr">
         {[
-          { lbl:"Total Transaksi",   val: String(trx30.length),                                                           sub:"30 hari",           color:"#0f0d0b" },
-          { lbl:"Omset / Hari",      val: rp(Math.round(omset30 / 30)),                                                   sub:"rata-rata harian",  color:"#c84b1f" },
-          { lbl:"Nilai / Transaksi", val: trx30.length > 0 ? rp(Math.round(omset30/trx30.length)) : "Rp 0",              sub:"rata-rata per trx", color:"#0f0d0b" },
-          { lbl:"Metode Dominan",    val: cashCnt30 >= qrisCnt30 ? "Cash" : "QRIS",
-            sub: cashCnt30 >= qrisCnt30 ? `${cashCnt30} dari ${trx30.length} trx` : `${qrisCnt30} dari ${trx30.length} trx`,
-            color: cashCnt30 >= qrisCnt30 ? "#15803d" : "#1d4ed8" },
+          { lbl: "Total Transaksi", val: String(trx30.length), sub: "30 hari", colorClass: "stat-mini-color-primary" },
+          { lbl: "Omset / Hari", val: rp(Math.round(omset30 / 30)), sub: "rata-rata harian", colorClass: "stat-mini-color-accent" },
+          { lbl: "Nilai / Transaksi", val: trx30.length > 0 ? rp(Math.round(omset30 / trx30.length)) : "Rp 0", sub: "rata-rata per trx", colorClass: "stat-mini-color-primary" },
+          { lbl: "Metode Dominan", val: cashCnt30 >= qrisCnt30 ? "Cash" : "QRIS", sub: cashCnt30 >= qrisCnt30 ? `${cashCnt30} dari ${trx30.length} trx` : `${qrisCnt30} dari ${trx30.length} trx`, colorClass: cashCnt30 >= qrisCnt30 ? "stat-mini-color-green" : "stat-mini-color-blue" },
         ].map((s, i) => (
-          <div style={[
-            "padding:1.1rem 1.375rem",
-            i < 2 ? "border-bottom:1px solid rgba(15,13,11,.06)" : "",
-            i % 2 === 0 ? "border-right:1px solid rgba(15,13,11,.06)" : "",
-          ].filter(Boolean).join(";")}>
-            <p style="font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;margin-bottom:5px">{s.lbl}</p>
-            <p style={`font-size:1.15rem;font-weight:800;color:${s.color};line-height:1.15`}>{s.val}</p>
-            <p style="font-size:.62rem;color:#9ca3af;margin-top:2px">{s.sub}</p>
+          <div class={["stat-mini-card", i < 2 ? "stat-mini-card-border-b" : "", i % 2 === 0 ? "stat-mini-card-border-r" : ""].filter(Boolean).join(" ")}>
+            <p class="stat-mini-label">{s.lbl}</p>
+            <p class={`stat-mini-val ${s.colorClass}`}>{s.val}</p>
+            <p class="stat-mini-sub">{s.sub}</p>
           </div>
         ))}
       </div>
+
     </div>
   </div>
 
-  <!-- ④  STAT CARDS PRODUK -->
+  <!-- ④ STAT CARDS PRODUK ──────────────────────────────────────────────── -->
   <div class="stats-grid grid grid-cols-4 gap-3 fade-up d4">
+
     <div class="stat-card">
-      <div class="flex items-start justify-between gap-3">
+      <div class="stat-top">
         <div>
-          <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-wider">Total Produk</p>
-          <p class="text-[1.9rem] font-bold text-[#0f0d0b] leading-none mt-2">{totalProduk}</p>
-          <p class="text-[.68rem] text-gray-400 mt-1.5">item terdaftar</p>
+          <p class="stat-label">Total Produk</p>
+          <p class="stat-value">{totalProduk}</p>
+          <p class="stat-sub">item terdaftar</p>
         </div>
-        <div class="stat-icon bg-[#fdf6f3]">
+        <div class="stat-icon stat-icon-wrap">
           <svg class="w-4 h-4 text-[#c84b1f]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
           </svg>
         </div>
       </div>
     </div>
+
     <div class="stat-card">
-      <div class="flex items-start justify-between gap-3">
+      <div class="stat-top">
         <div>
-          <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-wider">Rata-rata Margin</p>
-          <p class="text-[1.9rem] font-bold text-[#0f0d0b] leading-none mt-2">{avgMargin}%</p>
-          <p class="text-[.68rem] text-gray-400 mt-1.5">dari semua produk</p>
+          <p class="stat-label">Rata-rata Margin</p>
+          <p class="stat-value">{avgMargin}%</p>
+          <p class="stat-sub">dari semua produk</p>
         </div>
-        <div class="stat-icon bg-[#fdf6f3]">
+        <div class="stat-icon stat-icon-wrap">
           <svg class="w-4 h-4 text-[#c84b1f]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
           </svg>
         </div>
       </div>
     </div>
+
     <div class="stat-card">
-      <div class="flex items-start justify-between gap-3">
+      <div class="stat-top">
         <div>
-          <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-wider">Margin Rendah</p>
-          <p class={`text-[1.9rem] font-bold leading-none mt-2 ${lowMargin > 0 ? "text-red-500" : "text-[#0f0d0b]"}`}>{lowMargin}</p>
-          <p class="text-[.68rem] text-gray-400 mt-1.5">
+          <p class="stat-label">Margin Rendah</p>
+          <p class={`stat-value ${lowMargin > 0 ? "stat-value-danger" : ""}`}>{lowMargin}</p>
+          <p class="stat-sub">
             {lowMargin > 0
               ? <a href="/dashboard/produk?filter=low_margin" class="text-red-500 hover:underline font-medium">perlu ditinjau →</a>
               : "semua aman"}
           </p>
         </div>
-        <div class={`stat-icon ${lowMargin > 0 ? "bg-red-50" : "bg-[#fdf6f3]"}`}>
+        <div class={`stat-icon ${lowMargin > 0 ? "stat-icon-wrap-danger" : "stat-icon-wrap"}`}>
           <svg class={`w-4 h-4 ${lowMargin > 0 ? "text-red-500" : "text-[#c84b1f]"}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
             <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
@@ -542,37 +944,42 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         </div>
       </div>
     </div>
+
     <div class="stat-card">
-      <div class="flex items-start justify-between gap-3">
+      <div class="stat-top">
         <div>
-          <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-wider">Quick Cash</p>
-          <p class="text-[1.9rem] font-bold text-[#0f0d0b] leading-none mt-2">{quickCashCount}</p>
-          <p class="text-[.68rem] text-gray-400 mt-1.5">tombol cepat aktif</p>
+          <p class="stat-label">Quick Cash</p>
+          <p class="stat-value">{quickCashCount}</p>
+          <p class="stat-sub">tombol cepat aktif</p>
         </div>
-        <div class="stat-icon bg-[#fdf6f3]">
+        <div class="stat-icon stat-icon-wrap">
           <svg class="w-4 h-4 text-[#c84b1f]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
           </svg>
         </div>
       </div>
     </div>
+
   </div>
 
-  <!-- ⑤  TABEL PRODUK + KOLOM KANAN -->
+  <!-- ⑤ TABEL PRODUK + KOLOM KANAN ────────────────────────────────────── -->
   <div class="grid-main grid grid-cols-3 gap-5 fade-up d5">
+
     <div class="col-span-2 section-card">
       <div class="section-head">
         <div><h2>Daftar Produk</h2></div>
-        <a href="/dashboard/produk" class="text-[.72rem] text-[#c84b1f] font-semibold hover:underline whitespace-nowrap">Lihat semua →</a>
+        <a href="/dashboard/produk" class="text-[.72rem] text-[#c84b1f] font-semibold hover:underline whitespace-nowrap">
+          Lihat semua →
+        </a>
       </div>
       <div class="overflow-x-auto">
         <table class="data-table">
           <thead>
             <tr>
-              <th style="padding-left:1.375rem">Nama Produk</th>
+              <th class="th-pad-left">Nama Produk</th>
               <th class="hide-xs">Kategori</th>
               <th>Harga Jual</th>
-              <th style="padding-right:1.375rem">Margin</th>
+              <th class="th-pad-right">Margin</th>
             </tr>
           </thead>
           <tbody>
@@ -581,12 +988,10 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
               const mc = m >= 20 ? "m-good" : m >= 10 ? "m-mid" : "m-low";
               return (
                 <tr>
-                  <td style="padding-left:1.375rem">
-                    <div style="display:flex;align-items:center;gap:.5rem">
-                      {p.quick_cash && (
-                        <span title="Quick Cash" style="width:5px;height:5px;border-radius:50%;background:#c84b1f;flex-shrink:0;display:inline-block"></span>
-                      )}
-                      <span style="font-weight:500;color:#0f0d0b">{p.nama_produk}</span>
+                  <td class="td-pad-left">
+                    <div class="prod-name-cell">
+                      {p.quick_cash && <span title="Quick Cash" class="quick-cash-dot"></span>}
+                      <span class="prod-name-text">{p.nama_produk}</span>
                     </div>
                   </td>
                   <td class="hide-xs">
@@ -594,8 +999,8 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
                       {p.kategori}
                     </span>
                   </td>
-                  <td style="font-weight:500;color:#0f0d0b">{rp(p.harga_jual)}</td>
-                  <td style="padding-right:1.375rem">
+                  <td class="prod-name-text">{rp(p.harga_jual)}</td>
+                  <td class="td-pad-right">
                     <span class={`${mc} inline-block px-2 py-0.5 rounded text-[.63rem] font-bold`}>{m}%</span>
                   </td>
                 </tr>
@@ -603,9 +1008,9 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
             })}
             {produk.length === 0 && (
               <tr>
-                <td colspan="4" style="padding:2.5rem 1.375rem;text-align:center;color:#9ca3af;font-size:.8rem">
+                <td colspan="4" class="tabel-produk-empty">
                   Belum ada produk.{" "}
-                  <a href="/dashboard/produk?modal=tambah" style="color:#c84b1f;font-weight:600">Tambah sekarang →</a>
+                  <a href="/dashboard/produk?modal=tambah" class="tabel-produk-link">Tambah sekarang →</a>
                 </td>
               </tr>
             )}
@@ -613,74 +1018,76 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         </table>
       </div>
     </div>
+
     <div class="col-right space-y-4">
+
       <div class="section-card">
-        <div class="section-head" style="flex-direction:column;align-items:flex-start;gap:1px">
+        <div class="section-head section-head-col">
           <h2>Top Seller</h2>
           <p>Berdasarkan total qty terjual</p>
         </div>
-        <div style="padding:.875rem 1.375rem;display:flex;flex-direction:column;gap:.7rem">
+        <div class="top-seller-pad">
           {topSellers.length === 0
-            ? <p style="font-size:.75rem;color:#9ca3af;text-align:center;padding:.75rem 0">Belum ada data</p>
+            ? <p class="top-seller-empty">Belum ada data</p>
             : topSellers.map((t, i) => (
-              <div style="display:flex;align-items:center;gap:.6rem">
-                <span style="font-size:.65rem;font-weight:700;color:#d1d5db;width:1rem;text-align:right;flex-shrink:0">{i+1}</span>
-                <div style="flex:1;min-width:0">
-                  <p style="font-size:.77rem;font-weight:500;color:#0f0d0b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{t.nama}</p>
+              <div class="top-seller-row">
+                <span class="top-seller-rank">{i + 1}</span>
+                <div class="top-seller-info">
+                  <p class="top-seller-name">{t.nama}</p>
                   <div class="ts-bar-bg">
                     <div class="ts-bar" style={`width:${Math.min(100,(t.total/(topSellers[0]?.total||1))*100)}%`}></div>
                   </div>
                 </div>
-                <span style="font-size:.7rem;font-weight:600;color:#6b7280;flex-shrink:0">{t.total}×</span>
+                <span class="top-seller-qty">{t.total}×</span>
               </div>
             ))
           }
         </div>
       </div>
+
       <div class="section-card">
-        <div class="section-head" style="flex-direction:column;align-items:flex-start;gap:1px">
+        <div class="section-head section-head-col">
           <h2>Log Perubahan Harga</h2>
           <p>Riwayat terbaru</p>
         </div>
         {logs.length === 0
-          ? <p style="font-size:.75rem;color:#9ca3af;text-align:center;padding:1.25rem">Belum ada perubahan harga</p>
+          ? <p class="log-empty">Belum ada perubahan harga</p>
           : logs.slice(0, 5).map(l => (
             <div class="log-item">
-              <p style="font-size:.77rem;font-weight:500;color:#0f0d0b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{l.nama_produk}</p>
-              <div style="display:flex;align-items:center;gap:.5rem;margin-top:2px">
-                <span style="font-size:.65rem;color:#9ca3af;text-decoration:line-through">{rp(l.harga_jual_lama ?? 0)}</span>
-                <svg style="width:9px;height:9px;color:#d1d5db;flex-shrink:0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <p class="log-name">{l.nama_produk}</p>
+              <div class="log-price-row">
+                <span class="log-price-old">{rp(l.harga_jual_lama ?? 0)}</span>
+                <svg class="log-price-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
                 </svg>
-                <span style="font-size:.65rem;font-weight:700;color:#c84b1f">{rp(l.harga_jual_baru ?? 0)}</span>
-                <span style="font-size:.6rem;color:#d1d5db;margin-left:auto;flex-shrink:0">
-                  {new Date(l.changed_at).toLocaleDateString("id-ID",{day:"2-digit",month:"short"})}
+                <span class="log-price-new">{rp(l.harga_jual_baru ?? 0)}</span>
+                <span class="log-price-date">
+                  {new Date(l.changed_at).toLocaleDateString("id-ID", { day: "2-digit", month: "short" })}
                 </span>
               </div>
             </div>
           ))
         }
       </div>
+
     </div>
   </div>
 
-  <!-- ⑥  BREAKDOWN KATEGORI -->
+  <!-- ⑥ BREAKDOWN KATEGORI ─────────────────────────────────────────────── -->
   <div class="section-card fade-up d6">
     <div class="section-head">
       <div><h2>Breakdown per Kategori</h2></div>
     </div>
-    <div style="padding:1.125rem 1.375rem">
+    <div class="kat-grid-pad">
       <div class="kat-grid grid grid-cols-5 gap-3">
         {katBreakdown.map(({ kat, count, avgM, colorKey }) => (
-          <div
-            style="text-align:center;padding:1rem;border:1px solid rgba(15,13,11,.07);border-radius:6px;transition:box-shadow .15s,transform .15s"
-            onmouseenter="this.style.boxShadow='0 4px 14px rgba(15,13,11,.08)';this.style.transform='translateY(-2px)'"
-            onmouseleave="this.style.boxShadow='none';this.style.transform='none'"
-          >
-            <span class={`${colorKey} inline-block px-2.5 py-1 rounded text-[.6rem] font-bold uppercase tracking-wide`}>{kat}</span>
-            <p style="font-size:1.7rem;font-weight:700;color:#0f0d0b;margin:.5rem 0 0">{count}</p>
-            <p style="font-size:.65rem;color:#9ca3af;margin:1px 0 .375rem">produk</p>
-            <p style="font-size:.68rem;font-weight:600;color:#c84b1f">{avgM}% margin</p>
+          <div class="kat-card">
+            <span class={`${colorKey} inline-block px-2.5 py-1 rounded text-[.6rem] font-bold uppercase tracking-wide`}>
+              {kat}
+            </span>
+            <p class="kat-count">{count}</p>
+            <p class="kat-sub">produk</p>
+            <p class="kat-margin">{avgM}% margin</p>
           </div>
         ))}
       </div>
@@ -689,29 +1096,50 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
 
 </div>
 
-<!-- ── Script Modal Hapus Histori ─────────────────────────────────────────── -->
+<!-- ── Inject site key aman ke window (tidak expose di HTML source langsung) ── -->
+<script is:inline nonce={nonce} define:vars={{ PUBLIC_TURNSTILE_SITEKEY }}>
+  window.__TS_SITEKEY = PUBLIC_TURNSTILE_SITEKEY;
+</script>
+
+<!-- ── Load Turnstile SDK (render=explicit agar kita kontrol kapan render) ── -->
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+
+<!-- ── Script Modal Hapus Histori + Turnstile ─────────────────────────────── -->
 <script is:inline nonce={nonce}>
 (function () {
   "use strict";
 
-  /* ══════════════════════════════════════════════════════════════════
-     INIT — semua addEventListener dipasang di sini, dipanggil tiap
-     page-load agar berfungsi setelah navigasi ViewTransitions
-  ══════════════════════════════════════════════════════════════════ */
   function initDashboard() {
-    var modal      = document.getElementById("modalHapus");
-    var btnBuka    = document.getElementById("btnHapusHistori");
-    var btnTutup   = document.getElementById("modalHapusClose");
-    var btnBatal   = document.getElementById("hapusCancelBtn");
-    var btnKonfirm = document.getElementById("hapusKonfirmasiBtn");
-    var spinner    = document.getElementById("hapusSpinner");
-    var btnLabel   = document.getElementById("hapusBtnLabel");
-    var warnText   = document.getElementById("hapusWarningText");
-    var toast      = document.getElementById("toastNotif");
-    var toastTxt   = document.getElementById("toastText");
-    var toastIco   = document.getElementById("toastIcon");
+    if (!document.getElementById("modalHapus")) return;
+
+    var modal       = document.getElementById("modalHapus");
+    var btnBuka     = document.getElementById("btnHapusHistori");
+    var btnSidebar  = document.getElementById("btnOpenSidebar");
+    var btnTutup    = document.getElementById("modalHapusClose");
+    var btnBatal    = document.getElementById("hapusCancelBtn");
+    var btnKonfirm  = document.getElementById("hapusKonfirmasiBtn");
+    var spinner     = document.getElementById("hapusSpinner");
+    var btnLabel    = document.getElementById("hapusBtnLabel");
+    var warnText    = document.getElementById("hapusWarningText");
+    var toast       = document.getElementById("toastNotif");
+    var toastTxt    = document.getElementById("toastText");
+    var toastIco    = document.getElementById("toastIcon");
+    var tsWrap      = document.querySelector(".hm-turnstile-wrap");
+    var tsContainer = document.getElementById("hm-turnstile-container");
 
     if (!modal || !btnBuka) return;
+
+    // ── State Turnstile ────────────────────────────────────────────
+    var _widgetId = null;
+    var _token    = null;
+    var _pollTimer = null;
+
+    // ── Sidebar ────────────────────────────────────────────────────
+    if (btnSidebar) {
+      btnSidebar.addEventListener("click", function () {
+        if (window.openSidebar) window.openSidebar();
+      });
+    }
 
     // ── Warning messages ───────────────────────────────────────────
     var WARN = {
@@ -738,19 +1166,13 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
       var type  = getSelected("hapusType")  || "transaksi";
       var range = getSelected("hapusRange") || "hari_ini";
       if (warnText && WARN[type] && WARN[type][range]) {
-        warnText.textContent  = WARN[type][range];
+        warnText.textContent      = WARN[type][range];
         warnText.style.fontWeight = range === "semua" ? "700" : "400";
       }
     }
 
     function syncRadioStyles() {
-      document.querySelectorAll('[name="hapusType"]').forEach(function (radio) {
-        var lbl = radio.closest("label");
-        if (!lbl) return;
-        lbl.style.borderColor = radio.checked ? "#c84b1f" : "#e5e7eb";
-        lbl.style.background  = radio.checked ? "#fdf6f3" : "#fff";
-      });
-      document.querySelectorAll('[name="hapusRange"]').forEach(function (radio) {
+      document.querySelectorAll('[name="hapusType"],[name="hapusRange"]').forEach(function (radio) {
         var lbl = radio.closest("label");
         if (!lbl) return;
         lbl.style.borderColor = radio.checked ? "#c84b1f" : "#e5e7eb";
@@ -759,7 +1181,7 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
       updateWarning();
     }
 
-    // ── Toast helper ───────────────────────────────────────────────
+    // ── Toast ──────────────────────────────────────────────────────
     var toastTimer = null;
     function showToast(msg, ok) {
       if (!toast || !toastTxt || !toastIco) return;
@@ -768,7 +1190,7 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
       toast.style.background    = ok ? "#0f0d0b" : "#dc2626";
       toast.style.color         = "#fff";
       toast.style.display       = "flex";
-      toast.offsetHeight; // force reflow
+      toast.offsetHeight;
       toast.style.opacity       = "1";
       toast.style.pointerEvents = "auto";
       if (toastTimer) clearTimeout(toastTimer);
@@ -779,27 +1201,132 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
       }, 3500);
     }
 
-    // ── Buka / tutup modal ─────────────────────────────────────────
-    function onEsc(e) {
-      if (e.key === "Escape") tutupModal();
+    // ── Turnstile UI states ────────────────────────────────────────
+    function setTsState(state) {
+      // state: "loading" | "widget" | "verified" | "error"
+      if (!tsContainer) return;
+
+      if (state === "loading") {
+        tsContainer.innerHTML =
+          '<div class="ts-loading-msg">' +
+            '<div class="ts-loading-spinner"></div>' +
+            '<span>Memuat verifikasi…</span>' +
+          '</div>';
+        btnKonfirm.disabled = true;
+
+      } else if (state === "widget") {
+        tsContainer.innerHTML = "";
+        // widget akan di-render ke dalam tsContainer oleh Turnstile SDK
+        btnKonfirm.disabled = true;
+
+      } else if (state === "verified") {
+        // Tampilkan indikator sukses di bawah widget
+        // (widget Turnstile sendiri sudah tampil centang, ini hanya pelengkap)
+        btnKonfirm.disabled = false;
+
+      } else if (state === "error") {
+        tsContainer.innerHTML =
+          '<div class="ts-error-msg">' +
+            '<span>Verifikasi gagal.</span>' +
+            '<button class="ts-retry-btn" id="tsRetryBtn">Coba lagi</button>' +
+          '</div>';
+        btnKonfirm.disabled = true;
+        var retryBtn = document.getElementById("tsRetryBtn");
+        if (retryBtn) retryBtn.addEventListener("click", function () { renderWidget(); });
+      }
     }
+
+    // ── Render Turnstile widget ────────────────────────────────────
+    function renderWidget() {
+      if (!tsContainer) return;
+
+      // Hapus widget lama jika ada
+      if (_widgetId !== null) {
+        try { window.turnstile.remove(_widgetId); } catch (e) {}
+        _widgetId = null;
+        _token    = null;
+      }
+
+      setTsState("widget");
+
+      _widgetId = window.turnstile.render(tsContainer, {
+        sitekey: window.__TS_SITEKEY,
+        theme:   "light",
+        size:    "normal",
+
+        callback: function (token) {
+          _token = token;
+          setTsState("verified");
+        },
+
+        "expired-callback": function () {
+          _token = null;
+          btnKonfirm.disabled = true;
+          // Turnstile otomatis re-render token baru; tunggu callback lagi
+        },
+
+        "error-callback": function () {
+          _token = null;
+          setTsState("error");
+        },
+      });
+    }
+
+    // ── Tunggu SDK siap lalu render ────────────────────────────────
+    function initTurnstile() {
+      setTsState("loading");
+      if (window.turnstile) {
+        renderWidget();
+        return;
+      }
+      // Poll sampai SDK load (max ~10 detik)
+      var attempts = 0;
+      _pollTimer = setInterval(function () {
+        attempts++;
+        if (window.turnstile) {
+          clearInterval(_pollTimer);
+          _pollTimer = null;
+          renderWidget();
+        } else if (attempts > 50) {
+          clearInterval(_pollTimer);
+          _pollTimer = null;
+          setTsState("error");
+        }
+      }, 200);
+    }
+
+    // ── Bersihkan widget & timer saat modal ditutup ────────────────
+    function destroyTurnstile() {
+      if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+      if (_widgetId !== null && window.turnstile) {
+        try { window.turnstile.remove(_widgetId); } catch (e) {}
+      }
+      _widgetId = null;
+      _token    = null;
+      if (tsContainer) tsContainer.innerHTML = "";
+      btnKonfirm.disabled = true;
+    }
+
+    // ── Buka / tutup modal ─────────────────────────────────────────
+    function onEsc(e) { if (e.key === "Escape") tutupModal(); }
 
     function bukaModal() {
       modal.style.display = "block";
       syncRadioStyles();
       document.addEventListener("keydown", onEsc);
       setTimeout(function () { if (btnBatal) btnBatal.focus(); }, 50);
+      initTurnstile(); // ← mulai Turnstile
     }
 
     function tutupModal() {
       modal.style.display = "none";
       document.removeEventListener("keydown", onEsc);
+      destroyTurnstile(); // ← bersihkan Turnstile
     }
 
     btnBuka.addEventListener("click",  bukaModal);
     btnTutup.addEventListener("click", tutupModal);
     btnBatal.addEventListener("click", tutupModal);
-
     modal.addEventListener("click", function (e) {
       if (e.target === modal) tutupModal();
     });
@@ -813,6 +1340,12 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
       var type  = getSelected("hapusType");
       var range = getSelected("hapusRange");
       if (!type || !range) return;
+
+      // Wajib punya token Turnstile yang valid
+      if (!_token) {
+        showToast("Selesaikan verifikasi terlebih dahulu.", false);
+        return;
+      }
 
       if (range === "semua") {
         var label = type === "transaksi" ? "SELURUH histori transaksi" : "SELURUH log perubahan harga";
@@ -828,7 +1361,11 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         method:      "DELETE",
         credentials: "same-origin",
         headers:     { "Content-Type": "application/json" },
-        body:        JSON.stringify({ type: type, range: range }),
+        body: JSON.stringify({
+          type:           type,
+          range:          range,
+          turnstileToken: _token,   // ← token dikirim ke server untuk diverifikasi
+        }),
       })
       .then(function (res) {
         return res.json().then(function (data) {
@@ -839,24 +1376,39 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
             showToast("✓ " + deleted + " " + typeLabel + " berhasil dihapus", true);
             setTimeout(function () { window.location.reload(); }, 1500);
           } else {
-            showToast((data.error || "Gagal menghapus data."), false);
+            showToast(data.error || "Gagal menghapus data.", false);
+            // Reset Turnstile agar user bisa coba lagi dengan token baru
+            destroyTurnstile();
+            initTurnstile();
           }
         });
       })
       .catch(function () {
         showToast("Gagal terhubung ke server.", false);
+        destroyTurnstile();
+        initTurnstile();
       })
       .finally(function () {
-        btnKonfirm.disabled   = false;
         btnBatal.disabled     = false;
         spinner.style.display = "none";
         btnLabel.textContent  = "Hapus Sekarang";
+        // btnKonfirm.disabled tetap true sampai Turnstile re-verify
       });
     });
   }
 
-  /* Jalankan saat pertama load DAN setiap navigasi ViewTransitions */
-  document.addEventListener("astro:page-load", initDashboard);
+  // ── Bootstrap guard (ViewTransitions safe) ─────────────────────
+  if (!window.__dashboardScriptMounted) {
+    window.__dashboardScriptMounted = true;
+    document.addEventListener("astro:page-load", initDashboard);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initDashboard);
+  } else {
+    initDashboard();
+  }
+
 }());
 </script>
 

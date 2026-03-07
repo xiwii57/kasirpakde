@@ -1,5 +1,5 @@
 ---
-// margin-rendah.astro
+// src/pages/dashboard/margin-rendah.astro
 export const prerender = false;
 import Layout from "../../layouts/Layout.astro";
 import "../../styles/global.css";
@@ -29,21 +29,70 @@ function margin(beli: number, jual: number) {
   return Math.round(((jual - beli) / beli) * 100);
 }
 
-// Daftar kategori unik dari produk margin rendah
 const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].sort();
 ---
 
 <Layout title="Margin Rendah" active="margin-rendah" nonce={nonce}>
 
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STYLES
+     Semua style dipusatkan di sini. Tidak ada atribut style="" di HTML.
+     nonce diteruskan dari middleware agar browser mengenali tag ini lewat CSP.
+════════════════════════════════════════════════════════════════════════════ -->
+<style>
+  /* ── Tipografi ────────────────────────────────────────────────── */
+  .page-title { font-family: 'DM Serif Display', serif; }
+
+  /* ── Tabel: padding kolom kiri & kanan ───────────────────────── */
+  .col-nama { padding-left: 1.375rem; }
+  .col-aksi { padding-right: 1.375rem; }
+
+  /* ── Tabel: header sortable ───────────────────────────────────── */
+  .sortable { cursor: pointer; user-select: none; }
+
+  /* ── Tabel: cell nama produk ──────────────────────────────────── */
+  .td-nama { padding-left: 1.375rem; font-weight: 500; color: #0f0d0b; }
+
+  /* ── Tabel: cell harga (monospace, rata kanan) ────────────────── */
+  .td-price       { text-align: right; font-family: monospace; font-size: 0.78rem; }
+  .td-price-muted { color: #4b5563; }
+  .td-price-bold  { font-weight: 600; color: #0f0d0b; }
+
+  /* ── Tabel: cell margin ───────────────────────────────────────── */
+  .td-margin { text-align: right; }
+
+  /* ── Tabel: cell aksi ─────────────────────────────────────────── */
+  .td-aksi { padding-right: 1.375rem; }
+
+  /* ── Modal bulk: lebar lebih sempit ───────────────────────────── */
+  .modal-bulk-box { max-width: 420px; }
+
+  /* ── Radio button warna brand ─────────────────────────────────── */
+  /* Menggantikan style="accent-color:#c84b1f" yang sebelumnya inline */
+  .radio-accent { accent-color: #c84b1f; }
+
+  /* ── Bulk preview: elemen yang di-generate JS ────────────────── */
+  /* Menggantikan style="" inline yang ada di string HTML di updBulkPreview() */
+  .preview-header { font-weight: 600; color: #374151; margin-bottom: .25rem; }
+  .preview-row    { display: flex; justify-content: space-between; gap: .5rem; margin-top: .2rem; }
+  .preview-nama   { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .preview-harga  { flex-shrink: 0; font-weight: 600; }
+  .preview-ok     { color: #15803d; }
+  .preview-warn   { color: #dc2626; }
+  .preview-more   { color: #9ca3af; font-size: .7rem; margin-top: .3rem; }
+</style>
+
 <a href="#main-content" class="skip-link">Lewati navigasi</a>
 
-<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     HEADER
+════════════════════════════════════════════════════════════════════════════ -->
 <div class="bg-white border-b border-black/[0.07] px-4 sm:px-6 lg:px-8 py-4
             flex items-center justify-between sticky top-0 z-20">
 
   <div class="flex items-center gap-3">
     <button
-      onclick="window.openSidebar && window.openSidebar()"
+      id="btn-open-sidebar"
       class="lg:hidden w-8 h-8 flex items-center justify-center rounded-[4px]
              text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
       aria-label="Buka menu navigasi"
@@ -53,7 +102,7 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
       </svg>
     </button>
     <div>
-      <h1 style="font-family:'DM Serif Display',serif" class="text-[1.25rem] leading-tight text-[#0f0d0b]">
+      <h1 class="page-title text-[1.25rem] leading-tight text-[#0f0d0b]">
         Produk Margin Rendah
       </h1>
       <p class="text-[0.72rem] text-gray-400 hidden sm:block">Margin keuntungan &lt; 10%</p>
@@ -97,7 +146,9 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
   </div>
 </div>
 
-<!-- ── Konten ─────────────────────────────────────────────────────────────── -->
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     KONTEN UTAMA
+════════════════════════════════════════════════════════════════════════════ -->
 <main id="main-content" class="page-pad p-6 lg:p-8 max-w-[1200px] mx-auto fade-up delay-1">
 
   {produk.length === 0 ? (
@@ -129,7 +180,6 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
 
         <!-- Search + Filter bar -->
         <div class="px-4 py-3 border-b border-black/[0.06] flex flex-wrap items-center gap-3">
-          <!-- Search -->
           <div class="flex items-center gap-2 flex-1 min-w-[160px]">
             <svg class="w-4 h-4 text-gray-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -139,7 +189,6 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
               class="flex-1 text-[0.875rem] text-[#0f0d0b] bg-transparent outline-none placeholder:text-gray-400" />
           </div>
 
-          <!-- Filter kategori -->
           {kategoriList.length > 1 && (
             <div class="flex items-center gap-1.5 flex-shrink-0">
               <label for="filterKat" class="text-[0.72rem] text-gray-400 font-medium">Kategori:</label>
@@ -157,26 +206,27 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
           </span>
         </div>
 
+        <!-- Tabel data -->
         <div class="overflow-x-auto">
           <table class="data-table" id="main-table">
             <caption class="sr-only">Produk dengan margin rendah. {produk.length} produk.</caption>
             <thead>
               <tr>
-                <th class="sortable" data-col="nama" style="padding-left:1.375rem;cursor:pointer;user-select:none">
+                <th class="sortable col-nama" data-col="nama">
                   Nama Produk <span class="sort-icon" aria-hidden="true">↕</span>
                 </th>
                 <th class="hide-mobile">Kategori</th>
-                <th class="sortable text-right" data-col="beli" style="cursor:pointer;user-select:none">
+                <th class="sortable text-right" data-col="beli">
                   Harga Beli <span class="sort-icon" aria-hidden="true">↕</span>
                 </th>
-                <th class="sortable text-right" data-col="jual" style="cursor:pointer;user-select:none">
+                <th class="sortable text-right" data-col="jual">
                   Harga Jual <span class="sort-icon" aria-hidden="true">↕</span>
                 </th>
                 <th class="text-right hide-mobile">Untung</th>
-                <th class="sortable text-right" data-col="margin" style="cursor:pointer;user-select:none">
+                <th class="sortable text-right" data-col="margin">
                   Margin <span class="sort-icon" aria-hidden="true">↕</span>
                 </th>
-                <th style="padding-right:1.375rem"><span class="sr-only">Aksi</span></th>
+                <th class="col-aksi"><span class="sr-only">Aksi</span></th>
               </tr>
             </thead>
             <tbody id="tbody">
@@ -184,29 +234,36 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
                 const m      = margin(p.harga_beli, p.harga_jual);
                 const untung = p.harga_jual - p.harga_beli;
                 return (
-                  <tr class="data-row" data-id={p.id}
+                  <tr class="data-row"
+                      data-id={p.id}
                       data-nama={p.nama_produk.toLowerCase()}
                       data-nama-asli={p.nama_produk}
                       data-kat={p.kategori}
                       data-beli={p.harga_beli}
                       data-jual={p.harga_jual}
                       data-margin={m}>
-                    <td style="padding-left:1.375rem;font-weight:500;color:#0f0d0b">{p.nama_produk}</td>
+                    <td class="td-nama">{p.nama_produk}</td>
                     <td class="hide-mobile">
                       <span class="badge-gray inline-block px-2 py-0.5 rounded text-[0.63rem] font-semibold">{p.kategori}</span>
                     </td>
-                    <td style="text-align:right;color:#4b5563;font-family:monospace;font-size:0.78rem">{rp(p.harga_beli)}</td>
-                    <td style="text-align:right;font-weight:600;color:#0f0d0b;font-family:monospace;font-size:0.78rem">{rp(p.harga_jual)}</td>
-                    <td class="hide-mobile" style="text-align:right;color:#4b5563;font-family:monospace;font-size:0.78rem">{rp(untung)}</td>
-                    <td style="text-align:right">
-                      <span class={`inline-block px-2 py-0.5 rounded text-[0.65rem] font-bold ${m <= 0 ? 'bg-red-100 text-red-700' : 'badge-red'}`}>{m}%</span>
+                    <td class="td-price td-price-muted">{rp(p.harga_beli)}</td>
+                    <td class="td-price td-price-bold">{rp(p.harga_jual)}</td>
+                    <td class="td-price td-price-muted hide-mobile">{rp(untung)}</td>
+                    <td class="td-margin">
+                      <span class={`inline-block px-2 py-0.5 rounded text-[0.65rem] font-bold ${m <= 0 ? 'bg-red-100 text-red-700' : 'badge-red'}`}>
+                        {m}%
+                      </span>
                     </td>
-                    <td style="padding-right:1.375rem">
-                      <button type="button" class="edit-btn flex items-center gap-1 px-3 py-1.5 text-[0.72rem] font-medium text-[#c84b1f] border border-[#c84b1f]/30 hover:bg-[#fff5f2] rounded-[4px] transition-colors whitespace-nowrap"
-                        data-id={p.id} data-nama={p.nama_produk}
-                        data-beli={p.harga_beli} data-jual={p.harga_jual}
+                    <td class="td-aksi">
+                      <button type="button"
+                        class="edit-btn flex items-center gap-1 px-3 py-1.5 text-[0.72rem] font-medium text-[#c84b1f] border border-[#c84b1f]/30 hover:bg-[#fff5f2] rounded-[4px] transition-colors whitespace-nowrap"
+                        data-id={p.id}
+                        data-nama={p.nama_produk}
+                        data-beli={p.harga_beli}
+                        data-jual={p.harga_jual}
                         data-kat={p.kategori}
-                        aria-label={`Edit harga ${p.nama_produk}`} aria-haspopup="dialog">
+                        aria-label={`Edit harga ${p.nama_produk}`}
+                        aria-haspopup="dialog">
                         <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -219,7 +276,8 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
               })}
             </tbody>
           </table>
-          <div id="no-results" class="hidden px-6 py-12 text-center text-gray-500 text-[0.82rem]"
+          <div id="no-results"
+               class="hidden px-6 py-12 text-center text-gray-500 text-[0.82rem]"
                role="status" aria-live="polite">
             Tidak ada produk yang cocok.
           </div>
@@ -229,7 +287,9 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
   )}
 </main>
 
-<!-- ── Modal Edit Harga (satu produk) ─────────────────────────────────────── -->
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     MODAL EDIT HARGA (satu produk)
+════════════════════════════════════════════════════════════════════════════ -->
 <div id="modal-edit" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-edit-title">
   <div class="modal-box">
     <div class="px-6 py-5 border-b border-black/[0.07] flex items-center justify-between">
@@ -247,7 +307,9 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label for="f-beli" class="block text-[0.72rem] font-semibold text-[#3d3530] uppercase tracking-wider mb-1.5">Harga Beli (Rp)</label>
+          <label for="f-beli" class="block text-[0.72rem] font-semibold text-[#3d3530] uppercase tracking-wider mb-1.5">
+            Harga Beli (Rp)
+          </label>
           <input id="f-beli" type="number" placeholder="0" min="0"
             class="w-full px-3 py-2.5 bg-[#f7f3ee] border-[1.5px] border-black/15 rounded-[4px] text-[0.875rem] text-[#0f0d0b] outline-none focus:border-[#c84b1f] focus:bg-white transition-all font-mono" />
         </div>
@@ -259,11 +321,14 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
             class="w-full px-3 py-2.5 bg-[#f7f3ee] border-[1.5px] border-black/15 rounded-[4px] text-[0.875rem] text-[#0f0d0b] outline-none focus:border-[#c84b1f] focus:bg-white transition-all font-mono" />
         </div>
       </div>
-      <div id="margin-preview" class="hidden px-3 py-2 bg-[#f7f3ee] rounded-[4px] text-[0.78rem] font-mono"
+      <div id="margin-preview"
+           class="hidden px-3 py-2 bg-[#f7f3ee] rounded-[4px] text-[0.78rem] font-mono"
            aria-live="polite" aria-atomic="true"></div>
     </div>
     <div class="px-6 py-4 border-t border-black/[0.06] flex items-center justify-end gap-2">
-      <button type="button" class="btn-close px-4 py-2 text-[0.8rem] text-gray-600 hover:text-gray-800 cursor-pointer rounded transition-colors">Batal</button>
+      <button type="button" class="btn-close px-4 py-2 text-[0.8rem] text-gray-600 hover:text-gray-800 cursor-pointer rounded transition-colors">
+        Batal
+      </button>
       <button type="button" id="btn-simpan"
         class="px-5 py-2 bg-[#0f0d0b] hover:bg-[#c84b1f] text-white text-[0.8rem] font-semibold rounded-[4px] transition-colors cursor-pointer">
         Simpan
@@ -272,9 +337,11 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
   </div>
 </div>
 
-<!-- ── Modal Bulk Edit ─────────────────────────────────────────────────────── -->
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     MODAL BULK EDIT
+════════════════════════════════════════════════════════════════════════════ -->
 <div id="modal-bulk" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-bulk-title">
-  <div class="modal-box" style="max-width:420px">
+  <div class="modal-box modal-bulk-box">
     <div class="px-6 py-5 border-b border-black/[0.07] flex items-center justify-between">
       <h2 class="font-semibold text-[0.95rem] text-[#0f0d0b]" id="modal-bulk-title">Naikan Harga Massal</h2>
       <button type="button" class="btn-bulk-close text-gray-400 hover:text-gray-700 p-1 rounded cursor-pointer transition-colors" aria-label="Tutup">
@@ -284,23 +351,26 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
       </button>
     </div>
     <div class="px-6 py-5 space-y-4">
-      <!-- Scope -->
+
+      <!-- Target scope -->
       <div>
         <label class="block text-[0.72rem] font-semibold text-[#3d3530] uppercase tracking-wider mb-1.5">Target</label>
         <div class="flex gap-2">
+          <!-- .radio-accent menggantikan style="accent-color:#c84b1f" yang sebelumnya inline -->
           <label class="flex items-center gap-1.5 text-[0.8rem] cursor-pointer">
-            <input type="radio" name="bulk-scope" value="all" checked style="accent-color:#c84b1f" />
+            <input type="radio" name="bulk-scope" value="all" checked class="radio-accent" />
             Semua ({produk.length})
           </label>
           {kategoriList.length > 1 && (
             <label class="flex items-center gap-1.5 text-[0.8rem] cursor-pointer">
-              <input type="radio" name="bulk-scope" value="visible" style="accent-color:#c84b1f" />
+              <input type="radio" name="bulk-scope" value="visible" class="radio-accent" />
               Terfilter
             </label>
           )}
         </div>
       </div>
-      <!-- Tipe -->
+
+      <!-- Tipe kenaikan -->
       <div>
         <label class="block text-[0.72rem] font-semibold text-[#3d3530] uppercase tracking-wider mb-1.5">Tipe Kenaikan</label>
         <select id="bulk-type"
@@ -310,6 +380,7 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
           <option value="target-margin">Target margin (%)</option>
         </select>
       </div>
+
       <!-- Nilai -->
       <div>
         <label for="bulk-val" class="block text-[0.72rem] font-semibold text-[#3d3530] uppercase tracking-wider mb-1.5">
@@ -318,10 +389,13 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
         <input id="bulk-val" type="number" placeholder="cth: 10" min="0" max="999"
           class="w-full px-3 py-2.5 bg-[#f7f3ee] border-[1.5px] border-black/15 rounded-[4px] text-[0.875rem] text-[#0f0d0b] outline-none focus:border-[#c84b1f] focus:bg-white transition-all font-mono" />
       </div>
+
       <!-- Preview -->
-      <div id="bulk-preview" class="hidden px-3 py-2.5 bg-[#f7f3ee] rounded-[4px] text-[0.75rem] text-gray-600 space-y-1"
+      <div id="bulk-preview"
+           class="hidden px-3 py-2.5 bg-[#f7f3ee] rounded-[4px] text-[0.75rem] text-gray-600 space-y-1"
            aria-live="polite" aria-atomic="true"></div>
-      <!-- Warning -->
+
+      <!-- Peringatan -->
       <div class="px-3 py-2 bg-red-50 border border-red-200 rounded-[4px] flex items-start gap-2 text-[0.75rem] text-red-700">
         <svg class="w-3.5 h-3.5 mt-0.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
           <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -331,7 +405,9 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
       </div>
     </div>
     <div class="px-6 py-4 border-t border-black/[0.06] flex items-center justify-end gap-2">
-      <button type="button" class="btn-bulk-close px-4 py-2 text-[0.8rem] text-gray-600 hover:text-gray-800 cursor-pointer rounded transition-colors">Batal</button>
+      <button type="button" class="btn-bulk-close px-4 py-2 text-[0.8rem] text-gray-600 hover:text-gray-800 cursor-pointer rounded transition-colors">
+        Batal
+      </button>
       <button type="button" id="btn-bulk-ok"
         class="flex items-center gap-1.5 px-5 py-2 bg-[#c84b1f] hover:bg-[#a33c18] text-white text-[0.8rem] font-semibold rounded-[4px] transition-colors cursor-pointer">
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -343,7 +419,9 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
   </div>
 </div>
 
-<!-- ── Toast ──────────────────────────────────────────────────────────────── -->
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     TOAST
+════════════════════════════════════════════════════════════════════════════ -->
 <div id="toast"
      class="px-4 py-3 bg-[#0f0d0b] text-white text-[0.8rem] font-medium shadow-lg items-center gap-2"
      role="status" aria-live="polite" aria-atomic="true">
@@ -353,72 +431,109 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
   <span id="toast-msg"></span>
 </div>
 
-<script is:inline nonce={nonce} define:vars={{ produk }}>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     SCRIPT
+
+     CATATAN TEKNIS:
+     ─────────────────────────────────────────────────────────────────────────
+     • is:inline  → nonce diteruskan eksplisit, script tidak di-bundle Astro
+     • define:vars DIHAPUS — tidak valid dikombinasikan dengan is:inline.
+       Semua data produk sudah tersedia via data-* attribute di DOM.
+     • window.__marginScriptMounted → guard agar listener astro:page-load
+       dan keydown ESC hanya didaftarkan SEKALI, tidak menumpuk tiap navigasi.
+     • DOMContentLoaded fallback → astro:page-load saja tidak cukup saat
+       halaman dibuka pertama kali via URL langsung (hard load / refresh).
+     • ESC handler di LUAR initMarginRendah() → jika di dalam, setiap
+       navigasi ViewTransitions menambah satu listener baru (memory/bug leak).
+════════════════════════════════════════════════════════════════════════════ -->
+<script is:inline nonce={nonce}>
 'use strict';
 
-/* ══════════════════════════════════════════════════════════════════════════
-   HELPERS (di luar init — tidak memerlukan DOM)
-══════════════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════════════
+   HELPERS — tidak memerlukan DOM, aman dipanggil kapan saja
+════════════════════════════════════════════════════════════════════════════ */
+
 function rpFmt(n) {
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n);
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency', currency: 'IDR', minimumFractionDigits: 0
+  }).format(n);
 }
 
-// ── Toast ─────────────────────────────────────────────────────────────────────
+/* ── Toast ─────────────────────────────────────────────────────────────────── */
 var _toastTimer;
+
 function toast(msg, ok) {
-  var t = document.getElementById('toast');
+  var t    = document.getElementById('toast');
   var icon = document.getElementById('toast-icon');
-  if (!t || !icon) return;
-  document.getElementById('toast-msg').textContent = msg;
+  var span = document.getElementById('toast-msg');
+  if (!t || !icon || !span) return;
+
+  span.textContent = msg;
   icon.style.color = ok === false ? '#f87171' : '#4ade80';
-  icon.innerHTML = ok === false
+  icon.innerHTML   = ok === false
     ? '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
     : '<polyline points="20 6 9 17 4 12"/>';
+
   t.classList.add('show');
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(function () { t.classList.remove('show'); }, 3500);
 }
 
-// ── API ───────────────────────────────────────────────────────────────────────
+/* ── API fetch wrapper ─────────────────────────────────────────────────────── */
 async function api(method, path, body) {
   var r = await fetch(path, {
-    method: method,
-    headers: { 'Content-Type': 'application/json' },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    credentials: 'same-origin'
+    method:      method,
+    headers:     { 'Content-Type': 'application/json' },
+    body:        body !== undefined ? JSON.stringify(body) : undefined,
+    credentials: 'same-origin',
   });
   var d = await r.json().catch(function () { return {}; });
   if (!r.ok) throw new Error(d.error || r.statusText);
   return d;
 }
 
-/* ══════════════════════════════════════════════════════════════════════════
-   INIT — dipanggil tiap page-load agar berfungsi setelah ViewTransitions
-══════════════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════════════
+   INIT — dipanggil tiap astro:page-load agar berfungsi setelah navigasi
+════════════════════════════════════════════════════════════════════════════ */
 function initMarginRendah() {
 
-  // ── State ───────────────────────────────────────────────────────────────────
-  var activeQ    = '';
-  var activeKat  = '';
-  var sortCol    = '';
-  var sortDir    = 1; // 1 = asc, -1 = desc
-  var prevFocus  = null;
+  /* Guard — pastikan kita di halaman ini */
+  if (!document.getElementById('main-table') && !document.getElementById('btn-bulk')) return;
+
+  /* ── State ─────────────────────────────────────────────────────────────── */
+  var activeQ   = '';
+  var activeKat = '';
+  var sortCol   = '';
+  var sortDir   = 1;
+  var prevFocus = null;
 
   var FOCUSABLE = 'button:not([disabled]),[href],input:not([disabled]),select,[tabindex]:not([tabindex="-1"])';
 
-  // ── Modal helpers ───────────────────────────────────────────────────────────
+  /* ── Sidebar toggle ────────────────────────────────────────────────────── */
+  var btnSidebar = document.getElementById('btn-open-sidebar');
+  if (btnSidebar) {
+    btnSidebar.addEventListener('click', function () {
+      if (window.openSidebar) window.openSidebar();
+    });
+  }
+
+  /* ── Modal helpers ─────────────────────────────────────────────────────── */
   function trapFocus(el) {
     var els = Array.from(el.querySelectorAll(FOCUSABLE));
     if (!els.length) return;
     el._trap = function (e) {
       if (e.key !== 'Tab') return;
-      var f = els[0], l = els[els.length - 1];
-      if (e.shiftKey) { if (document.activeElement === f) { e.preventDefault(); l.focus(); } }
-      else            { if (document.activeElement === l) { e.preventDefault(); f.focus(); } }
+      var first = els[0], last = els[els.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+      } else {
+        if (document.activeElement === last)  { e.preventDefault(); first.focus(); }
+      }
     };
     el.addEventListener('keydown', el._trap);
     setTimeout(function () { els[0].focus(); }, 40);
   }
+
   function openModal(id) {
     prevFocus = document.activeElement;
     var m = document.getElementById(id);
@@ -427,6 +542,7 @@ function initMarginRendah() {
     document.body.style.overflow = 'hidden';
     trapFocus(m);
   }
+
   function closeModal(id) {
     var m = document.getElementById(id);
     if (!m) return;
@@ -436,90 +552,69 @@ function initMarginRendah() {
     if (prevFocus) { prevFocus.focus(); prevFocus = null; }
   }
 
-  // Close buttons - modal edit
+  /* Close — modal edit */
   document.querySelectorAll('.btn-close').forEach(function (b) {
     b.addEventListener('click', function () { closeModal('modal-edit'); });
   });
   var mEdit = document.getElementById('modal-edit');
   if (mEdit) mEdit.addEventListener('click', function (e) { if (e.target === this) closeModal('modal-edit'); });
 
-  // Close buttons - modal bulk
+  /* Close — modal bulk */
   document.querySelectorAll('.btn-bulk-close').forEach(function (b) {
     b.addEventListener('click', function () { closeModal('modal-bulk'); });
   });
   var mBulk = document.getElementById('modal-bulk');
   if (mBulk) mBulk.addEventListener('click', function (e) { if (e.target === this) closeModal('modal-bulk'); });
 
-  // ESC key
-  document.addEventListener('keydown', function (e) {
-    if (e.key !== 'Escape') return;
-    if (mEdit && mEdit.classList.contains('open'))  closeModal('modal-edit');
-    if (mBulk && mBulk.classList.contains('open')) closeModal('modal-bulk');
-  });
-
-  // ── Filter & Sort ────────────────────────────────────────────────────────────
+  /* ── Filter & Sort ─────────────────────────────────────────────────────── */
   function getRows() {
     return Array.from(document.querySelectorAll('#tbody tr.data-row'));
   }
 
   function applyFilterSort() {
     var allRows = getRows();
-    var q = activeQ.toLowerCase();
+    var q       = activeQ.toLowerCase();
 
-    // Filter
     var visible = allRows.filter(function (r) {
-      var matchQ   = !q   || r.dataset.nama.indexOf(q) !== -1;
-      var matchKat = !activeKat || r.dataset.kat === activeKat;
-      return matchQ && matchKat;
+      return (!q         || r.dataset.nama.indexOf(q) !== -1) &&
+             (!activeKat || r.dataset.kat === activeKat);
     });
-    allRows.forEach(function (r) { r.classList.add('hidden-row'); });
-    visible.forEach(function (r) { r.classList.remove('hidden-row'); });
+    allRows.forEach(function (r)  { r.classList.add('hidden-row'); });
+    visible.forEach(function (r)  { r.classList.remove('hidden-row'); });
 
-    // Sort (on visible only — re-insert sorted rows in tbody)
     if (sortCol) {
       visible.sort(function (a, b) {
         var va, vb;
-        if (sortCol === 'nama')   { va = a.dataset.nama;   vb = b.dataset.nama;   return va < vb ? -sortDir : va > vb ? sortDir : 0; }
-        if (sortCol === 'beli')   { va = +a.dataset.beli;  vb = +b.dataset.beli;  return (va - vb) * sortDir; }
-        if (sortCol === 'jual')   { va = +a.dataset.jual;  vb = +b.dataset.jual;  return (va - vb) * sortDir; }
+        if (sortCol === 'nama')   { va = a.dataset.nama;    vb = b.dataset.nama;    return va < vb ? -sortDir : va > vb ? sortDir : 0; }
+        if (sortCol === 'beli')   { va = +a.dataset.beli;   vb = +b.dataset.beli;   return (va - vb) * sortDir; }
+        if (sortCol === 'jual')   { va = +a.dataset.jual;   vb = +b.dataset.jual;   return (va - vb) * sortDir; }
         if (sortCol === 'margin') { va = +a.dataset.margin; vb = +b.dataset.margin; return (va - vb) * sortDir; }
         return 0;
       });
       var tbody = document.getElementById('tbody');
-      visible.forEach(function (r) { tbody.appendChild(r); });
+      if (tbody) visible.forEach(function (r) { tbody.appendChild(r); });
     }
 
-    // Count label
     var lbl = document.getElementById('count-label');
     if (lbl) lbl.textContent = visible.length + ' produk';
 
-    // No results
     var noRes = document.getElementById('no-results');
     if (noRes) noRes.classList.toggle('hidden', visible.length > 0 || allRows.length === 0);
 
-    // Update sort icons
     document.querySelectorAll('.sortable').forEach(function (th) {
       var ic = th.querySelector('.sort-icon');
       if (!ic) return;
-      if (th.dataset.col === sortCol) {
-        ic.textContent = sortDir === 1 ? '↑' : '↓';
-        th.style.color = '#c84b1f';
-      } else {
-        ic.textContent = '↕';
-        th.style.color = '';
-      }
+      if (th.dataset.col === sortCol) { ic.textContent = sortDir === 1 ? '↑' : '↓'; th.style.color = '#c84b1f'; }
+      else                            { ic.textContent = '↕'; th.style.color = ''; }
     });
   }
 
-  // Search
   var si = document.getElementById('searchInput');
   if (si) si.addEventListener('input', function () { activeQ = this.value; applyFilterSort(); });
 
-  // Filter kategori
   var fk = document.getElementById('filterKat');
   if (fk) fk.addEventListener('change', function () { activeKat = this.value; applyFilterSort(); });
 
-  // Sort headers
   document.querySelectorAll('.sortable').forEach(function (th) {
     th.addEventListener('click', function () {
       if (sortCol === this.dataset.col) { sortDir *= -1; }
@@ -528,42 +623,38 @@ function initMarginRendah() {
     });
   });
 
-  // ── Export CSV ───────────────────────────────────────────────────────────────
+  /* ── Export CSV ────────────────────────────────────────────────────────── */
   var btnExport = document.getElementById('btn-export');
-  if (btnExport) btnExport.addEventListener('click', function () {
-    var rows = getRows().filter(function (r) { return !r.classList.contains('hidden-row'); });
-    if (!rows.length) { toast('Tidak ada data untuk diekspor', false); return; }
+  if (btnExport) {
+    btnExport.addEventListener('click', function () {
+      var rows = getRows().filter(function (r) { return !r.classList.contains('hidden-row'); });
+      if (!rows.length) { toast('Tidak ada data untuk diekspor', false); return; }
 
-    var header = ['Nama Produk', 'Kategori', 'Harga Beli', 'Harga Jual', 'Untung', 'Margin (%)'];
-    var lines  = [header.join(',')];
-    rows.forEach(function (r) {
-      var beli   = +r.dataset.beli;
-      var jual   = +r.dataset.jual;
-      var untung = jual - beli;
-      var mgn    = +r.dataset.margin;
-      lines.push([
-        '"' + (r.dataset.namaAsli || r.dataset.nama).replace(/"/g, '""') + '"',
-        '"' + (r.dataset.kat || '') + '"',
-        beli, jual, untung, mgn
-      ].join(','));
+      var lines = [['Nama Produk', 'Kategori', 'Harga Beli', 'Harga Jual', 'Untung', 'Margin (%)'].join(',')];
+      rows.forEach(function (r) {
+        var beli = +r.dataset.beli, jual = +r.dataset.jual;
+        lines.push([
+          '"' + (r.dataset.namaAsli || r.dataset.nama).replace(/"/g, '""') + '"',
+          '"' + (r.dataset.kat || '') + '"',
+          beli, jual, (jual - beli), +r.dataset.margin,
+        ].join(','));
+      });
+
+      var blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+      var url  = URL.createObjectURL(blob);
+      var a    = document.createElement('a');
+      a.href = url;
+      a.download = 'margin-rendah-' + new Date().toISOString().slice(0, 10) + '.csv';
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+      toast('CSV berhasil diexport (' + rows.length + ' produk)');
     });
+  }
 
-    var blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-    var url  = URL.createObjectURL(blob);
-    var a    = document.createElement('a');
-    a.href   = url;
-    a.download = 'margin-rendah-' + new Date().toISOString().slice(0, 10) + '.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast('CSV berhasil diexport (' + rows.length + ' produk)');
-  });
-
-  // ── Edit satu produk ─────────────────────────────────────────────────────────
-  var fBeli  = document.getElementById('f-beli');
-  var fJual  = document.getElementById('f-jual');
-  var mPrev  = document.getElementById('margin-preview');
+  /* ── Edit satu produk ──────────────────────────────────────────────────── */
+  var fBeli = document.getElementById('f-beli');
+  var fJual = document.getElementById('f-jual');
+  var mPrev = document.getElementById('margin-preview');
 
   function updMargin() {
     if (!fBeli || !fJual || !mPrev) return;
@@ -577,63 +668,69 @@ function initMarginRendah() {
       mPrev.classList.add('hidden');
     }
   }
+
   if (fBeli) fBeli.addEventListener('input', updMargin);
   if (fJual) fJual.addEventListener('input', updMargin);
 
   document.querySelectorAll('.edit-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      document.getElementById('edit-id').value = this.dataset.id;
+      document.getElementById('edit-id').value                = this.dataset.id;
       document.getElementById('edit-nama-display').textContent = this.dataset.nama;
-      fBeli.value = this.dataset.beli;
-      fJual.value = this.dataset.jual;
+      if (fBeli) fBeli.value = this.dataset.beli;
+      if (fJual) fJual.value = this.dataset.jual;
       updMargin();
       openModal('modal-edit');
     });
   });
 
   var btnSimpan = document.getElementById('btn-simpan');
-  if (btnSimpan) btnSimpan.addEventListener('click', async function () {
-    var id   = document.getElementById('edit-id').value;
-    var beli = parseInt(fBeli.value) || 0;
-    var jual = parseInt(fJual.value) || 0;
-    if (jual <= 0) { toast('Harga jual harus > 0', false); fJual.focus(); return; }
-    this.disabled = true;
-    this.setAttribute('aria-busy', 'true');
-    this.textContent = 'Menyimpan…';
-    try {
-      await api('PATCH', '/api/produk/produk?id=' + encodeURIComponent(id), { harga_beli: beli, harga_jual: jual });
-      toast('Harga berhasil diupdate');
-      closeModal('modal-edit');
-      setTimeout(function () { location.reload(); }, 500);
-    } catch (e) {
-      toast('Error: ' + e.message, false);
-      this.disabled = false;
-      this.removeAttribute('aria-busy');
-      this.textContent = 'Simpan';
-    }
-  });
+  if (btnSimpan) {
+    btnSimpan.addEventListener('click', async function () {
+      var id   = document.getElementById('edit-id').value;
+      var beli = parseInt(fBeli.value) || 0;
+      var jual = parseInt(fJual.value) || 0;
+      if (jual <= 0) { toast('Harga jual harus > 0', false); if (fJual) fJual.focus(); return; }
 
-  if (fJual) fJual.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') { e.preventDefault(); if (btnSimpan) btnSimpan.click(); }
-  });
+      this.disabled = true;
+      this.setAttribute('aria-busy', 'true');
+      this.textContent = 'Menyimpan…';
+      try {
+        await api('PATCH', '/api/produk/produk?id=' + encodeURIComponent(id), {
+          harga_beli: beli, harga_jual: jual,
+        });
+        toast('Harga berhasil diupdate');
+        closeModal('modal-edit');
+        setTimeout(function () { location.reload(); }, 500);
+      } catch (e) {
+        toast('Error: ' + e.message, false);
+        this.disabled = false; this.removeAttribute('aria-busy'); this.textContent = 'Simpan';
+      }
+    });
+  }
 
-  // ── Bulk Edit ────────────────────────────────────────────────────────────────
+  if (fJual) {
+    fJual.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); if (btnSimpan) btnSimpan.click(); }
+    });
+  }
+
+  /* ── Bulk Edit ─────────────────────────────────────────────────────────── */
   var btnBulk = document.getElementById('btn-bulk');
-  if (btnBulk) btnBulk.addEventListener('click', function () {
-    // Reset form
-    var bv = document.getElementById('bulk-val');
-    if (bv) bv.value = '';
-    var bp = document.getElementById('bulk-preview');
-    if (bp) bp.classList.add('hidden');
-    openModal('modal-bulk');
-  });
+  if (btnBulk) {
+    btnBulk.addEventListener('click', function () {
+      var bv = document.getElementById('bulk-val');
+      if (bv) bv.value = '';
+      var bp = document.getElementById('bulk-preview');
+      if (bp) bp.classList.add('hidden');
+      openModal('modal-bulk');
+    });
+  }
 
   function updBulkUnit() {
     var t = document.getElementById('bulk-type');
     var u = document.getElementById('bulk-val-unit');
     if (!t || !u) return;
-    var map = { pct: '(%)', rp: '(Rp)', 'target-margin': '(% target margin)' };
-    u.textContent = map[t.value] || '';
+    u.textContent = { pct: '(%)', rp: '(Rp)', 'target-margin': '(% target margin)' }[t.value] || '';
     updBulkPreview();
   }
 
@@ -641,14 +738,12 @@ function initMarginRendah() {
     var scopeEl = document.querySelector('[name="bulk-scope"]:checked');
     var scope   = scopeEl ? scopeEl.value : 'all';
     return getRows().filter(function (r) {
-      if (scope === 'visible') return !r.classList.contains('hidden-row');
-      return true;
+      return scope === 'visible' ? !r.classList.contains('hidden-row') : true;
     });
   }
 
   function calcNewJual(row, type, val) {
-    var beli = +row.dataset.beli;
-    var jual = +row.dataset.jual;
+    var beli = +row.dataset.beli, jual = +row.dataset.jual;
     if (type === 'pct')           return Math.round(jual * (1 + val / 100));
     if (type === 'rp')            return jual + val;
     if (type === 'target-margin') return beli > 0 ? Math.round(beli * (1 + val / 100)) : jual;
@@ -656,31 +751,32 @@ function initMarginRendah() {
   }
 
   function updBulkPreview() {
-    var bp  = document.getElementById('bulk-preview');
-    var bv  = document.getElementById('bulk-val');
-    var bt  = document.getElementById('bulk-type');
+    var bp = document.getElementById('bulk-preview');
+    var bv = document.getElementById('bulk-val');
+    var bt = document.getElementById('bulk-type');
     if (!bp || !bv || !bt) return;
+
     var val = parseFloat(bv.value);
     if (!val || val <= 0) { bp.classList.add('hidden'); return; }
-    var type = bt.value;
+
     var rows = getTargetRows();
     if (!rows.length) { bp.classList.add('hidden'); return; }
 
-    // Show 3 sample rows
-    var samples = rows.slice(0, 3);
-    var html = '<div style="font-weight:600;color:#374151;margin-bottom:.25rem">Preview (' + rows.length + ' produk):</div>';
-    samples.forEach(function (r) {
-      var newJual = calcNewJual(r, type, val);
-      var newM    = +r.dataset.beli > 0 ? Math.round(((newJual - +r.dataset.beli) / +r.dataset.beli) * 100) : 0;
-      var color   = newM >= 10 ? '#15803d' : '#dc2626';
-      html += '<div style="display:flex;justify-content:space-between;gap:.5rem;margin-top:.2rem">'
-        + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (r.dataset.namaAsli || r.dataset.nama) + '</span>'
-        + '<span style="flex-shrink:0;font-weight:600">'
-          + rpFmt(+r.dataset.jual) + ' → <span style="color:' + color + '">' + rpFmt(newJual) + ' (' + newM + '%)</span>'
-        + '</span>'
-      + '</div>';
+    /* Gunakan CSS class yang sudah ada di <style> — tidak ada inline style */
+    var html = '<div class="preview-header">Preview (' + rows.length + ' produk):</div>';
+    rows.slice(0, 3).forEach(function (r) {
+      var newJual    = calcNewJual(r, bt.value, val);
+      var newM       = +r.dataset.beli > 0 ? Math.round(((newJual - +r.dataset.beli) / +r.dataset.beli) * 100) : 0;
+      var colorClass = newM >= 10 ? 'preview-ok' : 'preview-warn';
+      html += '<div class="preview-row">'
+        + '<span class="preview-nama">' + (r.dataset.namaAsli || r.dataset.nama) + '</span>'
+        + '<span class="preview-harga">' + rpFmt(+r.dataset.jual) + ' → '
+        + '<span class="' + colorClass + '">' + rpFmt(newJual) + ' (' + newM + '%)</span></span>'
+        + '</div>';
     });
-    if (rows.length > 3) html += '<div style="color:#9ca3af;font-size:.7rem;margin-top:.3rem">…dan ' + (rows.length - 3) + ' produk lainnya</div>';
+    if (rows.length > 3) {
+      html += '<div class="preview-more">…dan ' + (rows.length - 3) + ' produk lainnya</div>';
+    }
     bp.innerHTML = html;
     bp.classList.remove('hidden');
   }
@@ -689,50 +785,76 @@ function initMarginRendah() {
   var bulkVal  = document.getElementById('bulk-val');
   if (bulkType) bulkType.addEventListener('change', updBulkUnit);
   if (bulkVal)  bulkVal.addEventListener('input',  updBulkPreview);
+
   document.querySelectorAll('[name="bulk-scope"]').forEach(function (r) {
     r.addEventListener('change', updBulkPreview);
   });
 
   var btnBulkOk = document.getElementById('btn-bulk-ok');
-  if (btnBulkOk) btnBulkOk.addEventListener('click', async function () {
-    var val  = parseFloat(document.getElementById('bulk-val').value);
-    var type = document.getElementById('bulk-type').value;
-    if (!val || val <= 0) { toast('Masukkan nilai yang valid', false); return; }
+  if (btnBulkOk) {
+    btnBulkOk.addEventListener('click', async function () {
+      var val  = parseFloat(document.getElementById('bulk-val').value);
+      var type = document.getElementById('bulk-type').value;
+      if (!val || val <= 0) { toast('Masukkan nilai yang valid', false); return; }
 
-    var rows = getTargetRows();
-    if (!rows.length) { toast('Tidak ada produk untuk diupdate', false); return; }
+      var rows = getTargetRows();
+      if (!rows.length) { toast('Tidak ada produk untuk diupdate', false); return; }
 
-    this.disabled = true;
-    this.textContent = 'Menerapkan…';
-
-    try {
-      var updates = rows.map(function (r) {
-        return {
-          id:        r.dataset.id,
-          harga_jual: calcNewJual(r, type, val)
-        };
-      });
-
-      // Batch: kirim satu per satu (pakai PATCH individual, sama seperti produk.astro)
-      var ok = 0;
-      for (var i = 0; i < updates.length; i++) {
-        await api('PATCH', '/api/produk/produk?id=' + encodeURIComponent(updates[i].id), { harga_jual: updates[i].harga_jual });
-        ok++;
+      this.disabled = true; this.textContent = 'Menerapkan…';
+      try {
+        var ok = 0;
+        for (var i = 0; i < rows.length; i++) {
+          await api('PATCH', '/api/produk/produk?id=' + encodeURIComponent(rows[i].dataset.id), {
+            harga_jual: calcNewJual(rows[i], type, val),
+          });
+          ok++;
+        }
+        toast(ok + ' harga berhasil diupdate');
+        closeModal('modal-bulk');
+        setTimeout(function () { location.reload(); }, 600);
+      } catch (e) {
+        toast('Gagal: ' + e.message, false);
+        this.disabled = false; this.textContent = 'Terapkan';
       }
-      toast(ok + ' harga berhasil diupdate');
-      closeModal('modal-bulk');
-      setTimeout(function () { location.reload(); }, 600);
-    } catch (e) {
-      toast('Gagal: ' + e.message, false);
-      this.disabled = false;
-      this.textContent = 'Terapkan';
-    }
+    });
+  }
+
+} /* end initMarginRendah */
+
+/* ════════════════════════════════════════════════════════════════════════════
+   BOOTSTRAP
+
+   Guard window.__marginScriptMounted memastikan dua hal:
+   1. Listener astro:page-load hanya didaftarkan SEKALI, tidak menumpuk
+      tiap kali script dieksekusi ulang setelah navigasi ViewTransitions.
+   2. ESC handler didaftarkan di LUAR initMarginRendah() sehingga tidak
+      ditambah ulang tiap navigasi (memory/bug leak).
+
+   DOMContentLoaded fallback diperlukan karena astro:page-load tidak selalu
+   fire saat halaman dibuka pertama kali via URL langsung (hard load/refresh).
+════════════════════════════════════════════════════════════════════════════ */
+if (!window.__marginScriptMounted) {
+  window.__marginScriptMounted = true;
+
+  /* Navigasi ViewTransitions */
+  document.addEventListener('astro:page-load', initMarginRendah);
+
+  /* ESC — tutup modal yang sedang terbuka */
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var mEdit = document.getElementById('modal-edit');
+    var mBulk = document.getElementById('modal-bulk');
+    if (mEdit && mEdit.classList.contains('open')) { mEdit.classList.remove('open'); document.body.style.overflow = ''; }
+    if (mBulk && mBulk.classList.contains('open')) { mBulk.classList.remove('open'); document.body.style.overflow = ''; }
   });
+}
 
-} // end initMarginRendah
-
-/* Jalankan saat load pertama DAN setiap navigasi ViewTransitions */
-document.addEventListener('astro:page-load', initMarginRendah);
+/* Hard load / refresh fallback */
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initMarginRendah);
+} else {
+  initMarginRendah();
+}
 </script>
 
 </Layout>

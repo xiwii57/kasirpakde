@@ -27,8 +27,33 @@ const ADMIN_EMAIL_NORMALIZED = ADMIN_EMAIL.toLowerCase().trim();
 // KONSTANTA
 // ══════════════════════════════════════════════════════════════════
 
-// Batas body form login (email + password + turnstile token ~2 KB + overhead)
 const MAX_BODY_BYTES = 16 * 1024; // 16 KB
+
+// ── In-memory rate limiter (lapisan kedua setelah Turnstile) ──────
+// Melindungi jika Turnstile dibypass atau tidak tersedia
+const LOGIN_RATE_WINDOW_MS = 15 * 60_000; // 15 menit
+const LOGIN_RATE_MAX       = 10;          // maks 10 percobaan / 15 menit / IP
+
+const loginRateMap = new Map<string, { count: number; windowStart: number }>();
+
+function checkLoginRateLimit(ip: string): boolean {
+    const now    = Date.now();
+    const record = loginRateMap.get(ip);
+    if (!record || now - record.windowStart > LOGIN_RATE_WINDOW_MS) {
+        loginRateMap.set(ip, { count: 1, windowStart: now });
+        return true;
+    }
+    if (record.count >= LOGIN_RATE_MAX) return false;
+    record.count++;
+    return true;
+}
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, record] of loginRateMap.entries()) {
+        if (now - record.windowStart > LOGIN_RATE_WINDOW_MS * 2) loginRateMap.delete(ip);
+    }
+}, 15 * 60_000);
 
 // ══════════════════════════════════════════════════════════════════
 // COOKIE OPTIONS
@@ -37,7 +62,10 @@ const MAX_BODY_BYTES = 16 * 1024; // 16 KB
 const COOKIE_OPTIONS = {
     path:     "/",
     httpOnly: true,
-    sameSite: "lax" as const,
+    // FIX: "strict" lebih aman dari "lax" untuk admin panel
+    // "lax" masih memungkinkan cookie dikirim saat navigasi cross-site (link dari luar)
+    // "strict" memastikan cookie hanya dikirim dari origin yang sama
+    sameSite: "strict" as const,
     secure:   IS_PROD,
 } as const;
 
@@ -45,17 +73,26 @@ const COOKIE_OPTIONS = {
 // RESPONSE HELPERS
 // ══════════════════════════════════════════════════════════════════
 
+// FIX: Tambah X-Content-Type-Options di semua response
 function jsonOk(data: Record<string, unknown> = {}): Response {
     return new Response(JSON.stringify({ ok: true, ...data }), {
         status:  200,
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type":           "application/json",
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control":          "no-store",
+        },
     });
 }
 
 function jsonError(error: string, status = 401): Response {
     return new Response(JSON.stringify({ ok: false, error }), {
         status,
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type":           "application/json",
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control":          "no-store",
+        },
     });
 }
 
@@ -101,7 +138,7 @@ async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
     }
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
+    const timer      = setTimeout(() => controller.abort(), 5000);
 
     try {
         const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
@@ -128,14 +165,22 @@ async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
 export const POST: APIRoute = async ({ request, cookies, clientAddress }) => {
     const ip = getClientIp(request, clientAddress);
 
-    // ── 1. Validasi Content-Type ──────────────────────────────────
+    // ── 1. Rate limiting — lapisan kedua setelah Turnstile ────────
+    // FIX: Cek sebelum parse body agar tidak buang resource
+    if (!checkLoginRateLimit(ip)) {
+        await randomDelay();
+        console.warn(`[Login] Rate limit tercapai dari IP ${ip.slice(0, 8)}***`);
+        return jsonError("too_many_attempts", 429);
+    }
+
+    // ── 2. Validasi Content-Type ──────────────────────────────────
     const ct = request.headers.get("content-type") ?? "";
     if (!ct.includes("application/x-www-form-urlencoded") && !ct.includes("multipart/form-data")) {
         await randomDelay();
         return jsonError("invalid_credentials");
     }
 
-    // ── 2. Validasi ukuran body aktual sebelum parse ──────────────
+    // ── 3. Validasi ukuran body aktual sebelum parse ──────────────
     let bodyBuffer: ArrayBuffer;
     try {
         bodyBuffer = await request.arrayBuffer();
@@ -156,7 +201,7 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress }) => {
         body:    bodyBuffer,
     });
 
-    // ── 3. Parse & sanitasi form data ────────────────────────────
+    // ── 4. Parse & sanitasi form data ────────────────────────────
     let formData: FormData;
     try {
         formData = await clonedRequest.formData();
@@ -169,7 +214,7 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress }) => {
     const password = formData.get("password")?.toString().slice(0, 128)                   ?? "";
     const tsToken  = formData.get("cf-turnstile-response")?.toString().slice(0, 2048)     ?? "";
 
-    // ── 4. Validasi format input ──────────────────────────────────
+    // ── 5. Validasi format input ──────────────────────────────────
     const emailRegex = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
     if (!rawEmail || !emailRegex.test(rawEmail)) {
         await randomDelay();
@@ -180,14 +225,14 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress }) => {
         return jsonError("invalid_credentials");
     }
 
-    // ── 5. Verifikasi Turnstile captcha ───────────────────────────
+    // ── 6. Verifikasi Turnstile captcha ───────────────────────────
     if (!tsToken || !(await verifyTurnstile(tsToken, ip))) {
         console.warn(`[Login] Turnstile gagal dari IP: ${ip.slice(0, 8)}***`);
         await randomDelay();
         return jsonError("turnstile_failed");
     }
 
-    // ── 6. Supabase login ─────────────────────────────────────────
+    // ── 7. Supabase login ─────────────────────────────────────────
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         auth: {
             autoRefreshToken:   false,
@@ -196,10 +241,20 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress }) => {
         },
     });
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-        email:    rawEmail,
-        password,
-    });
+    let data: Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>["data"];
+    let error: Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>["error"];
+
+    try {
+        ({ data, error } = await supabase.auth.signInWithPassword({
+            email:    rawEmail,
+            password,
+        }));
+    } catch (err) {
+        // FIX: Pastikan randomDelay tetap berjalan meski Supabase throw (timeout, dll)
+        await randomDelay();
+        console.error("[Login] Supabase signIn exception:", err instanceof Error ? err.message : err);
+        return jsonError("invalid_credentials");
+    }
 
     if (error || !data.session || !data.user) {
         await randomDelay();
@@ -207,19 +262,16 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress }) => {
         return jsonError("invalid_credentials");
     }
 
-    // ── 7. Verifikasi admin ───────────────────────────────────────
+    // ── 8. Verifikasi admin ───────────────────────────────────────
     const userEmail = (data.user.email ?? "").toLowerCase().trim();
     if (!safeCompare(userEmail, ADMIN_EMAIL_NORMALIZED)) {
-        // FIX — hapus supabase.auth.admin?.signOut(token) yang tidak valid di JS SDK.
-        // signOut({ scope: "global" }) adalah satu-satunya cara yang benar untuk
-        // me-revoke refresh token di server Supabase via anon client.
         await supabase.auth.signOut({ scope: "global" }).catch(() => null);
         await randomDelay();
         console.warn(`[Login] Bukan admin dari IP ${ip.slice(0, 8)}***`);
         return jsonError("unauthorized");
     }
 
-    // ── 8. Verifikasi email sudah dikonfirmasi ────────────────────
+    // ── 9. Verifikasi email sudah dikonfirmasi ────────────────────
     if (!data.user.email_confirmed_at) {
         await supabase.auth.signOut({ scope: "global" }).catch(() => null);
         await randomDelay();
@@ -227,7 +279,7 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress }) => {
         return jsonError("invalid_credentials");
     }
 
-    // ── 9. Login sukses — set cookie ──────────────────────────────
+    // ── 10. Login sukses — set cookie ─────────────────────────────
     const { access_token, refresh_token, expires_in } = data.session;
 
     cookies.set("sb-access-token",  access_token,  { ...COOKIE_OPTIONS, maxAge: expires_in });
@@ -242,8 +294,7 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress }) => {
 // METHOD LAINNYA
 // ══════════════════════════════════════════════════════════════════
 
-export const GET: APIRoute = ({ redirect }) =>
-redirect("/", 302);
+export const GET: APIRoute = ({ redirect }) => redirect("/", 302);
 
 export const PUT:    APIRoute = () => new Response("Method Not Allowed", { status: 405 });
 export const DELETE: APIRoute = () => new Response("Method Not Allowed", { status: 405 });

@@ -367,54 +367,87 @@ padding-right: 3rem;
 }
 
 /* ── Submit button ───────────────────────────────────── */
+/* ── Submit Button ── */
 .submit-btn {
     position: relative;
     width: 100%;
-    height: 44px;
-    padding: 0 1rem;
-    background: var(--accent);
-    color: var(--accent-fg);
+    padding: 0.75rem 1.25rem;
     border: none;
-    border-radius: var(--radius-sm);
-    font-family: 'DM Sans', sans-serif;
-    font-size: .875rem;
-    font-weight: 500;
-    letter-spacing: -.01em;
+    border-radius: 10px;
+    background: #111827;
+    color: #fff;
+    font-size: 0.875rem;
+    font-weight: 600;
     cursor: pointer;
     overflow: hidden;
-    transition: opacity .18s var(--ease), transform .18s var(--ease);
-    box-sizing: border-box;
+    transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+    box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 4px 12px rgba(0,0,0,.10);
 }
 
-.submit-btn:hover:not(:disabled) { opacity: .88; }
-.submit-btn:active:not(:disabled) { transform: scale(.985); }
-.submit-btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
-.submit-btn:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+.submit-btn:hover:not(:disabled) {
+    background: #1f2937;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,.12), 0 6px 16px rgba(0,0,0,.12);
+}
 
-.btn-inner {
+.submit-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.submit-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.85;
+}
+
+/* ── Dua layer konten button ── */
+.btn-content,
+.btn-loading-content {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: .5rem;
-    transition: opacity .15s;
+    gap: 0.5rem;
+    transition: opacity 0.2s, transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.btn-loading .btn-inner { opacity: 0; }
-
-/* Spinner */
-.spinner {
-    display: none;
+.btn-loading-content {
     position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    width: 18px; height: 18px;
-    border: 2px solid rgba(255,255,255,.3);
-    border-top-color: #fff;
-    border-radius: 50%;
-    animation: spin .7s linear infinite;
+    inset: 0;
+    opacity: 0;
+    transform: translateY(8px);
 }
 
-.btn-loading .spinner { display: block; }
+/* State: loading aktif */
+.submit-btn.btn-loading .btn-content {
+    opacity: 0;
+    transform: translateY(-8px);
+}
+
+.submit-btn.btn-loading .btn-loading-content {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* ── Spinner Ring ── */
+.loader-ring {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    border-top-color: #ffffff;
+    animation: spin 0.65s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.btn-loading-text {
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
 
 /* ── Card footer ─────────────────────────────────────── */
 .card-footer {

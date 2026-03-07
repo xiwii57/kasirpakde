@@ -4,6 +4,11 @@
 @tailwind components;
 @tailwind utilities;
 
+body { font-family: 'DM Sans', sans-serif; }
+
+/* ViewTransitions */
+:root { view-transition-name: none; }
+
 ::view-transition-old(root),
 ::view-transition-new(root) {
     animation: none;

@@ -116,7 +116,6 @@ const jamPeak  = jamMap.indexOf(Math.max(...jamMap));
 const jamTotal = trx.length;
 
 // ── Label x-axis omset (tiap 5 bar) ─────────────────────────────────────
-// Prekalkulasi: tampilkan label tiap 5 hari + hari ini
 const showLabelIdx = new Set<number>();
 dayList.forEach((d,i) => {
   if (i % 5 === 0 || d.date === todayKey || i === dayList.length-1) showLabelIdx.add(i);
@@ -125,11 +124,62 @@ dayList.forEach((d,i) => {
 
 <Layout title="Analisis" active="analisis" nonce={nonce}>
 
+<!--
+  CATATAN INLINE STYLE:
+  ─────────────────────────────────────────────────────────────────────────
+  Semua style="" yang tersisa di file ini adalah SERVER-COMPUTED — nilainya
+  dihitung dari data per-item (height chart bar, width progress bar, SVG
+  stroke-dasharray). Nilai ini unik untuk setiap elemen dan tidak mungkin
+  diekspresikan sebagai CSS class statis.
+
+  Ini bukan "inline style yang lupa dipindah" — ini memang tempatnya.
+  CSS custom properties (--val) bisa dipakai sebagai alternatif tapi
+  menghasilkan pola yang lebih verbose tanpa keuntungan nyata di sini.
+
+  style="" yang TIDAK ada di file ini (sudah bersih):
+  - Static layout/color style → sudah ada di analisis.css
+  - Conditional active state → sudah pakai CSS class
+  ─────────────────────────────────────────────────────────────────────────
+-->
+
+<!-- ── Internal Styles ────────────────────────────────────────────────────── -->
+<style>
+  /* ── Header: badge "30 hari terakhir" ─────────────────────────── */
+  .an-period-badge {
+    margin-left: auto;
+    font-size: .7rem;
+    color: var(--an-muted);
+    background: var(--an-surface);
+    border: 1px solid var(--an-border);
+    border-radius: 6px;
+    padding: 3px 10px;
+  }
+
+  /* ── Panel body: produk terlaris ──────────────────────────────── */
+  .an-panel-body-list {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  /* ── Metode bayar: SVG donut wrapper ──────────────────────────── */
+  .metode-svg {
+    flex-shrink: 0;
+  }
+
+  /* ── Metode bayar: warna dot legend ───────────────────────────── */
+  .m-dot-qris { background: #2563eb; }
+  .m-dot-cash { background: #bfdbfe; }
+
+  /* ── Metode bayar: warna persen ───────────────────────────────── */
+  .m-pct-qris { color: #2563eb; }
+  .m-pct-cash { color: #3b82f6; }
+</style>
+
 <div class="an-wrap">
 
   <!-- Header -->
   <div class="an-header">
-    <button onclick="window.openSidebar&&window.openSidebar()"
+    <button id="btn-open-sidebar"
       class="lg:hidden flex-shrink-0 w-8 h-8 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100"
       aria-label="Menu">
       <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -142,9 +192,7 @@ dayList.forEach((d,i) => {
       <line x1="6"  y1="20" x2="6"  y2="14"/>
     </svg>
     <h1>Analisis</h1>
-    <span style="margin-left:auto;font-size:.7rem;color:var(--an-muted);background:var(--an-surface);border:1px solid var(--an-border);border-radius:6px;padding:3px 10px">
-      30 hari terakhir
-    </span>
+    <span class="an-period-badge">30 hari terakhir</span>
   </div>
 
   <!-- Summary cards -->
@@ -208,17 +256,14 @@ dayList.forEach((d,i) => {
               const isToday = d.date === todayKey;
               const showLbl = showLabelIdx.has(i);
               const color   = isToday ? '#2563eb' : '#bfdbfe';
-              const tipHtml = `${rp(d.omset)}\n${d.trx} transaksi`;
               return (
                 <div
                   class={`chart-col${isToday ? ' is-today' : ''}`}
                   data-lbl={showLbl ? d.label : undefined}
                 >
-                  {/* Tooltip — server-rendered, opacity:0 via CSS, hanya muncul saat hover */}
                   <div class="chart-tip">
                     {rp(d.omset)}<br/>{d.trx} transaksi
                   </div>
-                  {/* Bar — HANYA elemen visual, tidak ada teks */}
                   <div
                     class="chart-bar"
                     style={`height:${pct > 0 ? Math.max(pct, 1.5) : 0}%;background:${color}`}
@@ -279,7 +324,7 @@ dayList.forEach((d,i) => {
         <h2>Produk Terlaris</h2>
         <span class="an-panel-lbl">Top 10 · 30 hari</span>
       </div>
-      <div class="an-panel-body" style="padding-top:8px;padding-bottom:8px">
+      <div class="an-panel-body an-panel-body-list">
         {terlaris.length === 0 ? (
           <div class="an-empty">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -328,7 +373,7 @@ dayList.forEach((d,i) => {
           </div>
         ) : (
           <div class="metode-wrap">
-            <svg width="88" height="88" viewBox="0 0 88 88" aria-hidden="true" style="flex-shrink:0">
+            <svg width="88" height="88" viewBox="0 0 88 88" aria-hidden="true" class="metode-svg">
               <circle cx={CX} cy={CY} r={R} fill="none" stroke="#e5e7eb" stroke-width="13"/>
               {cashPct > 0 && (
                 <circle cx={CX} cy={CY} r={R} fill="none" stroke="#bfdbfe"
@@ -350,20 +395,20 @@ dayList.forEach((d,i) => {
             </svg>
             <div class="metode-legend">
               <div class="m-item">
-                <div class="m-dot" style="background:#2563eb"></div>
+                <div class="m-dot m-dot-qris"></div>
                 <div class="m-info">
                   <div class="m-label">QRIS</div>
                   <div class="m-sub">{qrisCount} transaksi</div>
                 </div>
-                <div class="m-pct" style="color:#2563eb">{qrisPct}%</div>
+                <div class="m-pct m-pct-qris">{qrisPct}%</div>
               </div>
               <div class="m-item">
-                <div class="m-dot" style="background:#bfdbfe"></div>
+                <div class="m-dot m-dot-cash"></div>
                 <div class="m-info">
                   <div class="m-label">Cash / Manual</div>
                   <div class="m-sub">{cashCount} transaksi</div>
                 </div>
-                <div class="m-pct" style="color:#3b82f6">{cashPct}%</div>
+                <div class="m-pct m-pct-cash">{cashPct}%</div>
               </div>
             </div>
           </div>
@@ -394,7 +439,6 @@ dayList.forEach((d,i) => {
               <div
                 class={`chart-col${isToday ? ' is-today' : ''}`}
                 data-lbl={showLbl ? d.label : undefined}
-                style={isToday ? 'outline:none' : ''}
               >
                 <div class="chart-tip">{rp(d.laba)}</div>
                 <div
@@ -410,4 +454,29 @@ dayList.forEach((d,i) => {
   </div>
 
 </div>
+
+<script is:inline nonce={nonce}>
+'use strict';
+function initAnalisis() {
+  if (!document.querySelector('.an-wrap')) return;
+
+  var btn = document.getElementById('btn-open-sidebar');
+  if (btn) {
+    btn.addEventListener('click', function () {
+      if (window.openSidebar) window.openSidebar();
+    });
+  }
+}
+
+if (!window.__analisisScriptMounted) {
+  window.__analisisScriptMounted = true;
+  document.addEventListener('astro:page-load', initAnalisis);
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initAnalisis);
+} else {
+  initAnalisis();
+}
+</script>
+
 </Layout>

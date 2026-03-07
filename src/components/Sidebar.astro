@@ -1,4 +1,5 @@
 ---
+// src/components/Sidebar.astro
 interface Props {
   active: "dashboard" | "produk" | "margin-rendah" | "analisis" | "kasir";
   nonce?: string;
@@ -37,84 +38,48 @@ const navItems = [
 ] as const;
 ---
 
+<!--
+  Semua style="" inline dipindah ke blok <style> di bawah.
+  Dynamic active state ditangani via class .is-active (sudah ada) +
+  CSS selector baru — tidak perlu style attribute sama sekali.
+  Dot indicator active → CSS ::after pseudo-element.
+-->
+
 <!-- ── Overlay ─────────────────────────────────────────────────────────────── -->
 <div
   id="sidebar-overlay"
-  class="fixed inset-0 bg-black/60 z-40 hidden lg:hidden"
+  class="sidebar-overlay"
   aria-hidden="true"
-  style="opacity:0; transition: opacity 220ms ease; backdrop-filter: blur(3px);"
 ></div>
 
 <!-- ── Sidebar ─────────────────────────────────────────────────────────────── -->
 <aside
   id="sidebar"
+  class="sidebar"
   aria-label="Navigasi utama"
-  style="
-    width: 220px;
-    background: #141210;
-    display: flex;
-    flex-direction: column;
-    flex-shrink: 0;
-    height: 100dvh;
-    overflow-y: auto;
-    position: fixed;
-    top: 0; left: 0;
-    z-index: 50;
-    transform: translateX(-100%);
-    transition: transform 240ms cubic-bezier(0.4,0,0.2,1);
-    border-right: 1px solid rgba(255,255,255,0.055);
-    box-shadow: 4px 0 24px rgba(0,0,0,0.4);
-  "
 >
 
   <!-- ── Logo ── -->
-  <div style="
-    padding: 1.125rem 1.25rem 1rem;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-shrink: 0;
-  ">
-    <a href="/dashboard" style="display:flex; align-items:center; gap:0.625rem; min-width:0; text-decoration:none;" aria-label="Kasir Warung — Beranda">
-      <div style="
-        width: 30px; height: 30px;
-        background: linear-gradient(135deg, #c84b1f 0%, #a83818 100%);
-        border-radius: 8px;
-        display: grid;
-        place-items: center;
-        flex-shrink: 0;
-        box-shadow: 0 2px 8px rgba(200,75,31,0.35);
-      " aria-hidden="true">
+  <div class="sidebar-logo-bar">
+    <a href="/dashboard" class="sidebar-logo-link" aria-label="Kasir Warung — Beranda">
+      <div class="sidebar-logo-icon" aria-hidden="true">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
           <line x1="3" y1="6" x2="21" y2="6"/>
           <path d="M16 10a4 4 0 0 1-8 0"/>
         </svg>
       </div>
-      <div style="min-width:0;">
-        <div style="color:#fff; font-size:0.875rem; font-weight:600; letter-spacing:-0.02em; line-height:1.1; font-family:'DM Sans',sans-serif;">Kasir Warung</div>
-        <div style="font-size:0.6rem; color:rgba(255,255,255,0.28); letter-spacing:0.1em; text-transform:uppercase; margin-top:2px; font-family:'DM Mono',monospace;">Admin Portal</div>
+      <div class="sidebar-logo-text">
+        <div class="sidebar-logo-name">Kasir Warung</div>
+        <div class="sidebar-logo-sub">Admin Portal</div>
       </div>
     </a>
 
     <!-- Tombol tutup mobile -->
     <button
       id="close-sidebar"
-      aria-label="Tutup menu"
-      style="
-        display: none;
-        width: 28px; height: 28px;
-        align-items: center; justify-content: center;
-        color: rgba(255,255,255,0.35);
-        background: none;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        transition: color 0.15s, background 0.15s;
-        flex-shrink: 0;
-      "
       class="sidebar-close-btn"
+      aria-label="Tutup menu"
     >
       <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -123,139 +88,70 @@ const navItems = [
   </div>
 
   <!-- ── Nav ── -->
-  <nav style="flex:1; padding: 0.875rem 0.75rem; overflow-y:auto;" aria-label="Menu halaman">
+  <nav class="sidebar-nav" aria-label="Menu halaman">
 
-    <p style="
-      padding: 0 0.625rem 0.5rem;
-      font-size: 0.6rem;
-      font-weight: 700;
-      color: rgba(255,255,255,0.2);
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      font-family: 'DM Mono', monospace;
-    ">Menu</p>
+    <p class="sidebar-section-label">Menu</p>
 
-    <div style="display:flex; flex-direction:column; gap:2px;">
+    <div class="sidebar-nav-list">
       {navItems.map(item => (
         <a
           href={item.href}
           class={`sidebar-nav-link ${active === item.key ? "is-active" : ""}`}
           aria-current={active === item.key ? "page" : undefined}
-          style={`
-            display: flex;
-            align-items: center;
-            gap: 0.625rem;
-            padding: 0.5rem 0.625rem;
-            border-radius: 6px;
-            font-size: 0.8125rem;
-            font-weight: 500;
-            text-decoration: none;
-            transition: all 0.15s ease;
-            letter-spacing: -0.01em;
-            color: ${active === item.key ? "#ffffff" : "rgba(255,255,255,0.4)"};
-            background: ${active === item.key ? "rgba(200,75,31,0.14)" : "transparent"};
-            box-shadow: ${active === item.key ? "inset 2.5px 0 0 #c84b1f" : "none"};
-          `}
         >
           <svg
             width="14" height="14"
             viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            class="sidebar-nav-icon"
             aria-hidden="true"
-            style={`flex-shrink:0; color:${active === item.key ? "#c84b1f" : "rgba(255,255,255,0.28)"};`}
             set:html={item.icon}
           />
-          <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{item.label}</span>
-          {active === item.key && (
-            <span style="width:5px; height:5px; border-radius:50%; background:#c84b1f; flex-shrink:0;" aria-hidden="true"></span>
-          )}
+          <span class="sidebar-nav-label">{item.label}</span>
         </a>
       ))}
     </div>
 
     <!-- Divider + Sistem -->
-    <div style="padding: 1rem 0.625rem 0.5rem;" aria-hidden="true">
-      <div style="height:1px; background:rgba(255,255,255,0.06); margin-bottom:0.75rem;"></div>
-      <p style="
-        font-size: 0.6rem;
-        font-weight: 700;
-        color: rgba(255,255,255,0.2);
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        font-family: 'DM Mono', monospace;
-      ">Sistem</p>
+    <div class="sidebar-divider-section" aria-hidden="true">
+      <div class="sidebar-divider-line"></div>
+      <p class="sidebar-section-label">Sistem</p>
     </div>
 
     <a
       href="/dashboard/kasir"
       class={`sidebar-nav-link ${active === "kasir" ? "is-active" : ""}`}
       aria-current={active === "kasir" ? "page" : undefined}
-      style={`
-        display: flex;
-        align-items: center;
-        gap: 0.625rem;
-        padding: 0.5rem 0.625rem;
-        border-radius: 6px;
-        font-size: 0.8125rem;
-        font-weight: 500;
-        text-decoration: none;
-        transition: all 0.15s ease;
-        letter-spacing: -0.01em;
-        color: ${active === "kasir" ? "#ffffff" : "rgba(255,255,255,0.4)"};
-        background: ${active === "kasir" ? "rgba(200,75,31,0.14)" : "transparent"};
-        box-shadow: ${active === "kasir" ? "inset 2.5px 0 0 #c84b1f" : "none"};
-      `}
     >
       <svg
         width="14" height="14"
         viewBox="0 0 24 24" fill="none" stroke="currentColor"
         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+        class="sidebar-nav-icon"
         aria-hidden="true"
-        style={`flex-shrink:0; color:${active === "kasir" ? "#c84b1f" : "rgba(255,255,255,0.28)"};`}
       >
         <rect x="2" y="3" width="20" height="14" rx="2"/>
         <line x1="8" y1="21" x2="16" y2="21"/>
         <line x1="12" y1="17" x2="12" y2="21"/>
       </svg>
-      <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Halaman Kasir</span>
-      {active === "kasir" && (
-        <span style="width:5px; height:5px; border-radius:50%; background:#c84b1f; flex-shrink:0;" aria-hidden="true"></span>
-      )}
+      <span class="sidebar-nav-label">Halaman Kasir</span>
     </a>
 
   </nav>
 
   <!-- ── User + Logout ── -->
-  <div style="
-    padding: 0.75rem;
-    border-top: 1px solid rgba(255,255,255,0.06);
-    flex-shrink: 0;
-  ">
+  <div class="sidebar-footer">
     {userEmail && (
-      <div style="
-        padding: 0.5rem 0.625rem;
-        margin-bottom: 0.375rem;
-        border-radius: 6px;
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.06);
-      ">
-        <div style="display:flex; align-items:center; gap:0.5rem;">
-          <div style="
-            width: 24px; height: 24px;
-            border-radius: 5px;
-            background: rgba(200,75,31,0.2);
-            border: 1px solid rgba(200,75,31,0.3);
-            display: grid;
-            place-items: center;
-            flex-shrink: 0;
-          ">
-            <span style="font-size:0.6rem; font-weight:700; color:#c84b1f; text-transform:uppercase;">
+      <div class="sidebar-user-card">
+        <div class="sidebar-user-row">
+          <div class="sidebar-user-avatar">
+            <span class="sidebar-user-initial">
               {shortName.charAt(0)}
             </span>
           </div>
-          <div style="min-width:0; flex:1;">
-            <p style="font-size:0.7rem; font-weight:600; color:rgba(255,255,255,0.6); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{shortName}</p>
-            <p style="font-size:0.6rem; color:rgba(255,255,255,0.22); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{userEmail}</p>
+          <div class="sidebar-user-info">
+            <p class="sidebar-user-name">{shortName}</p>
+            <p class="sidebar-user-email">{userEmail}</p>
           </div>
         </div>
       </div>
@@ -266,26 +162,8 @@ const navItems = [
         type="submit"
         class="sidebar-logout-btn"
         aria-label="Keluar dari akun"
-        style="
-          width: 100%;
-          display: flex;
-          align-items: center;
-          gap: 0.625rem;
-          padding: 0.5rem 0.625rem;
-          border-radius: 6px;
-          font-size: 0.8rem;
-          font-weight: 500;
-          color: rgba(255,255,255,0.3);
-          background: none;
-          border: none;
-          cursor: pointer;
-          transition: color 0.15s, background 0.15s;
-          text-align: left;
-          letter-spacing: -0.01em;
-          font-family: 'DM Sans', sans-serif;
-        "
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0; color:rgba(255,255,255,0.2);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="sidebar-logout-icon">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
           <polyline points="16 17 21 12 16 7"/>
           <line x1="21" y1="12" x2="9" y2="12"/>
@@ -297,46 +175,339 @@ const navItems = [
 
 </aside>
 
-<style is:inline>
-  .sidebar-nav-link:not(.is-active):hover {
-    color: rgba(255,255,255,0.8) !important;
-    background: rgba(255,255,255,0.05) !important;
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STYLES
+     Semua style="" inline dipindah ke sini.
+     Dynamic active state: class .is-active + CSS selector.
+     Dot indicator: ::after pseudo-element — tidak perlu <span> tambahan.
+     <style> tanpa is:inline → Astro scope otomatis + tidak butuh nonce
+     (style-src pakai 'unsafe-inline', nonce tidak diperlukan untuk style).
+════════════════════════════════════════════════════════════════════════════ -->
+<style>
+  /* ── Overlay ──────────────────────────────────────────────────── */
+  .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 40;
+    display: none;
+    opacity: 0;
+    transition: opacity 220ms ease;
+    backdrop-filter: blur(3px);
   }
-  .sidebar-nav-link:not(.is-active):hover svg {
-    color: rgba(255,255,255,0.55) !important;
+  /* JS menambah class 'hidden' via classList — override display */
+  .sidebar-overlay.hidden { display: none !important; }
+
+  /* ── Sidebar container ────────────────────────────────────────── */
+  .sidebar {
+    width: 220px;
+    background: #141210;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    height: 100dvh;
+    overflow-y: auto;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 240ms cubic-bezier(0.4, 0, 0.2, 1);
+    border-right: 1px solid rgba(255, 255, 255, 0.055);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
   }
-  .sidebar-logout-btn:hover {
-    color: #f87171 !important;
-    background: rgba(239,68,68,0.08) !important;
+
+  /* ── Logo bar ─────────────────────────────────────────────────── */
+  .sidebar-logo-bar {
+    padding: 1.125rem 1.25rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
   }
-  .sidebar-logout-btn:hover svg {
-    color: #f87171 !important;
+
+  .sidebar-logo-link {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-width: 0;
+    text-decoration: none;
+  }
+
+  .sidebar-logo-icon {
+    width: 30px;
+    height: 30px;
+    background: linear-gradient(135deg, #c84b1f 0%, #a83818 100%);
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(200, 75, 31, 0.35);
+  }
+
+  .sidebar-logo-text { min-width: 0; }
+
+  .sidebar-logo-name {
+    color: #fff;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  .sidebar-logo-sub {
+    font-size: 0.6rem;
+    color: rgba(255, 255, 255, 0.28);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 2px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* ── Tombol tutup (mobile only) ───────────────────────────────── */
+  .sidebar-close-btn {
+    display: none;
+    width: 28px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.35);
+    background: none;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s;
+    flex-shrink: 0;
   }
   .sidebar-close-btn:hover {
-    color: rgba(255,255,255,0.8) !important;
-    background: rgba(255,255,255,0.07) !important;
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.07);
   }
+
+  /* ── Nav ──────────────────────────────────────────────────────── */
+  .sidebar-nav {
+    flex: 1;
+    padding: 0.875rem 0.75rem;
+    overflow-y: auto;
+  }
+
+  .sidebar-section-label {
+    padding: 0 0.625rem 0.5rem;
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.2);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-family: 'DM Mono', monospace;
+    margin: 0;
+  }
+
+  .sidebar-nav-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  /* ── Nav link ─────────────────────────────────────────────────── */
+  .sidebar-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.625rem;
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.15s ease;
+    letter-spacing: -0.01em;
+    /* default: tidak aktif */
+    color: rgba(255, 255, 255, 0.4);
+    background: transparent;
+    box-shadow: none;
+    /* ruang untuk dot ::after */
+    position: relative;
+  }
+  .sidebar-nav-link:hover:not(.is-active) {
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .sidebar-nav-link:hover:not(.is-active) .sidebar-nav-icon {
+    color: rgba(255, 255, 255, 0.55);
+  }
+
+  /* State aktif */
+  .sidebar-nav-link.is-active {
+    color: #ffffff;
+    background: rgba(200, 75, 31, 0.14);
+    box-shadow: inset 2.5px 0 0 #c84b1f;
+  }
+
+  /* Dot indicator — ::after menggantikan <span> inline */
+  .sidebar-nav-link.is-active::after {
+    content: '';
+    display: block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #c84b1f;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  /* ── Nav icon ─────────────────────────────────────────────────── */
+  .sidebar-nav-icon {
+    flex-shrink: 0;
+    color: rgba(255, 255, 255, 0.28);
+    transition: color 0.15s;
+  }
+  .sidebar-nav-link.is-active .sidebar-nav-icon {
+    color: #c84b1f;
+  }
+
+  /* ── Nav label ────────────────────────────────────────────────── */
+  .sidebar-nav-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── Divider section ──────────────────────────────────────────── */
+  .sidebar-divider-section {
+    padding: 1rem 0.625rem 0.5rem;
+  }
+
+  .sidebar-divider-line {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.06);
+    margin-bottom: 0.75rem;
+  }
+
+  /* ── Footer (user + logout) ───────────────────────────────────── */
+  .sidebar-footer {
+    padding: 0.75rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+  }
+
+  .sidebar-user-card {
+    padding: 0.5rem 0.625rem;
+    margin-bottom: 0.375rem;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .sidebar-user-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .sidebar-user-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 5px;
+    background: rgba(200, 75, 31, 0.2);
+    border: 1px solid rgba(200, 75, 31, 0.3);
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+  }
+
+  .sidebar-user-initial {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #c84b1f;
+    text-transform: uppercase;
+  }
+
+  .sidebar-user-info {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .sidebar-user-name {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin: 0;
+  }
+
+  .sidebar-user-email {
+    font-size: 0.6rem;
+    color: rgba(255, 255, 255, 0.22);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin: 0;
+  }
+
+  /* ── Logout button ────────────────────────────────────────────── */
+  .sidebar-logout-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.625rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.3);
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: color 0.15s, background 0.15s;
+    text-align: left;
+    letter-spacing: -0.01em;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .sidebar-logout-btn:hover {
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.08);
+  }
+
+  .sidebar-logout-icon {
+    flex-shrink: 0;
+    color: rgba(255, 255, 255, 0.2);
+    transition: color 0.15s;
+  }
+  .sidebar-logout-btn:hover .sidebar-logout-icon {
+    color: #f87171;
+  }
+
+  /* ── Responsive ───────────────────────────────────────────────── */
   @media (min-width: 1024px) {
-    #sidebar {
+    .sidebar {
       transform: translateX(0) !important;
       position: sticky !important;
       box-shadow: none !important;
     }
-    #sidebar-overlay { display: none !important; }
-    .sidebar-close-btn { display: none !important; }
+    #sidebar-overlay    { display: none !important; }
+    .sidebar-close-btn  { display: none !important; }
   }
+
   @media (max-width: 1023px) {
     .sidebar-close-btn { display: flex !important; }
   }
 </style>
 
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     SCRIPT
+     nonce diteruskan eksplisit karena is:inline.
+     Tidak ada perubahan logika dari versi asli.
+════════════════════════════════════════════════════════════════════════════ -->
 <script is:inline nonce={nonce}>
 (function () {
   'use strict';
 
-  // ── openSidebar / closeSidebar — global, tidak perlu re-register tiap navigasi
-  // Karena sidebar tidak di-swap oleh ViewTransitions (persistent element),
-  // fungsi ini cukup didefinisikan sekali dan tetap valid.
+  // ── openSidebar / closeSidebar — global, cukup didefinisikan sekali
   window.openSidebar = function () {
     var sidebar = document.getElementById('sidebar');
     var overlay = document.getElementById('sidebar-overlay');
@@ -360,20 +531,15 @@ const navItems = [
   };
 
   // ── initSidebar — dipanggil tiap page-load untuk re-attach listener
-  // pada elemen yang mungkin baru setelah swap DOM.
-  // Pakai flag _sbInit untuk mencegah double-attach pada element yang sama.
   function initSidebar() {
-    // Tutup sidebar otomatis saat pindah halaman di mobile
     if (window.innerWidth < 1024) window.closeSidebar();
 
-    // Overlay — cukup pakai onclick langsung, tidak perlu addEventListener + clone
     var overlay = document.getElementById('sidebar-overlay');
     if (overlay && !overlay._sbInit) {
       overlay._sbInit = true;
       overlay.addEventListener('click', window.closeSidebar);
     }
 
-    // Tombol close — sama, pakai flag
     var closeBtn = document.getElementById('close-sidebar');
     if (closeBtn && !closeBtn._sbInit) {
       closeBtn._sbInit = true;
@@ -381,8 +547,7 @@ const navItems = [
     }
   }
 
-  // ── Keyboard: ESC tutup sidebar
-  // Cukup satu listener global, tidak perlu re-register
+  // ── ESC — satu listener global
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
     var sidebar = document.getElementById('sidebar');
@@ -391,7 +556,7 @@ const navItems = [
     if (t === 'translateX(0)' || t === 'translateX(0px)') window.closeSidebar();
   });
 
-  // ── Resize: tutup sidebar jika layar melebar ke desktop
+  // ── Resize
   window.addEventListener('resize', function () {
     if (window.innerWidth >= 1024) {
       var overlay = document.getElementById('sidebar-overlay');
@@ -400,11 +565,7 @@ const navItems = [
     }
   });
 
-  // ── Jalankan sekali saat load pertama
   initSidebar();
-
-  // ── Jalankan setiap navigasi ViewTransitions
-  // Hanya astro:page-load — tidak perlu astro:after-swap (redundant & menyebabkan double-init)
   document.addEventListener('astro:page-load', initSidebar);
 
 }());

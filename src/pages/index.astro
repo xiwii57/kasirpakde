@@ -155,17 +155,20 @@ const siteKey   = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
               </div>
 
               <button type="submit" id="submitBtn" class="submit-btn" aria-busy="false">
-                <div class="btn-inner">
+                <span class="btn-content">
                   <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24"
-                       fill="none" stroke="currentColor" stroke-width="2.25"
-                       stroke-linecap="round" stroke-linejoin="round">
+                      fill="none" stroke="currentColor" stroke-width="2.25"
+                      stroke-linecap="round" stroke-linejoin="round">
                     <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
                     <polyline points="10 17 15 12 10 7"/>
                     <line x1="15" y1="12" x2="3" y2="12"/>
                   </svg>
                   <span class="btn-label">Masuk ke Dashboard</span>
-                </div>
-                <div class="spinner" aria-hidden="true"></div>
+                </span>
+                <span class="btn-loading-content" aria-hidden="true">
+                  <span class="loader-ring"></span>
+                  <span class="btn-loading-text">Memverifikasi…</span>
+                </span>
               </button>
 
             </div>

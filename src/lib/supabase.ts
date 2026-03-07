@@ -50,7 +50,7 @@ export interface TopSeller {
 }
 
 export const KATEGORI_LIST = [
-    "Minuman",
+"Minuman",
 "Makanan",
 "Snack",
 "Rokok",

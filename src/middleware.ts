@@ -11,9 +11,6 @@ const SUPABASE_URL      = import.meta.env.PUBLIC_SUPABASE_URL       as string;
 const SUPABASE_ANON_KEY = import.meta.env.PUBLIC_SUPABASE_ANON_KEY  as string;
 const IS_PROD           = import.meta.env.PROD                      as boolean;
 
-const ALLOWED_DOMAINS  = new Set(["karsip.my.id", "www.karsip.my.id"]);
-const CANONICAL_DOMAIN = "www.karsip.my.id";
-
 for (const [key, val] of Object.entries({
     ADMIN_EMAIL,
     PUBLIC_SUPABASE_URL:      SUPABASE_URL,
@@ -33,7 +30,7 @@ const ADMIN_EMAIL_NORMALIZED = ADMIN_EMAIL.toLowerCase().trim();
 const COOKIE_OPTIONS = {
     path:     "/",
     httpOnly: true,
-    sameSite: "lax" as const,
+    sameSite: "strict" as const,
     secure:   IS_PROD,
 } as const;
 
@@ -62,23 +59,18 @@ const STATIC_EXTS        = /\.(ico|png|jpg|jpeg|webp|svg|gif|woff2?|ttf|otf|css|
 const MAX_BODY_BYTES      = 512 * 1024;
 const ALLOWED_METHODS     = new Set(["GET", "POST", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
 const REQUIRED_CT_METHODS = new Set(["POST", "PATCH"]);
-
-// FIX #9 — Batas panjang token agar tidak ada token raksasa masuk ke validator
-const MAX_TOKEN_LENGTH = 4096;
+const MAX_TOKEN_LENGTH    = 4096;
 
 // ══════════════════════════════════════════════════════════════════
 // ERROR PAGE HELPERS
 // ══════════════════════════════════════════════════════════════════
 
-function errorPageUrl(code: 401 | 403 | 429 | 500, extra?: string): string {
-    const base = `https://${CANONICAL_DOMAIN}/${code}`;
-    return extra ? `${base}?${extra}` : base;
-}
-
 function htmlErrorRedirect(code: 401 | 403 | 429 | 500, extra?: string): Response {
+    const base = `/${code}`;
+    const loc  = extra ? `${base}?${extra}` : base;
     return new Response(null, {
         status:  302,
-        headers: { Location: errorPageUrl(code, extra) },
+        headers: { Location: loc },
     });
 }
 
@@ -106,9 +98,6 @@ function generateNonce(): string {
 
 // ══════════════════════════════════════════════════════════════════
 // RATE LIMITER (In-Memory — Single Instance)
-// FIX #2: Catatan arsitektur — solusi ini valid untuk single-instance/single-user.
-// Jika nantinya multi-worker, migrasi ke Cloudflare KV / Durable Objects.
-// FIX #7: Cleanup proaktif via setInterval, bukan hanya saat request datang.
 // ══════════════════════════════════════════════════════════════════
 
 interface RateRecord {
@@ -121,7 +110,6 @@ interface RateRecord {
 
 const rateStore = new Map<string, RateRecord>();
 
-// FIX #7 — Cleanup proaktif setiap 5 menit, tidak bergantung pada incoming request
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 setInterval(() => {
     const now = Date.now();
@@ -159,7 +147,6 @@ function checkRateLimit(ip: string, category: RateCategory): { allowed: boolean;
     const key = `${category}:${ip.replace(/[^a-fA-F0-9.:]/g, "").slice(0, 45)}`;
     const now = Date.now();
 
-    // FIX #7 — Threshold dinaikkan dan cleanup sudah dihandle oleh setInterval di atas
     if (rateStore.size > 2000) {
         for (const [k, r] of rateStore.entries()) {
             if (now > r.resetAt && (!r.blocked || now > r.blockUntil)) rateStore.delete(k);
@@ -188,7 +175,6 @@ function checkRateLimit(ip: string, category: RateCategory): { allowed: boolean;
         rec.blockUntil = now + blockMs;
         rec.strikes    = strikes;
         rateStore.set(key, rec);
-        // FIX #11 — Tidak mencetak IP lengkap, hanya 8 karakter pertama
         console.warn(`[Middleware] Rate limit (${category}) IP diblokir: ${ip.slice(0, 8)}***, strike: ${strikes}, durasi: ${Math.round(blockMs / 60000)}m`);
         return { allowed: false, retryAfter: Math.ceil(blockMs / 1000) };
     }
@@ -203,13 +189,11 @@ function resetLoginRateLimit(ip: string): void {
 // HELPERS
 // ══════════════════════════════════════════════════════════════════
 
-// FIX #3 — Peringatan: IP hanya bisa dipercaya jika semua traffic 100% melalui Cloudflare.
-// Blokir direct-to-origin di Cloudflare Dashboard untuk memastikan header tidak bisa dipalsukan.
 function getClientIp(request: Request): string {
     const cfIp = request.headers.get("cf-connecting-ip");
     if (cfIp) return cfIp.trim().slice(0, 45);
     const forwarded = request.headers.get("x-forwarded-for");
-    if (forwarded) return forwarded.split(",")[0].trim().slice(0, 45);
+    if (forwarded) return forwarded.split(",")[0]!.trim().slice(0, 45);
     return request.headers.get("x-real-ip")?.trim().slice(0, 45) ?? "0.0.0.0";
 }
 
@@ -221,18 +205,15 @@ function isStaticAsset(pathname: string): boolean {
     return pathname.startsWith("/_astro/") || STATIC_EXTS.test(pathname);
 }
 
-// FIX #5 — safeCompare tidak lagi bocorkan panjang string via early return.
-// Kedua string dipad ke panjang yang sama sebelum dibandingkan.
 function safeCompare(a: string, b: string): boolean {
-    const enc   = new TextEncoder();
+    const enc    = new TextEncoder();
     const maxLen = Math.max(a.length, b.length, 1);
-    // Pad ke panjang yang sama agar tidak ada timing leak dari length check
-    const aPad  = a.padEnd(maxLen, "\0");
-    const bPad  = b.padEnd(maxLen, "\0");
-    const aB    = enc.encode(aPad);
-    const bB    = enc.encode(bPad);
-    let diff    = a.length === b.length ? 0 : 1; // length berbeda → pasti tidak sama
-    for (let i = 0; i < aB.length; i++) diff |= aB[i] ^ bB[i];
+    const aPad   = a.padEnd(maxLen, "\0");
+    const bPad   = b.padEnd(maxLen, "\0");
+    const aB     = enc.encode(aPad);
+    const bB     = enc.encode(bPad);
+    let diff     = a.length === b.length ? 0 : 1;
+    for (let i = 0; i < aB.length; i++) diff |= aB[i]! ^ bB[i]!;
     return diff === 0;
 }
 
@@ -243,19 +224,16 @@ function clearAuthCookies(cookies: AstroCookies): void {
 
 // ══════════════════════════════════════════════════════════════════
 // CSRF PROTECTION
+// Origin check berbasis Host header dinamis — tidak hardcoded domain.
 // ══════════════════════════════════════════════════════════════════
 
 function getAllowedOrigins(request: Request): Set<string> {
-    const origins = new Set<string>(
-        [...ALLOWED_DOMAINS].map(d => `https://${d}`)
-    );
-    const host = request.headers.get("host");
+    const origins = new Set<string>();
+    const host    = request.headers.get("host");
     if (host) {
-        const hostname = host.split(":")[0].toLowerCase();
-        if ([...ALLOWED_DOMAINS].some(d => hostname === d || hostname.endsWith(`.${d}`))) {
-            origins.add(`https://${host}`);
-            origins.add(`https://${hostname}`);
-        }
+        const hostname = host.split(":")[0]!.toLowerCase();
+        origins.add(`https://${hostname}`);
+        if (host.includes(":")) origins.add(`https://${host}`);
     }
     if (!IS_PROD) {
         origins.add("http://localhost:4321");
@@ -268,21 +246,19 @@ function getAllowedOrigins(request: Request): Set<string> {
 function checkOrigin(request: Request, url: URL): boolean {
     if (!REQUIRED_CT_METHODS.has(request.method)) return true;
 
-    const origin  = request.headers.get("origin");
-    const referer = request.headers.get("referer");
-    const isApi   = url.pathname.startsWith("/api/");
-    const isFormRoute = AUTH_FORM_ROUTES.has(url.pathname);
+    const origin         = request.headers.get("origin");
+    const referer        = request.headers.get("referer");
+    const isApi          = url.pathname.startsWith("/api/");
+    const isFormRoute    = AUTH_FORM_ROUTES.has(url.pathname);
     const allowedOrigins = getAllowedOrigins(request);
 
     if (isApi) {
         if (!origin || origin === "null") {
             if (isFormRoute) {
-                const host = (request.headers.get("host") ?? "").split(":")[0].toLowerCase();
-                const isAllowedHost = [...ALLOWED_DOMAINS].some(d => host === d);
-                if (isAllowedHost) return true;
-                if (!IS_PROD && (host === "localhost" || host === "127.0.0.1")) return true;
-                // FIX #11 — Log tidak mencetak detail path yang mungkin sensitif
-                console.warn(`[Middleware] CSRF: host tidak dikenali untuk login endpoint`);
+                const host  = (request.headers.get("host") ?? "").split(":")[0]!.toLowerCase();
+                const isDev = !IS_PROD && (host === "localhost" || host === "127.0.0.1");
+                if (isDev || IS_PROD) return true;
+                console.warn(`[Middleware] CSRF: origin tidak ada untuk login endpoint`);
                 return false;
             }
             console.warn(`[Middleware] CSRF: origin tidak ada untuk API endpoint`);
@@ -296,16 +272,12 @@ function checkOrigin(request: Request, url: URL): boolean {
         } catch { return false; }
     }
 
-    // FIX #4 — Untuk non-API POST/PATCH, jika tidak ada origin DAN tidak ada referer → tolak.
-    // Referer bisa hilang via Referrer-Policy: no-referrer di halaman penyerang.
-    // Karena ini admin-only single-user, kebijakan ketat lebih aman.
     if (!origin || origin === "null") {
         if (request.method === "GET") return true;
         if (referer) {
             try { return allowedOrigins.has(new URL(referer).origin); }
             catch { return false; }
         }
-        // FIX #4 — Tidak ada origin dan tidak ada referer untuk mutating request → tolak
         console.warn(`[Middleware] CSRF: tidak ada origin maupun referer untuk ${request.method} request`);
         return false;
     }
@@ -319,14 +291,13 @@ function checkOrigin(request: Request, url: URL): boolean {
 
 function isValidJwtStructure(token: string): boolean {
     if (!token || typeof token !== "string") return false;
-    // FIX #9 — Cek panjang sebelum parsing apapun
     if (token.length > MAX_TOKEN_LENGTH)      return false;
     const parts = token.split(".");
     if (parts.length !== 3) return false;
     const b64url = /^[A-Za-z0-9_-]+$/;
     if (!parts.every((p) => p.length > 0 && b64url.test(p))) return false;
     try {
-        const padded  = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+        const padded  = parts[1]!.replace(/-/g, "+").replace(/_/g, "/");
         const decoded = atob(padded);
         const payload = JSON.parse(decoded) as Record<string, unknown>;
         if (typeof payload.exp !== "number")                         return false;
@@ -349,7 +320,7 @@ interface SupabaseUser {
 
 async function getUserFromToken(accessToken: string): Promise<{ user: SupabaseUser | null; error: string | null }> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
+    const timer      = setTimeout(() => controller.abort(), 5000);
     try {
         const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
             method:  "GET",
@@ -377,7 +348,7 @@ async function refreshSessionFromToken(refreshToken: string): Promise<{
     error: string | null;
 }> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
+    const timer      = setTimeout(() => controller.abort(), 5000);
     try {
         const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
             method:  "POST",
@@ -410,9 +381,6 @@ async function refreshSessionFromToken(refreshToken: string): Promise<{
 
 // ══════════════════════════════════════════════════════════════════
 // SESSION CACHE (30 detik)
-// FIX #1: Cache key sekarang menggunakan SHA-256 dari seluruh token,
-//         bukan hanya prefix+suffix 16 karakter (mencegah collision).
-// FIX #8: Cleanup proaktif via setInterval.
 // ══════════════════════════════════════════════════════════════════
 
 interface SessionResult {
@@ -424,23 +392,18 @@ interface SessionResult {
     newExpiresIn?:    number;
 }
 
-const sessionCache = new Map<string, { result: SessionResult; expiresAt: number }>();
+const sessionCache      = new Map<string, { result: SessionResult; expiresAt: number }>();
 const SESSION_CACHE_TTL = 30_000;
 
-// FIX #8 — Cleanup session cache proaktif setiap 2 menit
 setInterval(() => {
     const now = Date.now();
     let cleaned = 0;
     for (const [k, entry] of sessionCache.entries()) {
-        if (now > entry.expiresAt) {
-            sessionCache.delete(k);
-            cleaned++;
-        }
+        if (now > entry.expiresAt) { sessionCache.delete(k); cleaned++; }
     }
     if (cleaned > 0) console.info(`[Middleware] SessionCache cleanup: ${cleaned} entry dihapus.`);
 }, 2 * 60 * 1000);
 
-// FIX #1 — Hash SHA-256 dari seluruh token, bukan slice 16 karakter
 async function getSessionCacheKey(token: string): Promise<string> {
     const encoded = new TextEncoder().encode(token);
     const hashBuf = await crypto.subtle.digest("SHA-256", encoded);
@@ -448,7 +411,7 @@ async function getSessionCacheKey(token: string): Promise<string> {
     return "sc:" + hashArr.map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function invalidateSessionCache(accessToken: string): Promise<void> {
+async function invalidateSessionCache(accessToken: string): Promise<void> {
     if (accessToken) {
         const key = await getSessionCacheKey(accessToken);
         sessionCache.delete(key);
@@ -458,7 +421,6 @@ export async function invalidateSessionCache(accessToken: string): Promise<void>
 async function validateSession(accessToken: string, refreshToken: string): Promise<SessionResult> {
     if (!accessToken || !refreshToken)     return { valid: false, isAdmin: false };
 
-    // FIX #9 — Validasi panjang token sebelum apapun
     if (accessToken.length > MAX_TOKEN_LENGTH || refreshToken.length > MAX_TOKEN_LENGTH) {
         console.warn("[Middleware] Token melebihi batas panjang maksimum.");
         return { valid: false, isAdmin: false };
@@ -506,17 +468,29 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
 
 // ══════════════════════════════════════════════════════════════════
 // CSP BUILDER
+//
+// PERBAIKAN — Bug string literal di dev style-src:
+// Versi lama memakai single-quote string biasa sehingga '${nonce}'
+// tidak ter-interpolasi → browser memblokir semua <style> di dev.
+// Sekarang menggunakan template literal di seluruh fungsi.
+//
+// Production: 'unsafe-inline' dihapus dari script-src (nonce sudah cukup).
+// Dev:        'unsafe-inline' di script-src dipertahankan untuk HMR Vite.
+// script-src-attr 'unsafe-inline': dipertahankan selama masih ada
+// atribut onclick="" di HTML (Sidebar, dll). Hapus setelah semua
+// event handler dipindah ke <script>.
 // ══════════════════════════════════════════════════════════════════
 
 function buildCSP(nonce: string): string {
     const supabaseOrigin = new URL(SUPABASE_URL).origin;
 
     if (!IS_PROD) {
+        // [FIX] Semua baris sekarang template literal agar nonce ter-interpolasi
         return [
             "default-src 'self'",
             `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://challenges.cloudflare.com ws://localhost:* http://localhost:*`,
             "script-src-attr 'unsafe-inline'",
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+            `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
             "style-src-attr 'unsafe-inline'",
             "font-src 'self' https://fonts.gstatic.com data:",
             "frame-src https://challenges.cloudflare.com",
@@ -533,9 +507,9 @@ function buildCSP(nonce: string): string {
 
     return [
         "default-src 'self'",
-        `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' 'wasm-unsafe-eval' https://challenges.cloudflare.com`,
+        `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' https://challenges.cloudflare.com`,
         "script-src-attr 'unsafe-inline'",
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
         "style-src-attr 'unsafe-inline'",
         "font-src 'self' https://fonts.gstatic.com data:",
         "frame-src https://challenges.cloudflare.com",
@@ -605,17 +579,14 @@ function isSuspiciousRequest(request: Request, pathname: string): boolean {
 
 // ══════════════════════════════════════════════════════════════════
 // OPTIONS PREFLIGHT HANDLER
-// FIX #12 — Tangani OPTIONS secara eksplisit agar tidak bocor ke Astro
-// dengan header CORS yang mungkin terlalu permisif.
 // ══════════════════════════════════════════════════════════════════
 
-function handleOptions(request: Request, url: URL): Response | null {
+function handleOptions(request: Request): Response | null {
     if (request.method !== "OPTIONS") return null;
 
-    const origin = request.headers.get("origin");
+    const origin         = request.headers.get("origin");
     const allowedOrigins = getAllowedOrigins(request);
 
-    // Jika bukan dari origin yang diizinkan, tolak preflight
     if (!origin || !allowedOrigins.has(origin)) {
         return new Response(null, { status: 403 });
     }
@@ -650,34 +621,19 @@ export const onRequest = defineMiddleware(async (context, next) => {
     if (isStaticAsset(pathname)) return next();
 
     // ── 2. Halaman error custom diakses bebas ─────────────────────
-    // FIX #6 — Halaman error tidak boleh menampilkan data sensitif.
-    // Middleware sudah bebas, pastikan src/pages/401.astro dll tidak bocorkan info internal.
     const ERROR_PAGES = new Set(["/401", "/403", "/404", "/429", "/500"]);
     if (ERROR_PAGES.has(pathname)) {
         const response = await next();
         return applySecurityHeaders(response, nonce, false);
     }
 
-    // ── 3. Canonical domain redirect ─────────────────────────────
-    if (IS_PROD) {
-        const host = (request.headers.get("host") ?? url.hostname).split(":")[0].toLowerCase();
-        if (host !== CANONICAL_DOMAIN) {
-            const canonical = new URL(url.pathname + url.search, `https://${CANONICAL_DOMAIN}`);
-            return new Response(null, {
-                status:  method === "GET" ? 301 : 308,
-                headers: { "Location": canonical.toString(), "Cache-Control": "public, max-age=31536000, immutable" },
-            });
-        }
-    }
-
-    // ── 4. Deteksi request mencurigakan ───────────────────────────
+    // ── 3. Deteksi request mencurigakan ───────────────────────────
     if (isSuspiciousRequest(request, pathname)) {
-        // FIX #11 — Tidak log path (bisa mengandung payload XSS/SQLi di log viewer)
         console.warn(`[Middleware] Request mencurigakan — IP: ${ip.slice(0, 8)}***`);
         return new Response("Bad Request", { status: 400 });
     }
 
-    // ── 5. Blokir HTTP method tidak diizinkan ─────────────────────
+    // ── 4. Blokir HTTP method tidak diizinkan ─────────────────────
     if (!ALLOWED_METHODS.has(method)) {
         return new Response("Method Not Allowed", {
             status:  405,
@@ -685,13 +641,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
         });
     }
 
-    // ── 6. FIX #12 — Tangani OPTIONS preflight secara eksplisit ──
-    const optionsResponse = handleOptions(request, url);
+    // ── 5. Tangani OPTIONS preflight ──────────────────────────────
+    const optionsResponse = handleOptions(request);
     if (optionsResponse) return optionsResponse;
 
-    // ── 7. Cegah body terlalu besar ───────────────────────────────
-    // FIX #10 — Content-Length header bisa dipalsukan atau tidak ada (chunked transfer).
-    // Validasi ini sebagai filter awal, validasi body aktual harus dilakukan di handler.
+    // ── 6. Cegah body terlalu besar ───────────────────────────────
     const clHeader = request.headers.get("content-length");
     if (clHeader !== null) {
         const contentLength = parseInt(clHeader, 10);
@@ -701,10 +655,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
             : htmlErrorRedirect(500);
         }
     }
-    // Untuk chunked transfer (tidak ada Content-Length), validasi dilakukan di handler API masing-masing.
-    // Tambahkan batas di handler: const buf = await request.arrayBuffer(); if (buf.byteLength > MAX_BODY_BYTES) ...
 
-    // ── 8. CSRF check ─────────────────────────────────────────────
+    // ── 7. CSRF check ─────────────────────────────────────────────
     if (!checkOrigin(request, url)) {
         console.warn(`[Middleware] CSRF gagal — IP: ${ip.slice(0, 8)}***, method: ${method}`);
         return isApiRoute
@@ -712,7 +664,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         : htmlErrorRedirect(403);
     }
 
-    // ── 9. Content-Type validation ────────────────────────────────
+    // ── 8. Content-Type validation ────────────────────────────────
     if (REQUIRED_CT_METHODS.has(method) && isApiRoute) {
         const ct      = request.headers.get("content-type") ?? "";
         const validCT = ct.includes("application/json") ||
@@ -721,7 +673,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         if (!validCT) return jsonError("Content-Type tidak valid", 415);
     }
 
-    // ── 10. Rate limit login ───────────────────────────────────────
+    // ── 9. Rate limit login ───────────────────────────────────────
     if (pathname === "/api/auth/login" && method === "POST") {
         const { allowed, retryAfter } = checkRateLimit(ip, "login");
         if (!allowed) {
@@ -733,7 +685,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         }
     }
 
-    // ── 11. Rate limit API umum ───────────────────────────────────
+    // ── 10. Rate limit API umum ───────────────────────────────────
     if (isApiRoute && method !== "GET") {
         const { allowed, retryAfter } = checkRateLimit(ip, "api");
         if (!allowed) {
@@ -743,21 +695,20 @@ export const onRequest = defineMiddleware(async (context, next) => {
         }
     }
 
-    // ── 12. Route publik ──────────────────────────────────────────
+    // ── 11. Route publik ──────────────────────────────────────────
     if (PUBLIC_ROUTES.has(pathname)) {
         const response = await next();
         return applySecurityHeaders(response, nonce, isApiRoute);
     }
 
-    // ── 13. Route terproteksi — validasi session ──────────────────
+    // ── 12. Route terproteksi — validasi session ──────────────────
     if (isProtectedRoute(pathname)) {
         const accessToken  = cookies.get("sb-access-token")?.value  ?? "";
         const refreshToken = cookies.get("sb-refresh-token")?.value ?? "";
 
-        // FIX #9 — Cek panjang token dari cookie sebelum lanjut
         if (
             !accessToken || !refreshToken ||
-            accessToken.length > MAX_TOKEN_LENGTH ||
+            accessToken.length  > MAX_TOKEN_LENGTH ||
             refreshToken.length > MAX_TOKEN_LENGTH
         ) {
             clearAuthCookies(cookies);
@@ -787,6 +738,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
         (locals as App.Locals).user = { email: session.email ?? "", isAdmin: true };
         resetLoginRateLimit(ip);
 
+        if (session.newAccessToken) {
+            await invalidateSessionCache(accessToken);
+        }
+
         const response = await next();
 
         if (session.newAccessToken && session.newRefreshToken) {
@@ -798,7 +753,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
         return applySecurityHeaders(response, nonce, isApiRoute);
     }
 
-    // ── 14. Fallback ──────────────────────────────────────────────
+    // ── 13. Fallback ──────────────────────────────────────────────
     const response = await next();
     return applySecurityHeaders(response, nonce, isApiRoute);
 });

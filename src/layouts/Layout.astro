@@ -24,20 +24,12 @@ const { title, active, nonce = "" } = Astro.props;
   <ViewTransitions nonce={nonce} />
   <meta name="astro-prefetch" content="hover" />
 </head>
-<body class="min-h-screen bg-[#f7f3ee]" style="font-family:'DM Sans',sans-serif">
-
+<body class="min-h-screen bg-[#f7f3ee]">
   <div class="flex h-screen overflow-hidden">
     <Sidebar active={active} nonce={nonce} />
-
     <main class="flex-1 overflow-y-auto" id="main">
       <slot />
     </main>
   </div>
-
-  <style is:inline>
-    /* CSS global tambahan jika diperlukan */
-    :root { view-transition-name: none; }
-  </style>
-
 </body>
 </html>
