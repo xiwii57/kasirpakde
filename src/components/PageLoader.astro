@@ -1,0 +1,175 @@
+---
+// src/components/PageLoader.astro
+// ─────────────────────────────────────────────────────────────────
+// Loading spinner untuk transisi antar halaman.
+// Kompatibel dengan Astro ViewTransitions:
+//   astro:before-preparation → tampilkan loader
+//   astro:page-load          → sembunyikan loader
+// ─────────────────────────────────────────────────────────────────
+
+interface Props {
+  nonce?: string;
+}
+
+const { nonce = "" } = Astro.props;
+---
+
+<style>
+  /* ── Overlay fullscreen ───────────────────────────────────────── */
+  #page-loader {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(247, 243, 238, 0.82); /* sesuai bg-[#f7f3ee] */
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+  }
+
+  #page-loader.visible {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  /* ── Spinner ring ─────────────────────────────────────────────── */
+  .pl-ring {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 3px solid rgba(0, 0, 0, 0.08);
+    border-top-color: #c84b1f; /* warna brand */
+    animation: pl-spin 0.6s linear infinite;
+    will-change: transform;
+  }
+
+  @keyframes pl-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* ── Top progress bar ─────────────────────────────────────────── */
+  #page-loader-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 2px;
+    width: 0%;
+    background: #c84b1f;
+    z-index: 100000;
+    opacity: 0;
+    transition:
+      width   0.38s cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 0.15s ease;
+  }
+
+  #page-loader-bar.running {
+    opacity: 1;
+    width: 70%;
+  }
+
+  #page-loader-bar.done {
+    opacity: 0;
+    width: 100%;
+    transition:
+      width   0.12s ease,
+      opacity 0.25s ease 0.08s;
+  }
+</style>
+
+<!-- Overlay + spinner -->
+<div id="page-loader" aria-hidden="true" role="status" aria-label="Memuat halaman">
+  <div class="pl-ring"></div>
+</div>
+
+<!-- Top progress bar -->
+<div id="page-loader-bar" aria-hidden="true"></div>
+
+<script is:inline nonce={nonce}>
+(function () {
+  'use strict';
+
+  var loader    = null;
+  var bar       = null;
+  var safeTimer = null;
+  var barTimer  = null;
+  var active    = false;
+
+  function getEls() {
+    if (!loader) loader = document.getElementById('page-loader');
+    if (!bar)    bar    = document.getElementById('page-loader-bar');
+  }
+
+  /* ── Tampilkan loader ─────────────────────────────────────────── */
+  function show() {
+    if (active) return;
+    active = true;
+    getEls();
+    clearTimeout(safeTimer);
+    clearTimeout(barTimer);
+
+    if (loader) loader.classList.add('visible');
+
+    if (bar) {
+      bar.classList.remove('done');
+      void bar.offsetWidth; // force reflow agar transisi reset
+      bar.classList.add('running');
+    }
+
+    // Failsafe: paksa sembunyikan setelah 8 detik
+    safeTimer = setTimeout(hide, 8000);
+  }
+
+  /* ── Sembunyikan loader ───────────────────────────────────────── */
+  function hide() {
+    active = false;
+    clearTimeout(safeTimer);
+    clearTimeout(barTimer);
+    getEls();
+
+    if (loader) loader.classList.remove('visible');
+
+    if (bar) {
+      bar.classList.remove('running');
+      bar.classList.add('done');
+      barTimer = setTimeout(function () {
+        if (bar) bar.classList.remove('done');
+      }, 400);
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     ViewTransitions events
+     astro:before-preparation → navigasi dimulai   → show
+     astro:page-load          → halaman siap        → hide
+
+     Kedua event ini persisten lintas navigasi karena
+     ViewTransitions tidak unmount dokumen.
+  ══════════════════════════════════════════════════════════════ */
+  document.addEventListener('astro:before-preparation', show);
+  document.addEventListener('astro:page-load', hide);
+
+  /* ══════════════════════════════════════════════════════════════
+     Fallback untuk navigasi non-ViewTransitions
+     (hard reload, back/forward ke halaman tanpa VT, dll)
+  ══════════════════════════════════════════════════════════════ */
+
+  // Tombol back/forward browser
+  window.addEventListener('popstate', show);
+
+  // pageshow: menangani navigasi normal & bfcache
+  window.addEventListener('pageshow', hide);
+
+  // DOMContentLoaded: hard load pertama
+  document.addEventListener('DOMContentLoaded', hide);
+
+  // Jika halaman sudah siap saat script berjalan
+  if (document.readyState !== 'loading') {
+    hide();
+  }
+
+})();
+</script>

@@ -10,8 +10,8 @@ const ADMIN_EMAIL       = import.meta.env.ADMIN_EMAIL               as string;
 const SUPABASE_URL      = import.meta.env.PUBLIC_SUPABASE_URL       as string;
 const SUPABASE_ANON_KEY = import.meta.env.PUBLIC_SUPABASE_ANON_KEY  as string;
 const IS_PROD           = import.meta.env.PROD                      as boolean;
-const CANONICAL_HOST = "www.karsip.my.id";
-const VERCEL_HOST_RE = /(?:\.vercel\.app)$/i;
+const CANONICAL_HOST    = "www.karsip.my.id";
+const VERCEL_HOST_RE    = /(?:\.vercel\.app)$/i;
 
 for (const [key, val] of Object.entries({
     ADMIN_EMAIL,
@@ -49,7 +49,7 @@ const PUBLIC_ROUTES    = new Set<string>(ROUTE_CONFIG.public);
 const AUTH_FORM_ROUTES = new Set<string>(ROUTE_CONFIG.authForms);
 
 const PROTECTED_PREFIXES = [
-"/dashboard",
+    "/dashboard",
 "/kasir",
 "/produk",
 "/api/kasir",
@@ -244,7 +244,6 @@ function clearAuthCookies(cookies: AstroCookies): void {
 
 // ══════════════════════════════════════════════════════════════════
 // CSRF PROTECTION
-// Origin check berbasis Host header dinamis — tidak hardcoded domain.
 // ══════════════════════════════════════════════════════════════════
 
 function getAllowedOrigins(request: Request): Set<string> {
@@ -489,26 +488,24 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
 // ══════════════════════════════════════════════════════════════════
 // CSP BUILDER
 //
-// PERBAIKAN — Bug string literal di dev style-src:
-// Versi lama memakai single-quote string biasa sehingga '${nonce}'
-// tidak ter-interpolasi → browser memblokir semua <style> di dev.
-// Sekarang menggunakan template literal di seluruh fungsi.
+// Nonce di-inject ke semua <script> via injectNonceIntoHtml().
+// Hash hardcoded dihapus — tidak diperlukan lagi karena semua script
+// (termasuk yang di-inject Vite/router) akan mendapat nonce attribute.
 //
-// Production: 'unsafe-inline' dihapus dari script-src (nonce sudah cukup).
-// Dev:        'unsafe-inline' di script-src dipertahankan untuk HMR Vite.
+// Production : 'unsafe-inline' dihapus dari script-src (nonce cukup).
+// Dev        : 'unsafe-inline' dipertahankan untuk HMR Vite.
 // script-src-attr 'unsafe-inline': dipertahankan selama masih ada
-// atribut onclick="" di HTML (Sidebar, dll). Hapus setelah semua
-// event handler dipindah ke <script>.
+// atribut onclick="" di HTML. Hapus setelah semua event handler
+// dipindah ke <script>.
 // ══════════════════════════════════════════════════════════════════
 
 function buildCSP(nonce: string): string {
     const supabaseOrigin = new URL(SUPABASE_URL).origin;
 
     if (!IS_PROD) {
-        // [FIX] Semua baris sekarang template literal agar nonce ter-interpolasi
         return [
             "default-src 'self'",
-            `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://challenges.cloudflare.com ws://localhost:* http://localhost:* https://static.cloudflareinsights.com`,
+            `script-src 'self' 'nonce-${nonce}' https://challenges.cloudflare.com ws://localhost:* http://localhost:* https://static.cloudflareinsights.com`,
             "script-src-attr 'unsafe-inline'",
             `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
             "style-src-attr 'unsafe-inline'",
@@ -546,6 +543,23 @@ function buildCSP(nonce: string): string {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// NONCE HTML INJECTOR
+//
+// Menambahkan nonce attribute ke semua <script> tag yang belum
+// memilikinya. Ini menangani script yang di-inject oleh Vite HMR,
+// React Router, dan Astro runtime secara otomatis tanpa perlu
+// hash hardcoded.
+// ══════════════════════════════════════════════════════════════════
+
+function injectNonceIntoHtml(html: string, nonce: string): string {
+    // Tambahkan nonce ke <script> yang belum punya nonce attribute
+    return html.replace(
+        /<script(?![^>]*\bnonce\b)([^>]*)>/gi,
+                        `<script nonce="${nonce}"$1>`,
+    );
+}
+
+// ══════════════════════════════════════════════════════════════════
 // SECURITY HEADERS
 // ══════════════════════════════════════════════════════════════════
 
@@ -577,6 +591,41 @@ function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boo
         h.set("Vary",          "Cookie");
     }
     return response;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SECURITY HEADERS + NONCE INJECTION
+//
+// Untuk response HTML: inject nonce ke semua <script> tag terlebih
+// dahulu, lalu terapkan security headers.
+// Untuk response non-HTML (API, redirect): langsung terapkan headers.
+// ══════════════════════════════════════════════════════════════════
+
+async function applySecurityWithNonce(
+    response: Response,
+    nonce: string,
+    isApiRoute: boolean,
+): Promise<Response> {
+    const contentType = response.headers.get("content-type") ?? "";
+
+    // Non-HTML (API JSON, redirect, dll) — tidak perlu inject nonce ke body
+    if (!contentType.includes("text/html")) {
+        return applySecurityHeaders(response, nonce, isApiRoute);
+    }
+
+    // HTML — inject nonce ke semua <script> yang belum punya nonce
+    let html = await response.text();
+    html = injectNonceIntoHtml(html, nonce);
+
+    const newResponse = new Response(html, {
+        status:  response.status,
+        headers: response.headers,
+    });
+
+    // Pastikan content-type tetap benar setelah rekonstruksi Response
+    newResponse.headers.set("content-type", "text/html; charset=utf-8");
+
+    return applySecurityHeaders(newResponse, nonce, isApiRoute);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -650,7 +699,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const ERROR_PAGES = new Set(["/401", "/403", "/404", "/429", "/500"]);
     if (ERROR_PAGES.has(pathname)) {
         const response = await next();
-        return applySecurityHeaders(response, nonce, false);
+        return applySecurityWithNonce(response, nonce, false);
     }
 
     // ── 3. Deteksi request mencurigakan ───────────────────────────
@@ -724,7 +773,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     // ── 11. Route publik ──────────────────────────────────────────
     if (PUBLIC_ROUTES.has(pathname)) {
         const response = await next();
-        return applySecurityHeaders(response, nonce, isApiRoute);
+        return applySecurityWithNonce(response, nonce, isApiRoute);
     }
 
     // ── 12. Route terproteksi — validasi session ──────────────────
@@ -776,10 +825,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
             cookies.set("sb-refresh-token", session.newRefreshToken, { ...COOKIE_OPTIONS, maxAge: 60 * 60 * 24 * 7 });
         }
 
-        return applySecurityHeaders(response, nonce, isApiRoute);
+        return applySecurityWithNonce(response, nonce, isApiRoute);
     }
 
     // ── 13. Fallback ──────────────────────────────────────────────
     const response = await next();
-    return applySecurityHeaders(response, nonce, isApiRoute);
+    return applySecurityWithNonce(response, nonce, isApiRoute);
 });

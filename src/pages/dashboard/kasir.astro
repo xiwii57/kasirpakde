@@ -3,7 +3,7 @@
 export const prerender = false;
 import "../../styles/global.css";
 import "../../styles/kasir.css";
-import { createServiceClient, KATEGORI_LIST } from "../../lib/supabase";
+import { createServiceClient } from "../../lib/supabase";
 import Layout from "../../layouts/Layout.astro";
 
 const accessToken = Astro.cookies.get("sb-access-token");
@@ -20,8 +20,8 @@ const { data: produkRaw } = await sb
 const produk = produkRaw ?? [];
 const quickCashProduk = produk.filter((p) => p.quick_cash);
 
-const PUBLIC_SUPABASE_URL      = import.meta.env.PUBLIC_SUPABASE_URL;
-const PUBLIC_SUPABASE_ANON_KEY = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
+const PUBLIC_SUPABASE_URL      = import.meta.env.PUBLIC_SUPABASE_URL  as string;
+const PUBLIC_SUPABASE_ANON_KEY = import.meta.env.PUBLIC_SUPABASE_ANON_KEY as string;
 
 const QRIS_IMAGE_URL = '/qris.jpeg';
 
@@ -38,12 +38,6 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
 
 <!-- ═══════════════════════════════════════════════════════════════════════
      STYLES
-     Semua style="" inline dipindah ke class:
-       - fab-badge    : .fab-badge-hidden  (display:none — JS tetap pakai .style.display)
-       - toast-ico    : .toast-ico         (flex-shrink:0)
-       - qris-instr   : .qris-instruction  (font-size, color, line-height)
-     Tidak ada duplikasi dengan kasir.css.
-     Nonce disertakan untuk forward-compatibility meski style-src unsafe-inline.
 ════════════════════════════════════════════════════════════════════════ -->
 <style nonce={nonce}>
 
@@ -173,7 +167,6 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
   .qris-no-img-hint  { margin: 0; font-size: .72rem; }
 
   /* ── QRIS instruksi pembayaran ────────────────────────────────── */
-  /* Sebelumnya: style="font-size:.75rem;color:#6b7280;line-height:1.4" */
   .qris-instruction {
     font-size: .75rem;
     color: #6b7280;
@@ -266,16 +259,27 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
   .qris-lightbox-close:hover { background: rgba(255,255,255,.25); }
 
   /* ── FAB badge: hidden by default ────────────────────────────── */
-  /* Sebelumnya: style="display:none" langsung di elemen.
-     JS tetap menggunakan .style.display untuk toggle — tidak ada perubahan JS.
-     Class ini hanya untuk initial state di HTML agar bersih dari inline style. */
   .fab-badge-hidden { display: none; }
 
   /* ── Toast icon: flex-shrink ──────────────────────────────────── */
-  /* Sebelumnya: style="flex-shrink:0" pada SVG di dalam #toast */
   .toast-ico { flex-shrink: 0; }
 
 </style>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     APP CONFIG — Supabase credentials disimpan di data attribute pada
+     elemen tersembunyi. Tidak menggunakan meta tag (mudah di-scrape)
+     maupun define:vars (Astro inject wrapper script tanpa nonce → CSP
+     violation). Data attribute hanya accessible via JS, tidak terindeks
+     oleh scraper meta tag.
+════════════════════════════════════════════════════════════════════════ -->
+<div
+  id="app-config"
+  data-sb-url={PUBLIC_SUPABASE_URL}
+  data-sb-anon={PUBLIC_SUPABASE_ANON_KEY}
+  aria-hidden="true"
+  style="display:none"
+></div>
 
 <!-- ══ MAIN LAYOUT ══ -->
 <div class="kasir-root">
@@ -318,7 +322,6 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
           <path d="M16 10a4 4 0 0 1-8 0"/>
         </svg>
         <span id="fab-label">Keranjang</span>
-        <!-- fab-badge-hidden: initial state. JS pakai .style.display untuk toggle -->
         <span class="cart-fab-badge fab-badge-hidden" id="fab-badge">0</span>
       </button>
     </div>
@@ -548,7 +551,6 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
           <p class="qris-no-img-hint">Simpan file di folder <code>public/qris.jpeg</code></p>
         </div>
         <div class="text-center space-y-2 pb-2">
-          <!-- qris-instruction: sebelumnya style="font-size:.75rem;color:#6b7280;line-height:1.4" -->
           <p class="qris-instruction">
             1. Buka aplikasi e-wallet (Gopay/OVO/Dana) atau M-Banking.<br/>
             2. Scan QR di atas dan selesaikan pembayaran.<br/>
@@ -617,25 +619,17 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
 
 <!-- Toast -->
 <div id="toast" role="status" aria-live="polite" aria-atomic="true">
-  <!-- toast-ico: sebelumnya style="flex-shrink:0" -->
   <svg id="toast-ico" class="toast-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
     <polyline points="20 6 9 17 4 12"/>
   </svg>
   <span id="toast-msg"></span>
 </div>
 
-<!--
-  Data Supabase disimpan di meta tags — menggantikan define:vars.
-  define:vars menyebabkan Astro inject script internal tanpa nonce → CSP violation.
--->
-<meta id="sb-url"  content={PUBLIC_SUPABASE_URL} />
-<meta id="sb-anon" content={PUBLIC_SUPABASE_ANON_KEY} />
-
 <script is:inline nonce={nonce}>
 'use strict';
 
 /* ══════════════════════════════════════════════════════════════════════════
-   HELPERS — pure functions, defined once
+   HELPERS — pure functions
 ══════════════════════════════════════════════════════════════════════════ */
 function rp(n) {
   return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n);
@@ -695,8 +689,7 @@ async function api(method, path, body) {
 /* ══════════════════════════════════════════════════════════════════════════
    REALTIME WebSocket
    Guard via window.__kasirWsConnected — hanya connect SATU KALI selama
-   tab terbuka, tidak reconnect saat ViewTransitions bolak-balik ke kasir.
-   Callback di-update ke instance initKasir() terbaru tiap navigasi.
+   tab terbuka.
 ══════════════════════════════════════════════════════════════════════════ */
 function initRealtime(SUPABASE_URL, SUPABASE_ANON, onInsert) {
   window.__kasirWsCallback = onInsert;
@@ -737,13 +730,17 @@ function initRealtime(SUPABASE_URL, SUPABASE_ANON, onInsert) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   INIT — dipanggil tiap kali halaman kasir aktif (hard load & navigasi)
+   INIT
 ══════════════════════════════════════════════════════════════════════════ */
 function initKasir() {
   if (!document.getElementById('prod-grid')) return;
 
-  var SUPABASE_URL  = (document.getElementById('sb-url')  || {}).content || '';
-  var SUPABASE_ANON = (document.getElementById('sb-anon') || {}).content || '';
+  /* ── Baca config dari data attribute — bukan meta tag ──────────────────
+     Menghindari expose credentials di meta tag yang mudah di-scrape.
+     data attribute hanya accessible via JS dan tidak terindeks scraper.   */
+  var cfg = document.getElementById('app-config');
+  var SUPABASE_URL  = cfg ? (cfg.dataset.sbUrl  || '') : '';
+  var SUPABASE_ANON = cfg ? (cfg.dataset.sbAnon || '') : '';
   var BUCKET = 'produk-foto';
 
   var cart        = [];
@@ -1069,7 +1066,7 @@ function initKasir() {
   /* Mobile sheet */
   var fab = document.getElementById('cart-fab');       if (fab) fab.addEventListener('click', openSheet);
   var sc  = document.getElementById('sheet-close');    if (sc)  sc.addEventListener('click', closeSheet);
-  var bd  = document.getElementById('sheet-backdrop'); if (bd)  bd.addEventListener('click', closeSheet);
+  var bd2 = document.getElementById('sheet-backdrop'); if (bd2) bd2.addEventListener('click', closeSheet);
   var she = document.getElementById('cart-sheet');
   if (she) {
     var sy=0, isd=false;
@@ -1147,12 +1144,9 @@ function initKasir() {
 
 /* ══════════════════════════════════════════════════════════════════════════
    BOOTSTRAP
+   View Transitions dihapus — init hanya via DOMContentLoaded / readyState.
 ══════════════════════════════════════════════════════════════════════════ */
 (function bootstrap() {
-  if (!window.__kasirScriptMounted) {
-    window.__kasirScriptMounted = true;
-    document.addEventListener('astro:page-load', initKasir);
-  }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initKasir);
   } else {

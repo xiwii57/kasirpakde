@@ -1124,21 +1124,20 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
     var toast       = document.getElementById("toastNotif");
     var toastTxt    = document.getElementById("toastText");
     var toastIco    = document.getElementById("toastIcon");
-    var tsWrap      = document.querySelector(".hm-turnstile-wrap");
     var tsContainer = document.getElementById("hm-turnstile-container");
 
     if (!modal || !btnBuka) return;
 
     // ── State Turnstile ────────────────────────────────────────────
-    var _widgetId = null;
-    var _token    = null;
+    var _widgetId  = null;
+    var _token     = null;
     var _pollTimer = null;
 
     // ── Sidebar ────────────────────────────────────────────────────
     if (btnSidebar) {
-      btnSidebar.addEventListener("click", function () {
+      btnSidebar.onclick = function () {
         if (window.openSidebar) window.openSidebar();
-      });
+      };
     }
 
     // ── Warning messages ───────────────────────────────────────────
@@ -1203,7 +1202,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
 
     // ── Turnstile UI states ────────────────────────────────────────
     function setTsState(state) {
-      // state: "loading" | "widget" | "verified" | "error"
       if (!tsContainer) return;
 
       if (state === "loading") {
@@ -1216,12 +1214,9 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
 
       } else if (state === "widget") {
         tsContainer.innerHTML = "";
-        // widget akan di-render ke dalam tsContainer oleh Turnstile SDK
         btnKonfirm.disabled = true;
 
       } else if (state === "verified") {
-        // Tampilkan indikator sukses di bawah widget
-        // (widget Turnstile sendiri sudah tampil centang, ini hanya pelengkap)
         btnKonfirm.disabled = false;
 
       } else if (state === "error") {
@@ -1240,7 +1235,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
     function renderWidget() {
       if (!tsContainer) return;
 
-      // Hapus widget lama jika ada
       if (_widgetId !== null) {
         try { window.turnstile.remove(_widgetId); } catch (e) {}
         _widgetId = null;
@@ -1262,7 +1256,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         "expired-callback": function () {
           _token = null;
           btnKonfirm.disabled = true;
-          // Turnstile otomatis re-render token baru; tunggu callback lagi
         },
 
         "error-callback": function () {
@@ -1279,7 +1272,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         renderWidget();
         return;
       }
-      // Poll sampai SDK load (max ~10 detik)
       var attempts = 0;
       _pollTimer = setInterval(function () {
         attempts++;
@@ -1315,13 +1307,13 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
       syncRadioStyles();
       document.addEventListener("keydown", onEsc);
       setTimeout(function () { if (btnBatal) btnBatal.focus(); }, 50);
-      initTurnstile(); // ← mulai Turnstile
+      initTurnstile();
     }
 
     function tutupModal() {
       modal.style.display = "none";
       document.removeEventListener("keydown", onEsc);
-      destroyTurnstile(); // ← bersihkan Turnstile
+      destroyTurnstile();
     }
 
     btnBuka.addEventListener("click",  bukaModal);
@@ -1341,7 +1333,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
       var range = getSelected("hapusRange");
       if (!type || !range) return;
 
-      // Wajib punya token Turnstile yang valid
       if (!_token) {
         showToast("Selesaikan verifikasi terlebih dahulu.", false);
         return;
@@ -1364,7 +1355,7 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         body: JSON.stringify({
           type:           type,
           range:          range,
-          turnstileToken: _token,   // ← token dikirim ke server untuk diverifikasi
+          turnstileToken: _token,
         }),
       })
       .then(function (res) {
@@ -1377,7 +1368,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
             setTimeout(function () { window.location.reload(); }, 1500);
           } else {
             showToast(data.error || "Gagal menghapus data.", false);
-            // Reset Turnstile agar user bisa coba lagi dengan token baru
             destroyTurnstile();
             initTurnstile();
           }
@@ -1392,19 +1382,12 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         btnBatal.disabled     = false;
         spinner.style.display = "none";
         btnLabel.textContent  = "Hapus Sekarang";
-        // btnKonfirm.disabled tetap true sampai Turnstile re-verify
       });
     });
   }
 
-  // ── Bootstrap guard (ViewTransitions safe) ─────────────────────
-  if (!window.__dashboardScriptMounted) {
-    window.__dashboardScriptMounted = true;
-    document.addEventListener("astro:page-load", initDashboard);
-  }
-
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initDashboard);
+    document.addEventListener("DOMContentLoaded", initDashboard, { once: true });
   } else {
     initDashboard();
   }

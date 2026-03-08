@@ -462,18 +462,14 @@ function initAnalisis() {
 
   var btn = document.getElementById('btn-open-sidebar');
   if (btn) {
-    btn.addEventListener('click', function () {
+    btn.onclick = function () {
       if (window.openSidebar) window.openSidebar();
-    });
+    };
   }
 }
 
-if (!window.__analisisScriptMounted) {
-  window.__analisisScriptMounted = true;
-  document.addEventListener('astro:page-load', initAnalisis);
-}
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initAnalisis);
+  document.addEventListener('DOMContentLoaded', initAnalisis, { once: true });
 } else {
   initAnalisis();
 }

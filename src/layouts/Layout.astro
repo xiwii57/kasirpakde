@@ -2,6 +2,7 @@
 // src/layouts/Layout.astro
 import "../styles/global.css";
 import Sidebar from "../components/Sidebar.astro";
+import PageLoader from "../components/PageLoader.astro";
 import { ViewTransitions } from 'astro:transitions';
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
 
 const { title, active, nonce = "" } = Astro.props;
 ---
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -25,11 +27,16 @@ const { title, active, nonce = "" } = Astro.props;
   <meta name="astro-prefetch" content="hover" />
 </head>
 <body class="min-h-screen bg-[#f7f3ee]">
+
+  <!-- PageLoader di awal body — bekerja dengan ViewTransitions -->
+  <PageLoader nonce={nonce} />
+
   <div class="flex h-screen overflow-hidden">
     <Sidebar active={active} nonce={nonce} />
     <main class="flex-1 overflow-y-auto" id="main">
       <slot />
     </main>
   </div>
+
 </body>
 </html>

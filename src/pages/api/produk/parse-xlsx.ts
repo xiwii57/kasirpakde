@@ -21,13 +21,15 @@ const MAX_KATEGORI_LEN   = 100;
 const MAX_HARGA          = 100_000_000;
 
 // FIX ZIP bomb — batas ukuran output setelah decompress per entry ZIP
-// Nilai sengaja lebih besar dari MAX_FILE_BYTES karena XML lebih besar dari source data,
-// tapi tetap dibatasi ketat agar ZIP bomb tidak menghabiskan memori.
 const MAX_DECOMPRESS_BYTES = 10 * 1024 * 1024; // 10 MB per entry
 
+// FIX: Sinkronkan dengan KATEGORI_LIST di supabase.ts dan produk.astro
+// Sebelumnya: "Kebersihan", "Kesehatan", "ATK" — tidak cocok dengan nilai asli
 const VALID_KATEGORI = new Set([
     "Minuman", "Makanan", "Snack", "Rokok", "Sembako",
-    "Kebersihan", "Kesehatan", "ATK", "Lainnya",
+    "Bumbu & Masak", "Roti & Kue", "Es Krim & Frozen",
+    "Kebersihan Diri", "Kebersihan Rumah",
+    "Obat & Kesehatan", "Alat Tulis", "Lainnya",
 ]);
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────

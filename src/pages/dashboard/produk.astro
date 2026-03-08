@@ -707,8 +707,17 @@ function fmtDate(s: string) {
 
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 
+  <!-- Script kecil: hanya inject config ke window, tidak ada logika -->
   <script define:vars={{ KATEGORI_LIST, PUBLIC_TURNSTILE_SITEKEY }} nonce={nonce}>
+    window.__PRODUK_CFG__ = { KAT: KATEGORI_LIST, TS: PUBLIC_TURNSTILE_SITEKEY };
+  </script>
+
+  <!-- Script utama: tanpa define:vars agar tidak dieksekusi ulang oleh View Transitions -->
+  <script nonce={nonce}>
   'use strict';
+  var __cfg = window.__PRODUK_CFG__ || {};
+  var KATEGORI_LIST            = __cfg.KAT || [];
+  var PUBLIC_TURNSTILE_SITEKEY = __cfg.TS  || '';
 
   // ─── HELPERS ──────────────────────────────────────────────────────────────────
   function rp(n){ return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n); }
@@ -737,7 +746,8 @@ function fmtDate(s: string) {
       method:method,
       credentials:'same-origin',
       headers:{'Content-Type':'application/json'},
-      body: body!==undefined ? JSON.stringify(body) : '{}'
+      // body hanya dikirim jika ada payload
+      ...(body!==undefined ? {body:JSON.stringify(body)} : {})
     };
     var r=await fetch(path,opts);
     var d=await r.json().catch(function(){return{};});
@@ -782,6 +792,11 @@ function fmtDate(s: string) {
   function initProduk() {
 
     if (!document.getElementById('btn-tambah')) return;
+
+    // Abort & cleanup semua listener dari pemanggilan initProduk sebelumnya
+    if (window.__produkAbortCtrl) window.__produkAbortCtrl.abort();
+    window.__produkAbortCtrl = new AbortController();
+    var sig = window.__produkAbortCtrl.signal;
 
     var _q='', _kat='';
     var _pendingFotoBlob=null, _fotoHapus=false;
@@ -846,7 +861,7 @@ function fmtDate(s: string) {
         var m=document.getElementById('m-'+ALL_MODALS[i]);
         if(m&&m.classList.contains('open')){ closeM(ALL_MODALS[i]); return; }
       }
-    });
+    },{signal:sig});
     ALL_MODALS.forEach(function(id){
       var m=document.getElementById('m-'+id);
       if(!m)return;
@@ -944,26 +959,26 @@ function fmtDate(s: string) {
       var cell=e.target.closest('.name-clickable'); if(!cell)return;
       var row=cell.closest('tr.data-row'); if(!row)return;
       openDetail({id:row.dataset.id,nama:row.dataset.namaAsli,kat:row.dataset.kat,beli:parseInt(row.dataset.beli)||0,jual:parseInt(row.dataset.jual)||0,qc:row.dataset.quick==='true',created:row.dataset.created,updated:row.dataset.updated,img:row.dataset.img});
-    });
+    },{signal:sig});
     document.addEventListener('keydown',function(e){
       if(e.key!=='Enter'&&e.key!==' ')return;
       var cell=e.target.closest('.name-clickable'); if(!cell)return;
       var row=cell.closest('tr.data-row'); if(!row)return;
       e.preventDefault();
       openDetail({id:row.dataset.id,nama:row.dataset.namaAsli,kat:row.dataset.kat,beli:parseInt(row.dataset.beli)||0,jual:parseInt(row.dataset.jual)||0,qc:row.dataset.quick==='true',created:row.dataset.created,updated:row.dataset.updated,img:row.dataset.img});
-    });
+    },{signal:sig});
     document.addEventListener('click',function(e){
       var body=e.target.closest('.card-body-clickable'); if(!body)return;
       var card=body.closest('.prod-card'); if(!card)return;
       openDetail({id:card.dataset.id,nama:card.dataset.namaAsli,kat:card.dataset.kat,beli:parseInt(card.dataset.beli)||0,jual:parseInt(card.dataset.jual)||0,qc:card.dataset.quick==='true',created:card.dataset.created,updated:card.dataset.updated,img:card.dataset.img});
-    });
+    },{signal:sig});
     document.addEventListener('keydown',function(e){
       if(e.key!=='Enter'&&e.key!==' ')return;
       var body=e.target.closest('.card-body-clickable'); if(!body)return;
       var card=body.closest('.prod-card'); if(!card)return;
       e.preventDefault();
       openDetail({id:card.dataset.id,nama:card.dataset.namaAsli,kat:card.dataset.kat,beli:parseInt(card.dataset.beli)||0,jual:parseInt(card.dataset.jual)||0,qc:card.dataset.quick==='true',created:card.dataset.created,updated:card.dataset.updated,img:card.dataset.img});
-    });
+    },{signal:sig});
 
     // ─── FILTER ─────────────────────────────────────────────────────────────────
     function applyFilter(){
@@ -997,8 +1012,8 @@ function fmtDate(s: string) {
     var btnTable=document.getElementById('btn-table');
     var btnCard=document.getElementById('btn-card');
     if(btnTable) btnTable.addEventListener('click',function(){
-      document.getElementById('view-table').style.display='';
-      document.getElementById('view-card').style.display='none';
+      document.getElementById('view-table').classList.remove('d-none');
+      document.getElementById('view-card').classList.add('d-none');
       this.classList.add('active'); btnCard.classList.remove('active');
       this.setAttribute('aria-pressed','true'); btnCard.setAttribute('aria-pressed','false');
       localStorage.setItem('kw-view','table');
@@ -1099,7 +1114,7 @@ function fmtDate(s: string) {
       document.getElementById('m-tambah-title').textContent='Edit Produk';
       _pendingFotoBlob=null; _fotoHapus=false;
       loadFotoForEdit(id); updMargin(); openM('tambah');
-    });
+    },{signal:sig});
 
     // ─── SIMPAN ─────────────────────────────────────────────────────────────────
     var btnSimpan=document.getElementById('btn-simpan');
@@ -1161,7 +1176,7 @@ function fmtDate(s: string) {
         await api('PATCH','/api/produk/produk?id='+encodeURIComponent(id),{quick_cash:next});
         toast(next?'Quick Cash diaktifkan':'Quick Cash dinonaktifkan');
       }catch(e2){ btn.setAttribute('aria-checked',String(cur)); btn.style.background=cur?'#c84b1f':'#d1d5db'; toast('Gagal: '+e2.message,false); }
-    });
+    },{signal:sig});
 
     // ─── HAPUS (satu produk) ────────────────────────────────────────────────────
     document.addEventListener('click',function(e){
@@ -1169,7 +1184,7 @@ function fmtDate(s: string) {
       _hapusId=btn.dataset.id;
       document.getElementById('hapus-nama').textContent=btn.dataset.nama;
       openM('hapus');
-    });
+    },{signal:sig});
     var btnHapusOk=document.getElementById('btn-hapus-ok');
     if(btnHapusOk) btnHapusOk.addEventListener('click',async function(){
       if(!_hapusId)return;
@@ -1259,7 +1274,7 @@ function fmtDate(s: string) {
       var id=wrap.dataset.id; if(!id)return;
       document.getElementById('foto-target-id').value=id;
       openM('foto');
-    });
+    },{signal:sig});
     document.addEventListener('keydown',function(e){
       if(e.key!=='Enter'&&e.key!==' ')return;
       var wrap=e.target.closest('.thumb-wrap'); if(!wrap)return;
@@ -1269,7 +1284,7 @@ function fmtDate(s: string) {
       var id=wrap.dataset.id; if(!id)return;
       document.getElementById('foto-target-id').value=id;
       openM('foto');
-    });
+    },{signal:sig});
 
     async function processQuickFoto(file){
       if(!file.type.startsWith('image/')){toast('File bukan gambar',false);return;}
@@ -1376,13 +1391,13 @@ function fmtDate(s: string) {
 
       // Tombol ganti file → kembali ke dropzone
       var btnGanti=document.getElementById('btn-ganti-file');
-      if(btnGanti) btnGanti.addEventListener('click',function(){
+      if(btnGanti) btnGanti.onclick=function(){
         dz.style.display='';
         previewWrap.style.display='none';
         _csvData=[];
         document.getElementById('btn-do-import').disabled=true;
         document.getElementById('f-csv').value='';
-      });
+      };
 
       // Render tabel preview
       var tb=document.getElementById('csv-tbody');
@@ -1429,7 +1444,7 @@ function fmtDate(s: string) {
     if(fCsv) fCsv.addEventListener('change',function(){ if(this.files&&this.files[0]) parseFile(this.files[0]); });
 
     var btnDoImport=document.getElementById('btn-do-import');
-    if(btnDoImport) btnDoImport.addEventListener('click',async function(){
+    if(btnDoImport) btnDoImport.onclick=async function(){
       if(!_csvData.length)return;
       this.disabled=true; this.textContent='Mengimport…';
       try{
@@ -1438,7 +1453,7 @@ function fmtDate(s: string) {
         closeM('import');
         setTimeout(function(){location.reload();},600);
       }catch(e){ toast('Import gagal: '+e.message,false); this.disabled=false; this.textContent='Import'; }
-    });
+    };
 
     // ─── DRAG TO SCROLL (pills) ─────────────────────────────────────────────────
     var el=document.getElementById('kat-pills');
@@ -1467,13 +1482,8 @@ function fmtDate(s: string) {
   /* ══════════════════════════════════════════════════════════════════════
      BOOTSTRAP
   ══════════════════════════════════════════════════════════════════════ */
-  if (!window.__produkScriptMounted) {
-    window.__produkScriptMounted = true;
-    document.addEventListener('astro:page-load', initProduk);
-  }
-
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initProduk);
+    document.addEventListener('DOMContentLoaded', initProduk, { once: true });
   } else {
     initProduk();
   }
