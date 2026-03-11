@@ -1,10 +1,10 @@
 ---
 // src/components/PageLoader.astro
 // ─────────────────────────────────────────────────────────────────
-// Loading spinner untuk transisi antar halaman.
-// Kompatibel dengan Astro ViewTransitions:
-//   astro:before-preparation → tampilkan loader
-//   astro:page-load          → sembunyikan loader
+// Loading spinner untuk navigasi antar halaman.
+// Tidak menggunakan ViewTransitions — mengandalkan event browser standar:
+//   click pada <a>        → tampilkan loader
+//   pageshow / DOMContentLoaded → sembunyikan loader
 // ─────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -23,7 +23,7 @@ const { nonce = "" } = Astro.props;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(247, 243, 238, 0.82); /* sesuai bg-[#f7f3ee] */
+    background: rgba(247, 243, 238, 0.82);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
     opacity: 0;
@@ -42,7 +42,7 @@ const { nonce = "" } = Astro.props;
     height: 36px;
     border-radius: 50%;
     border: 3px solid rgba(0, 0, 0, 0.08);
-    border-top-color: #c84b1f; /* warna brand */
+    border-top-color: #c84b1f;
     animation: pl-spin 0.6s linear infinite;
     will-change: transform;
   }
@@ -142,20 +142,39 @@ const { nonce = "" } = Astro.props;
   }
 
   /* ══════════════════════════════════════════════════════════════
-     ViewTransitions events
-     astro:before-preparation → navigasi dimulai   → show
-     astro:page-load          → halaman siap        → hide
+     Navigasi standar (tanpa ViewTransitions)
 
-     Kedua event ini persisten lintas navigasi karena
-     ViewTransitions tidak unmount dokumen.
+     - Click pada <a> internal → show
+       (kecuali link yang membuka tab baru, atau dengan modifier key)
+     - pageshow              → hide  (hard load, back/forward, bfcache)
+     - DOMContentLoaded      → hide  (fallback)
   ══════════════════════════════════════════════════════════════ */
-  document.addEventListener('astro:before-preparation', show);
-  document.addEventListener('astro:page-load', hide);
 
-  /* ══════════════════════════════════════════════════════════════
-     Fallback untuk navigasi non-ViewTransitions
-     (hard reload, back/forward ke halaman tanpa VT, dll)
-  ══════════════════════════════════════════════════════════════ */
+  // Intercept klik link internal
+  document.addEventListener('click', function (e) {
+    var target = e.target.closest('a[href]');
+    if (!target) return;
+
+    var href = target.getAttribute('href');
+    if (!href) return;
+
+    // Abaikan: tab baru, anchor saja, mailto/tel, modifier key
+    if (
+      target.target === '_blank' ||
+      href.startsWith('#') ||
+      href.startsWith('mailto:') ||
+      href.startsWith('tel:') ||
+      e.ctrlKey || e.metaKey || e.shiftKey || e.altKey
+    ) return;
+
+    // Abaikan link ke domain lain
+    try {
+      var url = new URL(href, location.href);
+      if (url.origin !== location.origin) return;
+    } catch (_) { return; }
+
+    show();
+  });
 
   // Tombol back/forward browser
   window.addEventListener('popstate', show);

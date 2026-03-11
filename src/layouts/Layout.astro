@@ -3,7 +3,6 @@
 import "../styles/global.css";
 import Sidebar from "../components/Sidebar.astro";
 import PageLoader from "../components/PageLoader.astro";
-import { ViewTransitions } from 'astro:transitions';
 
 interface Props {
   title: string;
@@ -13,7 +12,6 @@ interface Props {
 
 const { title, active, nonce = "" } = Astro.props;
 ---
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -23,20 +21,15 @@ const { title, active, nonce = "" } = Astro.props;
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23c84b1f'/><text x='50%' y='56%' dominant-baseline='middle' text-anchor='middle' font-size='20' font-family='Georgia,serif' fill='white'>K</text></svg>" />
   <title>{title} — Kasir Warung</title>
-  <ViewTransitions nonce={nonce} />
-  <meta name="astro-prefetch" content="hover" />
 </head>
 <body class="min-h-screen bg-[#f7f3ee]">
-
-  <!-- PageLoader di awal body — bekerja dengan ViewTransitions -->
+  <!-- PageLoader di awal body -->
   <PageLoader nonce={nonce} />
-
   <div class="flex h-screen overflow-hidden">
     <Sidebar active={active} nonce={nonce} />
     <main class="flex-1 overflow-y-auto" id="main">
       <slot />
     </main>
   </div>
-
 </body>
 </html>

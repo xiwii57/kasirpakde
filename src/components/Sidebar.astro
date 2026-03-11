@@ -38,13 +38,6 @@ const navItems = [
 ] as const;
 ---
 
-<!--
-  Semua style="" inline dipindah ke blok <style> di bawah.
-  Dynamic active state ditangani via class .is-active (sudah ada) +
-  CSS selector baru — tidak perlu style attribute sama sekali.
-  Dot indicator active → CSS ::after pseudo-element.
--->
-
 <!-- ── Overlay ─────────────────────────────────────────────────────────────── -->
 <div
   id="sidebar-overlay"
@@ -175,14 +168,6 @@ const navItems = [
 
 </aside>
 
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     STYLES
-     Semua style="" inline dipindah ke sini.
-     Dynamic active state: class .is-active + CSS selector.
-     Dot indicator: ::after pseudo-element — tidak perlu <span> tambahan.
-     <style> tanpa is:inline → Astro scope otomatis + tidak butuh nonce
-     (style-src pakai 'unsafe-inline', nonce tidak diperlukan untuk style).
-════════════════════════════════════════════════════════════════════════════ -->
 <style>
   /* ── Overlay ──────────────────────────────────────────────────── */
   .sidebar-overlay {
@@ -195,7 +180,6 @@ const navItems = [
     transition: opacity 220ms ease;
     backdrop-filter: blur(3px);
   }
-  /* JS menambah class 'hidden' via classList — override display */
   .sidebar-overlay.hidden { display: none !important; }
 
   /* ── Sidebar container ────────────────────────────────────────── */
@@ -322,11 +306,9 @@ const navItems = [
     text-decoration: none;
     transition: all 0.15s ease;
     letter-spacing: -0.01em;
-    /* default: tidak aktif */
     color: rgba(255, 255, 255, 0.4);
     background: transparent;
     box-shadow: none;
-    /* ruang untuk dot ::after */
     position: relative;
   }
   .sidebar-nav-link:hover:not(.is-active) {
@@ -344,7 +326,7 @@ const navItems = [
     box-shadow: inset 2.5px 0 0 #c84b1f;
   }
 
-  /* Dot indicator — ::after menggantikan <span> inline */
+  /* Dot indicator */
   .sidebar-nav-link.is-active::after {
     content: '';
     display: block;
@@ -498,11 +480,6 @@ const navItems = [
   }
 </style>
 
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     SCRIPT
-     nonce diteruskan eksplisit karena is:inline.
-     Tidak ada perubahan logika dari versi asli.
-════════════════════════════════════════════════════════════════════════════ -->
 <script is:inline nonce={nonce}>
 (function () {
   'use strict';
@@ -530,7 +507,7 @@ const navItems = [
     document.body.style.overflow = '';
   };
 
-  // ── initSidebar — dipanggil tiap page-load untuk re-attach listener
+  // ── initSidebar — dipanggil sekali saat halaman load
   function initSidebar() {
     if (window.innerWidth < 1024) window.closeSidebar();
 
@@ -566,7 +543,6 @@ const navItems = [
   });
 
   initSidebar();
-  document.addEventListener('astro:page-load', initSidebar);
 
 }());
 </script>

@@ -1019,8 +1019,8 @@ function fmtDate(s: string) {
       localStorage.setItem('kw-view','table');
     });
     if(btnCard) btnCard.addEventListener('click',function(){
-      document.getElementById('view-card').style.display='';
-      document.getElementById('view-table').style.display='none';
+      document.getElementById('view-card').classList.remove('d-none');  // ← FIX
+      document.getElementById('view-table').classList.add('d-none');    // ← FIX
       this.classList.add('active'); btnTable.classList.remove('active');
       this.setAttribute('aria-pressed','true'); btnTable.setAttribute('aria-pressed','false');
       localStorage.setItem('kw-view','card');

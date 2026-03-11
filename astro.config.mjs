@@ -10,14 +10,9 @@ export default defineConfig({
                             site: 'https://www.karsip.my.id',
 
                             security: {
-                              // Diatur ke false karena kamu sudah mengimplementasikan
+                              // Diatur ke false karena sudah mengimplementasikan
                               // pengecekan Origin manual yang sangat ketat di middleware.ts
                               checkOrigin: false,
-                            },
-
-                            prefetch: {
-                              prefetchAll: true,
-                            defaultStrategy: 'viewport',
                             },
 
                             devToolbar: {
