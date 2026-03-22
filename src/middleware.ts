@@ -41,8 +41,8 @@ const COOKIE_OPTIONS = {
 // ══════════════════════════════════════════════════════════════════
 
 const ROUTE_CONFIG = {
-    public:    ["/", "/api/auth/login", "/api/auth/logout"] as const,
-        authForms: ["/api/auth/login"] as const,
+    public:    ["/", "/dashboard/api/auth/login", "/dashboard/api/auth/logout"] as const,
+        authForms: ["/dashboard/api/auth/login"] as const,
 } as const;
 
 const PUBLIC_ROUTES    = new Set<string>(ROUTE_CONFIG.public);
@@ -52,9 +52,9 @@ const PROTECTED_PREFIXES = [
     "/dashboard",
 "/kasir",
 "/produk",
-"/api/kasir",
-"/api/admin",
-"/api/produk",
+"/dashboard/api/kasir",
+"/dashboard/api/admin",
+"/dashboard/api/produk",
 ];
 
 const STATIC_EXTS        = /\.(ico|png|jpg|jpeg|webp|svg|gif|woff2?|ttf|otf|css|js|map|txt|xml|json)$/i;
@@ -90,8 +90,11 @@ function isVercelHost(host: string): boolean {
     return VERCEL_HOST_RE.test(hostname);
 }
 
+// FIX: kode lama — new URL(url.pathname + url.search + url.hash)
+// crash karena pathname saja bukan URL absolut yang valid.
+// Solusi: clone url object lengkap lalu ganti protocol & host.
 function redirectToCanonical(url: URL): Response {
-    const canonical = new URL(url.pathname + url.search + url.hash);
+    const canonical    = new URL(url.toString());
     canonical.protocol = "https:";
     canonical.host     = CANONICAL_HOST;
     return new Response(null, {
@@ -217,7 +220,10 @@ function getClientIp(request: Request): string {
     return request.headers.get("x-real-ip")?.trim().slice(0, 45) ?? "0.0.0.0";
 }
 
+// FIX: tambah guard — PUBLIC_ROUTES tidak boleh dianggap protected
+// meski path-nya diawali "/dashboard" (contoh: logout).
 function isProtectedRoute(pathname: string): boolean {
+    if (PUBLIC_ROUTES.has(pathname)) return false;
     return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
@@ -267,7 +273,7 @@ function checkOrigin(request: Request, url: URL): boolean {
 
     const origin         = request.headers.get("origin");
     const referer        = request.headers.get("referer");
-    const isApi          = url.pathname.startsWith("/api/");
+    const isApi          = url.pathname.startsWith("/dashboard/api/");
     const isFormRoute    = AUTH_FORM_ROUTES.has(url.pathname);
     const allowedOrigins = getAllowedOrigins(request);
 
@@ -487,16 +493,6 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
 
 // ══════════════════════════════════════════════════════════════════
 // CSP BUILDER
-//
-// Nonce di-inject ke semua <script> via injectNonceIntoHtml().
-// Hash hardcoded dihapus — tidak diperlukan lagi karena semua script
-// (termasuk yang di-inject Vite/router) akan mendapat nonce attribute.
-//
-// Production : 'unsafe-inline' dihapus dari script-src (nonce cukup).
-// Dev        : 'unsafe-inline' dipertahankan untuk HMR Vite.
-// script-src-attr 'unsafe-inline': dipertahankan selama masih ada
-// atribut onclick="" di HTML. Hapus setelah semua event handler
-// dipindah ke <script>.
 // ══════════════════════════════════════════════════════════════════
 
 function buildCSP(nonce: string): string {
@@ -544,15 +540,9 @@ function buildCSP(nonce: string): string {
 
 // ══════════════════════════════════════════════════════════════════
 // NONCE HTML INJECTOR
-//
-// Menambahkan nonce attribute ke semua <script> tag yang belum
-// memilikinya. Ini menangani script yang di-inject oleh Vite HMR,
-// React Router, dan Astro runtime secara otomatis tanpa perlu
-// hash hardcoded.
 // ══════════════════════════════════════════════════════════════════
 
 function injectNonceIntoHtml(html: string, nonce: string): string {
-    // Tambahkan nonce ke <script> yang belum punya nonce attribute
     return html.replace(
         /<script(?![^>]*\bnonce\b)([^>]*)>/gi,
                         `<script nonce="${nonce}"$1>`,
@@ -593,14 +583,6 @@ function applySecurityHeaders(response: Response, nonce: string, isApiRoute: boo
     return response;
 }
 
-// ══════════════════════════════════════════════════════════════════
-// SECURITY HEADERS + NONCE INJECTION
-//
-// Untuk response HTML: inject nonce ke semua <script> tag terlebih
-// dahulu, lalu terapkan security headers.
-// Untuk response non-HTML (API, redirect): langsung terapkan headers.
-// ══════════════════════════════════════════════════════════════════
-
 async function applySecurityWithNonce(
     response: Response,
     nonce: string,
@@ -608,12 +590,10 @@ async function applySecurityWithNonce(
 ): Promise<Response> {
     const contentType = response.headers.get("content-type") ?? "";
 
-    // Non-HTML (API JSON, redirect, dll) — tidak perlu inject nonce ke body
     if (!contentType.includes("text/html")) {
         return applySecurityHeaders(response, nonce, isApiRoute);
     }
 
-    // HTML — inject nonce ke semua <script> yang belum punya nonce
     let html = await response.text();
     html = injectNonceIntoHtml(html, nonce);
 
@@ -622,7 +602,6 @@ async function applySecurityWithNonce(
         headers: response.headers,
     });
 
-    // Pastikan content-type tetap benar setelah rekonstruksi Response
     newResponse.headers.set("content-type", "text/html; charset=utf-8");
 
     return applySecurityHeaders(newResponse, nonce, isApiRoute);
@@ -640,7 +619,7 @@ function isSuspiciousRequest(request: Request, pathname: string): boolean {
         const decoded = decodeURIComponent(pathname);
         if (decoded.includes("../") || decoded.includes("<script") || decoded.includes("javascript:")) return true;
     }
-    if (!ua && pathname.startsWith("/api/"))                   return true;
+    if (!ua && pathname.startsWith("/dashboard/api/"))        return true;
     const badUa = ["sqlmap", "nikto", "masscan", "zgrab", "nuclei"];
     if (badUa.some((b) => ua.toLowerCase().includes(b)))      return true;
     return false;
@@ -681,7 +660,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const pathname   = url.pathname;
     const method     = request.method;
     const ip         = getClientIp(request);
-    const isApiRoute = pathname.startsWith("/api/");
+    const isApiRoute = pathname.startsWith("/dashboard/api/");
 
     const nonce = generateNonce();
     (locals as App.Locals).nonce = nonce;
@@ -749,7 +728,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
 
     // ── 9. Rate limit login ───────────────────────────────────────
-    if (pathname === "/api/auth/login" && method === "POST") {
+    if (pathname === "/dashboard/api/auth/login" && method === "POST") {
         const { allowed, retryAfter } = checkRateLimit(ip, "login");
         if (!allowed) {
             const mnt = retryAfter === 9999 ? "sementara" : `${Math.ceil(retryAfter / 60)} menit`;
@@ -770,7 +749,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
         }
     }
 
-    // ── 11. Route publik ──────────────────────────────────────────
+    // ── 11. Route publik — dicek SEBELUM protected ────────────────
+    // Logout (/dashboard/api/auth/logout) harus lolos di sini,
+    // tidak boleh tertangkap isProtectedRoute() di step 12.
     if (PUBLIC_ROUTES.has(pathname)) {
         const response = await next();
         return applySecurityWithNonce(response, nonce, isApiRoute);
