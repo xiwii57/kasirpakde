@@ -695,7 +695,7 @@ function initMarginRendah() {
       this.setAttribute('aria-busy', 'true');
       this.textContent = 'Menyimpan…';
       try {
-        await api('PATCH', '/api/produk/produk?id=' + encodeURIComponent(id), {
+        await api('PATCH', '/dashboard/api/produk/produk?id=' + encodeURIComponent(id), {
           harga_beli: beli, harga_jual: jual,
         });
         toast('Harga berhasil diupdate');
@@ -804,7 +804,7 @@ function initMarginRendah() {
       try {
         var ok = 0;
         for (var i = 0; i < rows.length; i++) {
-          await api('PATCH', '/api/produk/produk?id=' + encodeURIComponent(rows[i].dataset.id), {
+          await api('PATCH', '/dashboard/api/produk/produk?id=' + encodeURIComponent(rows[i].dataset.id), {
             harga_jual: calcNewJual(rows[i], type, val),
           });
           ok++;

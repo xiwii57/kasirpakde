@@ -1131,21 +1131,21 @@ function fmtDate(s: string) {
       try{
         var payload={nama_produk:nama,harga_beli:beli,harga_jual:jual,kategori:kat,quick_cash:qc};
         var savedId=id;
-        if(id){ await api('PATCH','/api/produk/produk?id='+encodeURIComponent(id),payload); }
-        else { var res=await api('POST','/api/produk/produk',payload); savedId=String(res.id); }
+        if(id){ await api('PATCH','/dashboard/api/produk/produk?id='+encodeURIComponent(id),payload); }
+        else { var res=await api('POST','/dashboard/api/produk/produk',payload); savedId=String(res.id); }
         var uploadedUrl=null;
         if(_pendingFotoBlob&&savedId){
           this.textContent='Mengupload foto…';
           var fd=new FormData();
           fd.append('id',savedId);
           fd.append('file',new File([_pendingFotoBlob],'foto.webp',{type:'image/webp'}));
-          var fr=await fetch('/api/produk/foto',{method:'POST',body:fd,credentials:'same-origin'});
+          var fr=await fetch('/dashboard/api/produk/foto',{method:'POST',body:fd,credentials:'same-origin'});
           var frd=await fr.json().catch(function(){return{};});
           if(!fr.ok) throw new Error(frd.error||'Upload foto gagal');
           uploadedUrl=String(frd.url);
         }
         if(_fotoHapus&&id){
-          fetch('/api/produk/foto?id='+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin'}).catch(function(){});
+          fetch('/dashboard/api/produk/foto?id='+encodeURIComponent(id),{method:'DELETE',credentials:'same-origin'}).catch(function(){});
           uploadedUrl='';
         }
         if(uploadedUrl!==null&&savedId){
@@ -1173,7 +1173,7 @@ function fmtDate(s: string) {
       btn.setAttribute('aria-checked',String(next));
       btn.style.background=next?'#c84b1f':'#d1d5db';
       try{
-        await api('PATCH','/api/produk/produk?id='+encodeURIComponent(id),{quick_cash:next});
+        await api('PATCH','/dashboard/api/produk/produk?id='+encodeURIComponent(id),{quick_cash:next});
         toast(next?'Quick Cash diaktifkan':'Quick Cash dinonaktifkan');
       }catch(e2){ btn.setAttribute('aria-checked',String(cur)); btn.style.background=cur?'#c84b1f':'#d1d5db'; toast('Gagal: '+e2.message,false); }
     },{signal:sig});
@@ -1190,8 +1190,8 @@ function fmtDate(s: string) {
       if(!_hapusId)return;
       this.disabled=true; this.textContent='Menghapus…';
       try{
-        await api('DELETE','/api/produk/produk?id='+encodeURIComponent(_hapusId));
-        fetch('/api/produk/foto?id='+encodeURIComponent(_hapusId),{method:'DELETE',credentials:'same-origin'}).catch(function(){});
+        await api('DELETE','/dashboard/api/produk/produk?id='+encodeURIComponent(_hapusId));
+        fetch('/dashboard/api/produk/foto?id='+encodeURIComponent(_hapusId),{method:'DELETE',credentials:'same-origin'}).catch(function(){});
         toast('Produk dihapus'); closeM('hapus');
         var r=document.querySelector('tr.data-row[data-id="'+_hapusId+'"]');
         if(r){r.style.transition='opacity .18s';r.style.opacity='0';setTimeout(function(){r.remove();applyFilter();},200);}
@@ -1248,7 +1248,7 @@ function fmtDate(s: string) {
       var kat=document.getElementById('hm-kat').value;
       this.disabled=true; this.textContent='Menghapus…'; this.style.opacity='.7';
       try{
-        var url='/api/produk/produk?bulk='+mode;
+        var url='/dashboard/api/produk/produk?bulk='+mode;
         if(mode==='kategori') url+='&kategori='+encodeURIComponent(kat);
         var res=await api('DELETE', url, { turnstile_token: _turnstileToken });
         toast((res.deleted||0)+' produk berhasil dihapus');
@@ -1325,7 +1325,7 @@ function fmtDate(s: string) {
         var fd=new FormData();
         fd.append('id',id);
         fd.append('file',new File([_fotoQuickBlob],'foto.webp',{type:'image/webp'}));
-        var r=await fetch('/api/produk/foto',{method:'POST',body:fd,credentials:'same-origin'});
+        var r=await fetch('/dashboard/api/produk/foto',{method:'POST',body:fd,credentials:'same-origin'});
         var rd=await r.json().catch(function(){return{};});
         if(!r.ok) throw new Error(rd.error||'Upload gagal');
         var newSrc=String(rd.url);
@@ -1357,7 +1357,7 @@ function fmtDate(s: string) {
       try{
         var fd=new FormData();
         fd.append('file',file);
-        var r=await fetch('/api/produk/parse-xlsx',{method:'POST',body:fd,credentials:'same-origin'});
+        var r=await fetch('/dashboard/api/produk/parse-xlsx',{method:'POST',body:fd,credentials:'same-origin'});
         var d=await r.json().catch(function(){return{};});
         if(!r.ok){
           console.error('[parseFile] Error:',r.status,d);
@@ -1448,7 +1448,7 @@ function fmtDate(s: string) {
       if(!_csvData.length)return;
       this.disabled=true; this.textContent='Mengimport…';
       try{
-        for(var i=0;i<_csvData.length;i+=50){ await api('POST','/api/produk/produk',_csvData.slice(i,i+50)); }
+        for(var i=0;i<_csvData.length;i+=50){ await api('POST','/dashboard/api/produk/produk',_csvData.slice(i,i+50)); }
         toast(_csvData.length+' produk diimport');
         closeM('import');
         setTimeout(function(){location.reload();},600);

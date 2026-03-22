@@ -90,7 +90,7 @@ const siteKey   = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
             </div>
           )}
 
-          <form id="loginForm" action="/api/auth/login" method="POST" novalidate
+          <form id="loginForm" action="/dashboard/api/auth/login" method="POST" novalidate
                 autocomplete="on" aria-label="Form masuk">
             <div class="form-fields">
 
@@ -308,7 +308,7 @@ const siteKey   = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
         submitBtn.classList.add("btn-loading");
         submitBtn.setAttribute("aria-busy", "true");
 
-        fetch("/api/auth/login", {
+        fetch("/dashboard/api/auth/login", {
           method:      "POST",
           body:        new FormData(form),
           credentials: "same-origin",

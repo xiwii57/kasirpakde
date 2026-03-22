@@ -2,7 +2,7 @@ export const prerender = false;
 
 import type { APIRoute } from "astro";
 import { createClient } from "@supabase/supabase-js";
-import { createServiceClient, KATEGORI_LIST } from "../../../lib/supabase";
+import { createServiceClient, KATEGORI_LIST } from "../../../../lib/supabase";
 
 // ── Konstanta ──────────────────────────────────────────────────────────────
 const MAX_NAMA         = 100;

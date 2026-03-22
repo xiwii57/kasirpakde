@@ -1,0 +1,801 @@
+---
+// src/pages/dashboard/piutang.astro
+export const prerender = false;
+import "../../styles/global.css";
+import { createServiceClient } from "../../lib/supabase";
+import Layout from "../../layouts/Layout.astro";
+
+const accessToken = Astro.cookies.get("sb-access-token");
+if (!accessToken?.value) return Astro.redirect("/");
+
+const nonce = (Astro.locals as App.Locals).nonce ?? "";
+const sb = createServiceClient();
+
+const { data: piutangRaw } = await sb
+  .from("piutang")
+  .select("*, piutang_bayar(id, jumlah, catatan, created_at)")
+  .order("tanggal", { ascending: false });
+
+const piutang = piutangRaw ?? [];
+
+function rp(n: number) {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency", currency: "IDR", minimumFractionDigits: 0,
+  }).format(n);
+}
+
+const totalPiutang = piutang
+  .filter(p => p.status !== "lunas")
+  .reduce((s, p) => s + (p.total_hutang - p.terbayar), 0);
+
+const totalDebitur = piutang.filter(p => p.status !== "lunas").length;
+
+const totalJatuhTempo = piutang.filter(p => {
+  if (!p.jatuh_tempo || p.status === "lunas") return false;
+  return new Date(p.jatuh_tempo) < new Date();
+}).length;
+
+const now = Date.now();
+const piutangList = piutang.map(p => {
+  const terbayar  = p.terbayar ?? 0;
+  const sisa      = Math.max(0, p.total_hutang - terbayar);
+  const pctRaw    = p.total_hutang > 0 ? (terbayar / p.total_hutang) * 100 : 0;
+  const pct       = Math.min(100, Math.round(pctRaw));
+  const isLunas   = p.status === "lunas" || sisa === 0;
+  const inisial   = (p.nama || "?").trim().charAt(0).toUpperCase();
+  const avatarCls = `avatar-${inisial}`;
+  const progClass = isLunas ? "full" : pct >= 70 ? "high" : pct >= 30 ? "mid" : "low";
+  const tanggalStr = new Date(p.tanggal).toLocaleDateString("id-ID", {
+    day: "2-digit", month: "short", year: "numeric",
+  });
+  let tempoClass = "";
+  let tempoLabel = "";
+  if (p.jatuh_tempo && !isLunas) {
+    const diff = (new Date(p.jatuh_tempo).getTime() - now) / 86400000;
+    if (diff < 0) {
+      tempoClass = "tempo-lewat";
+      tempoLabel = `Lewat ${Math.abs(Math.ceil(diff))} hari`;
+    } else if (diff <= 3) {
+      tempoClass = "tempo-dekat";
+      tempoLabel = `${Math.ceil(diff)} hari lagi`;
+    } else {
+      tempoClass = "tempo-aman";
+      tempoLabel = `${Math.ceil(diff)} hari lagi`;
+    }
+  }
+  return { ...p, terbayar, sisa, pct, isLunas, inisial, avatarCls, progClass, tanggalStr, tempoClass, tempoLabel };
+});
+---
+
+<Layout title="Piutang" active="piutang" nonce={nonce}>
+
+<style>
+  .avatar-A{background:#fef3c7;color:#92400e}.avatar-B{background:#dbeafe;color:#1e40af}
+  .avatar-C{background:#fce7f3;color:#9d174d}.avatar-D{background:#d1fae5;color:#065f46}
+  .avatar-E{background:#ede9fe;color:#5b21b6}.avatar-F{background:#fee2e2;color:#991b1b}
+  .avatar-G{background:#e0f2fe;color:#0c4a6e}.avatar-H{background:#fef9c3;color:#713f12}
+  .avatar-I{background:#f0fdf4;color:#14532d}.avatar-J{background:#fff7ed;color:#9a3412}
+  .avatar-K{background:#f5f3ff;color:#4c1d95}.avatar-L{background:#ecfdf5;color:#064e3b}
+  .avatar-M{background:#fffbeb;color:#78350f}.avatar-N{background:#eff6ff;color:#1e3a8a}
+  .avatar-O{background:#fdf4ff;color:#6b21a8}.avatar-P{background:#f0f9ff;color:#0c4a6e}
+  .avatar-Q{background:#fff1f2;color:#881337}.avatar-R{background:#f7fee7;color:#3f6212}
+  .avatar-S{background:#fef2f2;color:#7f1d1d}.avatar-T{background:#f0fdfa;color:#134e4a}
+  .avatar-U{background:#fefce8;color:#713f12}.avatar-V{background:#f8fafc;color:#1e293b}
+  .avatar-W{background:#fdf2f8;color:#831843}.avatar-X{background:#ecfeff;color:#164e63}
+  .avatar-Y{background:#f0fdf4;color:#166534}.avatar-Z{background:#fff7ed;color:#7c2d12}
+
+  .progress-track{height:5px;background:#f1f5f9;border-radius:99px;overflow:hidden}
+  .progress-fill{height:100%;border-radius:99px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+  .progress-fill.low{background:linear-gradient(90deg,#f87171,#ef4444)}
+  .progress-fill.mid{background:linear-gradient(90deg,#fb923c,#f97316)}
+  .progress-fill.high{background:linear-gradient(90deg,#34d399,#10b981)}
+  .progress-fill.full{background:linear-gradient(90deg,#34d399,#059669)}
+
+  .hutang-card{transition:box-shadow .2s,transform .2s}
+  .hutang-card:hover{box-shadow:0 8px 30px rgba(0,0,0,.08);transform:translateY(-1px)}
+
+  .badge-aktif{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
+  .badge-lunas{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.45);
+    backdrop-filter:blur(3px);z-index:50;
+    display:none;align-items:center;justify-content:center;padding:16px
+  }
+  .modal-overlay.open{display:flex}
+  .modal-panel{
+    background:#fff;border-radius:16px;width:100%;max-width:460px;
+    box-shadow:0 20px 60px rgba(0,0,0,.18);overflow:hidden;
+    animation:modal-in .2s cubic-bezier(.34,1.56,.64,1)
+  }
+  @keyframes modal-in{
+    from{opacity:0;transform:scale(.94) translateY(8px)}
+    to{opacity:1;transform:scale(1) translateY(0)}
+  }
+
+  .riwayat-item{position:relative;padding-left:20px}
+  .riwayat-item::before{content:'';position:absolute;left:6px;top:0;bottom:0;width:1px;background:#e5e7eb}
+  .riwayat-item::after{content:'';position:absolute;left:2px;top:6px;width:9px;height:9px;border-radius:50%;background:#10b981;border:2px solid #fff;box-shadow:0 0 0 1px #10b981}
+
+  /* Base input - tanpa prefix */
+  .field-input{
+    width:100%;padding:10px 12px;
+    border:1.5px solid #e5e7eb;border-radius:9px;
+    font-size:.875rem;color:#111;outline:none;
+    transition:border-color .15s,box-shadow .15s;
+    background:#fff;font-family:inherit;
+    box-sizing:border-box;
+    -moz-appearance:textfield
+  }
+  .field-input::-webkit-outer-spin-button,
+  .field-input::-webkit-inner-spin-button{-webkit-appearance:none}
+  .field-input:focus{border-color:#f97316;box-shadow:0 0 0 3px rgba(249,115,22,.1)}
+  .field-input::placeholder{color:#d1d5db}
+
+  /* Input group - prefix/suffix sebagai elemen flex terpisah */
+  .input-group{
+    display:flex;flex-direction:row;align-items:stretch;
+    border:1.5px solid #e5e7eb;border-radius:9px;
+    background:#fff;transition:border-color .15s,box-shadow .15s;
+    overflow:hidden
+  }
+  .input-group:focus-within{border-color:#f97316;box-shadow:0 0 0 3px rgba(249,115,22,.1)}
+  .input-group-addon{
+    flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    padding:0 12px;
+    background:#f8fafc;border-right:1.5px solid #e5e7eb;
+    font-size:.8rem;font-weight:700;color:#6b7280;
+    white-space:nowrap;user-select:none;line-height:1;min-height:40px
+  }
+  .input-group .field-input{
+    flex:1 1 0%;min-width:0;width:0;
+    border:none !important;border-radius:0 !important;box-shadow:none !important;
+    background:transparent;padding:10px 12px
+  }
+  .input-group .field-input:focus{border:none !important;box-shadow:none !important;outline:none}
+
+  .empty-wave{animation:wave-bob 3s ease-in-out infinite}
+  @keyframes wave-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+
+  .stat-card{animation:fade-up .4s both}
+  .stat-card:nth-child(1){animation-delay:.05s}
+  .stat-card:nth-child(2){animation-delay:.12s}
+  .stat-card:nth-child(3){animation-delay:.19s}
+  @keyframes fade-up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+  .thin-scroll::-webkit-scrollbar{width:4px}
+  .thin-scroll::-webkit-scrollbar-track{background:transparent}
+  .thin-scroll::-webkit-scrollbar-thumb{background:#e5e7eb;border-radius:4px}
+
+  .tempo-lewat{color:#dc2626;font-weight:600}
+  .tempo-dekat{color:#ea580c;font-weight:600}
+  .tempo-aman{color:#16a34a}
+
+  .btn-bayar{
+    display:inline-flex;align-items:center;gap:5px;
+    padding:6px 12px;border-radius:8px;font-size:.73rem;font-weight:700;
+    background:#111;color:#fff;border:none;cursor:pointer;
+    transition:background .15s,transform .1s;white-space:nowrap
+  }
+  .btn-bayar:hover{background:#333}
+  .btn-bayar:active{transform:scale(.97)}
+
+  .btn-detail{
+    display:inline-flex;align-items:center;gap:5px;
+    padding:6px 10px;border-radius:8px;font-size:.73rem;font-weight:600;
+    background:#f8fafc;color:#475569;border:1.5px solid #e2e8f0;
+    cursor:pointer;transition:background .15s;white-space:nowrap
+  }
+  .btn-detail:hover{background:#f1f5f9}
+
+  #p-toast{
+    position:fixed;bottom:24px;left:50%;
+    transform:translateX(-50%) translateY(20px);
+    background:#111;color:#fff;padding:10px 18px;border-radius:10px;
+    font-size:.8rem;font-weight:600;z-index:9999;
+    opacity:0;transition:opacity .2s,transform .2s;
+    pointer-events:none;display:flex;align-items:center;gap:8px;white-space:nowrap
+  }
+  #p-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .filter-tab{
+    padding:6px 14px;border-radius:8px;font-size:.78rem;font-weight:600;
+    border:1.5px solid #e5e7eb;background:#fff;color:#6b7280;
+    cursor:pointer;transition:all .15s
+  }
+  .filter-tab.active{background:#111;color:#fff;border-color:#111}
+
+  .modal-danger{border-top:3px solid #f87171}
+
+  .form-label{
+    display:block;font-size:.7rem;font-weight:700;
+    text-transform:uppercase;letter-spacing:.05em;
+    color:#4b5563;margin-bottom:6px
+  }
+  .form-label span{color:#9ca3af;font-weight:400;text-transform:none;letter-spacing:0;margin-left:4px;font-size:.75rem}
+  .form-label em{color:#f87171;font-style:normal}
+</style>
+
+<div id="p-app-config"
+  data-sb-url={import.meta.env.PUBLIC_SUPABASE_URL}
+  data-sb-anon={import.meta.env.PUBLIC_SUPABASE_ANON_KEY}
+  class="hidden" aria-hidden="true">
+</div>
+
+<div class="min-h-full bg-gray-50/60">
+
+  <!-- Page Header -->
+  <div class="bg-white border-b border-gray-100 sticky top-0 z-30">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <button id="p-btn-sidebar" class="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 transition-colors">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+          </svg>
+        </button>
+        <div>
+          <h1 class="text-lg font-black text-gray-900 tracking-tight leading-none">Piutang</h1>
+          <p class="text-xs text-gray-400 mt-0.5">Kelola hutang pelanggan</p>
+        </div>
+      </div>
+      <button id="btn-tambah-hutang"
+        class="flex items-center gap-2 bg-gray-900 hover:bg-gray-700 text-white text-sm font-bold px-4 py-2.5 rounded-xl transition-colors shadow-sm">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        <span class="hidden sm:inline">Tambah Hutang</span>
+        <span class="sm:hidden">Tambah</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+    <!-- Stat Cards -->
+    <div class="grid grid-cols-3 gap-3 sm:gap-4">
+      <div class="stat-card bg-white rounded-2xl p-4 sm:p-5 border border-gray-100 shadow-sm">
+        <div class="flex items-start justify-between mb-3">
+          <div class="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/>
+            </svg>
+          </div>
+          <span class="text-xs font-semibold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full">Aktif</span>
+        </div>
+        <div class="text-xl sm:text-2xl font-black text-gray-900 leading-none tracking-tight">{rp(totalPiutang)}</div>
+        <div class="text-xs text-gray-400 mt-1 font-medium">Total Piutang</div>
+      </div>
+
+      <div class="stat-card bg-white rounded-2xl p-4 sm:p-5 border border-gray-100 shadow-sm">
+        <div class="flex items-start justify-between mb-3">
+          <div class="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <span class="text-xs font-semibold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">Orang</span>
+        </div>
+        <div class="text-xl sm:text-2xl font-black text-gray-900 leading-none">{totalDebitur}</div>
+        <div class="text-xs text-gray-400 mt-1 font-medium">Debitur Aktif</div>
+      </div>
+
+      <div class="stat-card bg-white rounded-2xl p-4 sm:p-5 border border-gray-100 shadow-sm">
+        <div class="flex items-start justify-between mb-3">
+          <div class="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <span class="text-xs font-semibold text-red-500 bg-red-50 px-2 py-0.5 rounded-full">Lewat</span>
+        </div>
+        <div class="text-xl sm:text-2xl font-black text-gray-900 leading-none">{totalJatuhTempo}</div>
+        <div class="text-xs text-gray-400 mt-1 font-medium">Jatuh Tempo</div>
+      </div>
+    </div>
+
+    <!-- Search & Filter -->
+    <div class="flex flex-col sm:flex-row gap-3">
+      <div class="flex-1"><div class="input-group">
+        <span class="input-group-addon">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </span>
+        <input id="p-search" type="search" placeholder="Cari nama atau nomor HP..." class="field-input" />
+      </div></div>
+      <div class="flex gap-2 flex-shrink-0">
+        <button class="filter-tab active" data-filter="semua">Semua</button>
+        <button class="filter-tab" data-filter="aktif">Belum Lunas</button>
+        <button class="filter-tab" data-filter="lunas">Lunas</button>
+      </div>
+    </div>
+
+    <!-- Card List -->
+    <div id="p-list" class="space-y-3">
+      {piutangList.length === 0 && (
+        <div class="bg-white rounded-2xl border border-gray-100 p-16 flex flex-col items-center text-center">
+          <div class="empty-wave mb-4">
+            <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
+              <circle cx="36" cy="36" r="36" fill="#fff7ed"/>
+              <rect x="18" y="28" width="36" height="22" rx="4" fill="#fed7aa" stroke="#f97316" stroke-width="1.5"/>
+              <rect x="24" y="22" width="24" height="10" rx="3" fill="#ffedd5" stroke="#f97316" stroke-width="1.5"/>
+              <circle cx="36" cy="36" r="3" fill="#f97316"/>
+              <path d="M32 44h8" stroke="#f97316" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <p class="text-base font-bold text-gray-700">Belum ada data piutang</p>
+          <p class="text-sm text-gray-400 mt-1 max-w-xs">Tambahkan catatan hutang pelanggan dengan menekan tombol "Tambah Hutang" di atas.</p>
+        </div>
+      )}
+
+      {piutangList.map(p => (
+        <div
+          class={`hutang-card bg-white rounded-2xl border shadow-sm overflow-hidden p-4 sm:p-5 ${p.isLunas ? "border-green-100 opacity-70" : "border-gray-100"}`}
+          data-id={p.id}
+          data-nama={p.nama?.toLowerCase() ?? ""}
+          data-status={p.isLunas ? "lunas" : "aktif"}
+        >
+          <div class="flex items-start gap-3 sm:gap-4">
+            <div class={`w-11 h-11 rounded-xl flex items-center justify-center text-base font-black flex-shrink-0 ${p.avatarCls}`}>
+              {p.inisial}
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start justify-between gap-2 flex-wrap">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <h3 class="font-bold text-gray-900 text-sm sm:text-base truncate">{p.nama}</h3>
+                    <span class={`text-xs font-semibold px-2 py-0.5 rounded-full ${p.isLunas ? "badge-lunas" : "badge-aktif"}`}>
+                      {p.isLunas ? "Lunas" : "Belum Lunas"}
+                    </span>
+                  </div>
+                  {p.telepon && (
+                    <a href={`https://wa.me/62${p.telepon.replace(/^0/, "")}`} target="_blank" rel="noopener"
+                      class="text-xs text-gray-400 hover:text-green-600 transition-colors mt-0.5 flex items-center gap-1">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                      </svg>
+                      {p.telepon}
+                    </a>
+                  )}
+                </div>
+                <div class="text-right flex-shrink-0">
+                  <div class={`font-black text-sm sm:text-base leading-none ${p.isLunas ? "text-green-600" : "text-gray-900"}`}>
+                    {p.isLunas ? rp(0) : rp(p.sisa)}
+                  </div>
+                  <div class="text-xs text-gray-400 mt-0.5">dari {rp(p.total_hutang)}</div>
+                </div>
+              </div>
+
+              <div class="mt-3 mb-2">
+                <div class="flex items-center justify-between text-xs text-gray-400 mb-1">
+                  <span>Terbayar {rp(p.terbayar)}</span>
+                  <span class="font-semibold text-gray-600">{p.pct}%</span>
+                </div>
+                <div class="progress-track">
+                  <div class={`progress-fill ${p.progClass}`} style={`width:${p.pct}%`}></div>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between flex-wrap gap-2 mt-3">
+                <div class="flex items-center gap-3 flex-wrap">
+                  <span class="text-xs text-gray-400 flex items-center gap-1">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                      <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                      <line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                    {p.tanggalStr}
+                  </span>
+                  {p.jatuh_tempo && !p.isLunas && (
+                    <span class={`text-xs flex items-center gap-1 ${p.tempoClass}`}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                      </svg>
+                      {p.tempoLabel}
+                    </span>
+                  )}
+                  {p.catatan && (
+                    <span class="text-xs text-gray-400 flex items-center gap-1 italic max-w-[160px] truncate">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                      </svg>
+                      {p.catatan}
+                    </span>
+                  )}
+                </div>
+                {!p.isLunas && (
+                  <div class="flex items-center gap-2">
+                    <button class="btn-detail" data-action="detail" data-id={p.id}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="8" x2="12" y2="16"/>
+                        <line x1="8" y1="12" x2="16" y2="12"/>
+                      </svg>
+                      Riwayat
+                    </button>
+                    <button class="btn-bayar" data-action="bayar" data-id={p.id} data-nama={p.nama} data-sisa={p.sisa}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      Bayar
+                    </button>
+                  </div>
+                )}
+                {p.isLunas && (
+                  <span class="text-xs text-green-600 font-semibold flex items-center gap-1">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    Lunas
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <div id="p-no-result" class="hidden bg-white rounded-2xl border border-gray-100 py-14 text-center text-gray-400 text-sm font-medium">
+      Tidak ada data yang cocok.
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL: Tambah Hutang -->
+<div id="modal-tambah" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="mt-h">
+  <div class="modal-panel">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+      <div>
+        <h2 id="mt-h" class="text-base font-black text-gray-900">Tambah Hutang Baru</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Catat hutang pelanggan</p>
+      </div>
+      <button id="close-tambah" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 transition-colors">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="px-5 py-4 space-y-4 max-h-[65vh] overflow-y-auto thin-scroll">
+      <div>
+        <label class="form-label">Nama Pelanggan <em>*</em></label>
+        <input id="f-nama" type="text" class="field-input" placeholder="Contoh: Budi Santoso" maxlength="80" />
+      </div>
+      <div>
+        <label class="form-label">No. HP / WhatsApp</label>
+        <div class="input-group">
+          <span class="input-group-addon">+62</span>
+          <input id="f-telepon" type="tel" class="field-input" placeholder="81234567890" maxlength="15" />
+        </div>
+      </div>
+      <div>
+        <label class="form-label">Jumlah Hutang <em>*</em></label>
+        <div class="input-group">
+          <span class="input-group-addon">Rp</span>
+          <input id="f-total" type="number" min="0" class="field-input" placeholder="0" />
+        </div>
+      </div>
+      <div>
+        <label class="form-label">Jatuh Tempo <span>(opsional)</span></label>
+        <input id="f-tempo" type="date" class="field-input" />
+      </div>
+      <div>
+        <label class="form-label">Catatan <span>(opsional)</span></label>
+        <textarea id="f-catatan" class="field-input resize-none" rows="2" placeholder="Keterangan barang, konteks hutang, dll." maxlength="200"></textarea>
+      </div>
+    </div>
+    <div class="px-5 py-4 border-t border-gray-100 flex gap-3">
+      <button id="btn-batal-tambah" class="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">Batal</button>
+      <button id="btn-simpan-hutang" class="flex-1 py-2.5 rounded-xl bg-gray-900 text-sm font-bold text-white hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Simpan Hutang</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Catat Pembayaran -->
+<div id="modal-bayar" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="mb-h">
+  <div class="modal-panel">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+      <div>
+        <h2 id="mb-h" class="text-base font-black text-gray-900">Catat Pembayaran</h2>
+        <p id="mb-sub" class="text-xs text-orange-500 font-semibold mt-0.5"></p>
+      </div>
+      <button id="close-bayar" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 transition-colors">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="px-5 py-4 space-y-4">
+      <div class="bg-orange-50 border border-orange-100 rounded-xl p-3 flex items-center justify-between">
+        <div>
+          <div class="text-xs text-orange-600 font-semibold uppercase tracking-wide">Sisa Hutang</div>
+          <div id="mb-sisa-disp" class="text-xl font-black text-orange-700 mt-0.5"></div>
+        </div>
+        <button id="mb-lunas-btn" class="text-xs font-bold text-orange-600 bg-orange-100 hover:bg-orange-200 px-3 py-1.5 rounded-lg transition-colors">Bayar Penuh</button>
+      </div>
+      <div>
+        <label class="form-label">Jumlah Dibayar <em>*</em></label>
+        <div class="input-group">
+          <span class="input-group-addon">Rp</span>
+          <input id="mb-jumlah" type="number" min="1" class="field-input" placeholder="0" />
+        </div>
+      </div>
+      <div>
+        <div class="form-label" style="margin-bottom:8px">Nominal Cepat</div>
+        <div id="mb-chips" class="flex flex-wrap gap-2"></div>
+      </div>
+      <div>
+        <label class="form-label">Catatan <span>(opsional)</span></label>
+        <input id="mb-catatan" type="text" class="field-input" placeholder="Mis: DP pertama, transfer BCA" maxlength="120"/>
+      </div>
+    </div>
+    <div class="px-5 py-4 border-t border-gray-100 flex gap-3">
+      <button id="btn-batal-bayar" class="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">Batal</button>
+      <button id="btn-konfirmasi-bayar" class="flex-1 py-2.5 rounded-xl bg-gray-900 text-sm font-bold text-white hover:bg-gray-700 transition-colors disabled:opacity-50">Konfirmasi Bayar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Detail & Riwayat -->
+<div id="modal-detail" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="md-h">
+  <div class="modal-panel max-h-[90vh] flex flex-col">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+      <div>
+        <h2 id="md-h" class="text-base font-black text-gray-900">Riwayat Pembayaran</h2>
+        <p id="md-sub" class="text-xs text-gray-400 mt-0.5"></p>
+      </div>
+      <button id="close-detail" class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 transition-colors">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="flex-1 overflow-y-auto thin-scroll px-5 py-4">
+      <div id="md-content">
+        <div class="text-center text-gray-400 text-sm py-8">Memuat...</div>
+      </div>
+    </div>
+    <div class="px-5 py-4 border-t border-gray-100 flex-shrink-0 flex gap-3">
+      <button id="btn-hapus-piutang" class="px-4 py-2.5 rounded-xl border border-red-200 text-sm font-semibold text-red-500 hover:bg-red-50 transition-colors">Hapus Data</button>
+      <button id="close-detail-btn" class="flex-1 py-2.5 rounded-xl bg-gray-900 text-sm font-bold text-white hover:bg-gray-700 transition-colors">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Konfirmasi Hapus -->
+<div id="modal-hapus" class="modal-overlay" role="alertdialog" aria-modal="true" aria-labelledby="mh-h">
+  <div class="modal-panel modal-danger">
+    <div class="px-5 py-5 text-center">
+      <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+        </svg>
+      </div>
+      <h2 id="mh-h" class="text-base font-black text-gray-900 mb-1">Hapus Data Piutang?</h2>
+      <p class="text-sm text-gray-500 leading-relaxed">Semua riwayat pembayaran juga akan dihapus. Tindakan ini tidak dapat dibatalkan.</p>
+    </div>
+    <div class="px-5 pb-5 flex gap-3">
+      <button id="btn-batal-hapus" class="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">Batal</button>
+      <button id="btn-konfirmasi-hapus" class="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-sm font-bold text-white transition-colors">Ya, Hapus</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="p-toast" role="status" aria-live="polite">
+  <svg id="p-toast-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+    <polyline points="20 6 9 17 4 12"/>
+  </svg>
+  <span id="p-toast-msg"></span>
+</div>
+
+<script is:inline nonce={nonce}>
+'use strict';
+function rp(n){return new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',minimumFractionDigits:0}).format(n)}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function dateID(iso){return new Date(iso).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}
+function timeID(iso){return new Date(iso).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}
+
+var _pt;
+function pToast(msg,ok){
+  var t=document.getElementById('p-toast'),ic=document.getElementById('p-toast-ico');
+  if(!t||!ic)return;
+  document.getElementById('p-toast-msg').textContent=msg;
+  ic.style.color=ok===false?'#f87171':'#4ade80';
+  ic.innerHTML=ok===false?'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>':'<polyline points="20 6 9 17 4 12"/>';
+  t.classList.add('show');clearTimeout(_pt);
+  _pt=setTimeout(function(){t.classList.remove('show')},3000);
+}
+
+async function pApi(method,path,body){
+  var r=await fetch(path,{method:method,headers:{'Content-Type':'application/json'},body:body!==undefined?JSON.stringify(body):undefined,credentials:'same-origin'});
+  var d=await r.json().catch(function(){return{}});
+  if(!r.ok)throw new Error(d.error||r.statusText);
+  return d;
+}
+
+function openModal(id){var el=document.getElementById('modal-'+id);if(el){el.classList.add('open');document.body.style.overflow='hidden'}}
+function closeModal(id){var el=document.getElementById('modal-'+id);if(el){el.classList.remove('open');document.body.style.overflow=''}}
+
+function buildPayChips(sisa){
+  var wrap=document.getElementById('mb-chips');if(!wrap)return;
+  var candidates=[5000,10000,20000,50000,100000,200000,500000,1000000];
+  var chips=candidates.filter(function(d){return d<=sisa});
+  if(!chips.includes(sisa))chips.push(sisa);
+  chips=chips.slice(-6);
+  wrap.innerHTML=chips.map(function(d){
+    return '<button class="pay-chip text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:border-gray-900 hover:bg-gray-900 hover:text-white transition-all" data-val="'+d+'">'+(d===sisa?'Lunas Penuh':rp(d))+'</button>';
+  }).join('');
+  wrap.querySelectorAll('.pay-chip').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var inp=document.getElementById('mb-jumlah');if(inp)inp.value=this.dataset.val;
+      wrap.querySelectorAll('.pay-chip').forEach(function(b){b.classList.remove('!bg-gray-900','!text-white','!border-gray-900')});
+      this.classList.add('!bg-gray-900','!text-white','!border-gray-900');
+    });
+  });
+}
+
+function initPiutang(){
+  var btnSidebar=document.getElementById('p-btn-sidebar');
+  if(btnSidebar)btnSidebar.addEventListener('click',function(){if(window.openSidebar)window.openSidebar()});
+
+  var _currentId=null,_currentSisa=0,_hapusId=null,activeFilter='semua';
+
+  function applyFilter(){
+    var q=(document.getElementById('p-search').value||'').toLowerCase().trim();
+    var cards=document.querySelectorAll('#p-list [data-id]');
+    var vis=0;
+    cards.forEach(function(card){
+      var ok=(!q||(card.dataset.nama||'').includes(q))&&(activeFilter==='semua'||card.dataset.status===activeFilter);
+      card.classList.toggle('hidden',!ok);if(ok)vis++;
+    });
+    var nr=document.getElementById('p-no-result');
+    if(nr)nr.classList.toggle('hidden',vis>0||cards.length===0);
+  }
+
+  var srch=document.getElementById('p-search');if(srch)srch.addEventListener('input',applyFilter);
+
+  document.querySelectorAll('.filter-tab').forEach(function(tab){
+    tab.addEventListener('click',function(){
+      document.querySelectorAll('.filter-tab').forEach(function(t){t.classList.remove('active')});
+      this.classList.add('active');activeFilter=this.dataset.filter;applyFilter();
+    });
+  });
+
+  document.getElementById('p-list').addEventListener('click',function(e){
+    var btn=e.target.closest('[data-action]');if(!btn)return;
+    if(btn.dataset.action==='bayar'){
+      _currentId=btn.dataset.id;_currentSisa=parseFloat(btn.dataset.sisa)||0;
+      document.getElementById('mb-h').textContent='Catat Pembayaran';
+      document.getElementById('mb-sub').textContent=btn.dataset.nama;
+      document.getElementById('mb-sisa-disp').textContent=rp(_currentSisa);
+      document.getElementById('mb-jumlah').value='';
+      document.getElementById('mb-catatan').value='';
+      buildPayChips(_currentSisa);openModal('bayar');
+    }
+    if(btn.dataset.action==='detail'){_currentId=btn.dataset.id;openDetailModal(btn.dataset.id)}
+  });
+
+  var lunasBtn=document.getElementById('mb-lunas-btn');
+  if(lunasBtn)lunasBtn.addEventListener('click',function(){var inp=document.getElementById('mb-jumlah');if(inp)inp.value=String(_currentSisa)});
+
+  var konfBayar=document.getElementById('btn-konfirmasi-bayar');
+  if(konfBayar)konfBayar.addEventListener('click',async function(){
+    var jumlah=parseFloat(document.getElementById('mb-jumlah').value)||0;
+    var catatan=document.getElementById('mb-catatan').value.trim();
+    if(!jumlah||jumlah<=0){pToast('Masukkan jumlah pembayaran',false);return}
+    if(jumlah>_currentSisa){pToast('Jumlah melebihi sisa hutang',false);return}
+    this.disabled=true;this.textContent='Menyimpan...';
+    try{
+      await pApi('POST','/dashboard/api/piutang/'+_currentId+'/bayar',{jumlah:jumlah,catatan:catatan||undefined});
+      closeModal('bayar');pToast('Pembayaran berhasil dicatat!');
+      setTimeout(function(){location.reload()},800);
+    }catch(e){pToast('Gagal: '+e.message,false)}
+    finally{this.disabled=false;this.textContent='Konfirmasi Bayar'}
+  });
+
+  document.getElementById('btn-tambah-hutang').addEventListener('click',function(){openModal('tambah')});
+  document.getElementById('close-tambah').addEventListener('click',function(){closeModal('tambah')});
+  document.getElementById('btn-batal-tambah').addEventListener('click',function(){closeModal('tambah')});
+
+  var simpanHutang=document.getElementById('btn-simpan-hutang');
+  if(simpanHutang)simpanHutang.addEventListener('click',async function(){
+    var nama=document.getElementById('f-nama').value.trim();
+    var telp=document.getElementById('f-telepon').value.trim();
+    var total=parseFloat(document.getElementById('f-total').value)||0;
+    var tempo=document.getElementById('f-tempo').value;
+    var catatan=document.getElementById('f-catatan').value.trim();
+    if(!nama){pToast('Nama pelanggan wajib diisi',false);document.getElementById('f-nama').focus();return}
+    if(total<=0){pToast('Jumlah hutang harus lebih dari 0',false);document.getElementById('f-total').focus();return}
+    this.disabled=true;this.textContent='Menyimpan...';
+    try{
+      await pApi('POST','/dashboard/api/piutang/piutang',{nama:nama,telepon:telp||undefined,total_hutang:total,jatuh_tempo:tempo||undefined,catatan:catatan||undefined});
+      closeModal('tambah');pToast('Hutang berhasil ditambahkan!');
+      setTimeout(function(){location.reload()},800);
+    }catch(e){pToast('Gagal: '+e.message,false)}
+    finally{this.disabled=false;this.textContent='Simpan Hutang'}
+  });
+
+  async function openDetailModal(id){
+    document.getElementById('md-content').innerHTML='<div class="text-center text-gray-400 text-sm py-8">Memuat...</div>';
+    openModal('detail');
+    try{var data=await pApi('GET','/dashboard/api/piutang/'+id);renderDetail(data)}
+    catch(e){document.getElementById('md-content').innerHTML='<div class="text-center text-red-400 text-sm py-8">Gagal memuat data</div>'}
+  }
+
+  function renderDetail(data){
+    var riwayat=data.piutang_bayar||[];
+    var sisa=Math.max(0,data.total_hutang-(data.terbayar||0));
+    var pct=data.total_hutang>0?Math.min(100,Math.round((data.terbayar||0)/data.total_hutang*100)):0;
+    document.getElementById('md-h').textContent='Riwayat - '+esc(data.nama);
+    document.getElementById('md-sub').textContent='Sisa: '+rp(sisa);
+    var html='<div class="space-y-4">';
+    html+='<div class="bg-gray-50 rounded-xl p-3 space-y-2">';
+    html+='<div class="flex justify-between text-xs"><span class="text-gray-500">Total Hutang</span><span class="font-bold text-gray-800">'+rp(data.total_hutang)+'</span></div>';
+    html+='<div class="flex justify-between text-xs"><span class="text-gray-500">Terbayar</span><span class="font-bold text-green-600">'+rp(data.terbayar||0)+'</span></div>';
+    html+='<div class="flex justify-between text-xs"><span class="text-gray-500">Sisa</span><span class="font-bold '+(sisa>0?'text-orange-600':'text-green-600')+'">'+rp(sisa)+'</span></div>';
+    html+='<div class="h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1"><div class="h-full rounded-full '+(pct>=100?'bg-green-500':'bg-orange-400')+' transition-all" style="width:'+pct+'%"></div></div>';
+    html+='</div>';
+    if(riwayat.length===0){
+      html+='<div class="text-center py-6 text-gray-400 text-sm">Belum ada pembayaran tercatat.</div>';
+    }else{
+      html+='<div><div class="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Riwayat Bayar ('+riwayat.length+'x)</div><div class="space-y-3">';
+      riwayat.slice().sort(function(a,b){return new Date(b.created_at)-new Date(a.created_at)}).forEach(function(r){
+        html+='<div class="riwayat-item pb-3"><div class="flex items-start justify-between">';
+        html+='<div><div class="text-sm font-bold text-gray-800">'+rp(r.jumlah)+'</div>';
+        if(r.catatan)html+='<div class="text-xs text-gray-400 mt-0.5 italic">'+esc(r.catatan)+'</div>';
+        html+='</div><div class="text-xs text-gray-400 text-right flex-shrink-0 ml-3"><div>'+dateID(r.created_at)+'</div><div>'+timeID(r.created_at)+'</div></div></div></div>';
+      });
+      html+='</div></div>';
+    }
+    if(data.catatan)html+='<div class="bg-amber-50 border border-amber-100 rounded-xl p-3 text-xs text-amber-700">'+esc(data.catatan)+'</div>';
+    html+='</div>';
+    document.getElementById('md-content').innerHTML=html;
+  }
+
+  document.getElementById('close-detail').addEventListener('click',function(){closeModal('detail')});
+  document.getElementById('close-detail-btn').addEventListener('click',function(){closeModal('detail')});
+  document.getElementById('close-bayar').addEventListener('click',function(){closeModal('bayar')});
+  document.getElementById('btn-batal-bayar').addEventListener('click',function(){closeModal('bayar')});
+
+  document.getElementById('btn-hapus-piutang').addEventListener('click',function(){_hapusId=_currentId;closeModal('detail');openModal('hapus')});
+  document.getElementById('btn-batal-hapus').addEventListener('click',function(){closeModal('hapus')});
+
+  document.getElementById('btn-konfirmasi-hapus').addEventListener('click',async function(){
+    if(!_hapusId)return;this.disabled=true;this.textContent='Menghapus...';
+    try{
+      await pApi('DELETE','/dashboard/api/piutang/'+_hapusId);
+      closeModal('hapus');pToast('Data piutang dihapus');
+      setTimeout(function(){location.reload()},700);
+    }catch(e){pToast('Gagal: '+e.message,false);this.disabled=false;this.textContent='Ya, Hapus'}
+  });
+
+  ['tambah','bayar','detail','hapus'].forEach(function(id){
+    var el=document.getElementById('modal-'+id);if(!el)return;
+    el.addEventListener('click',function(e){if(e.target===this)closeModal(id)});
+  });
+
+  document.addEventListener('keydown',function(e){
+    if(e.key!=='Escape')return;
+    ['hapus','detail','bayar','tambah'].forEach(function(id){
+      var el=document.getElementById('modal-'+id);if(el&&el.classList.contains('open'))closeModal(id);
+    });
+  });
+
+  document.getElementById('f-catatan').addEventListener('keydown',function(e){
+    if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();document.getElementById('btn-simpan-hutang').click()}
+  });
+}
+
+(function(){
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initPiutang)}
+  else{initPiutang()}
+})();
+</script>
+
+</Layout>

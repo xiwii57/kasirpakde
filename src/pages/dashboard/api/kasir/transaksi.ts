@@ -6,7 +6,7 @@ export const prerender = false;
 
 import type { APIRoute } from "astro";
 import { createClient } from "@supabase/supabase-js";
-import { createServiceClient } from "../../../lib/supabase";
+import { createServiceClient } from "../../../../lib/supabase";
 
 // ─── Konstanta ────────────────────────────────────────────────────────────────
 

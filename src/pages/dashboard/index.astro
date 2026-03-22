@@ -6,7 +6,6 @@ import { createServiceClient } from "../../lib/supabase";
 import "../../styles/global.css";
 import "../../styles/dashboard.css";
 
-// Auth guard — middleware sudah handle redirect, ini double-check
 const accessToken = Astro.cookies.get("sb-access-token");
 if (!accessToken?.value) return Astro.redirect("/");
 
@@ -14,7 +13,7 @@ const nonce = (Astro.locals as App.Locals).nonce ?? "";
 const sb    = createServiceClient();
 const PUBLIC_TURNSTILE_SITEKEY = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY as string;
 
-// ── Time helpers ───────────────────────────────────────────────────────────
+//  Time helpers
 function toWIB(iso: string) {
   return new Date(new Date(iso).getTime() + 7 * 60 * 60 * 1000);
 }
@@ -22,16 +21,14 @@ function pad2(n: number) { return String(n).padStart(2, "0"); }
 
 const nowWIB = toWIB(new Date().toISOString());
 
-// Awal hari ini WIB → UTC
 const todayStart = new Date(nowWIB);
 todayStart.setHours(0, 0, 0, 0);
 const todayStartUTC = new Date(todayStart.getTime() - 7 * 60 * 60 * 1000);
 
-// 7 & 30 hari lalu
 const week7UTC   = new Date(todayStartUTC.getTime() - 6  * 24 * 60 * 60 * 1000);
 const month30UTC = new Date(todayStartUTC.getTime() - 29 * 24 * 60 * 60 * 1000);
 
-// ── Data fetching paralel ──────────────────────────────────────────────────
+//  Data fetching paralel
 const [
   { data: produkList },
   { data: logList },
@@ -39,6 +36,7 @@ const [
   { data: trx7Raw },
   { data: trx30Raw },
   { data: topItems },
+  { data: piutangRaw },
 ] = await Promise.all([
   sb.from("produk").select("*").order("nama_produk"),
   sb.from("harga_log").select("*").order("changed_at", { ascending: false }).limit(10),
@@ -59,6 +57,10 @@ const [
   sb.from("transaksi_item")
     .select("produk_id, nama_produk, qty")
     .limit(300),
+  sb.from("piutang")
+    .select("id, nama, total_hutang, terbayar, status, jatuh_tempo, tanggal")
+    .order("tanggal", { ascending: false })
+    .limit(50),
 ]);
 
 const produk  = produkList  ?? [];
@@ -66,8 +68,9 @@ const logs    = logList     ?? [];
 const hari    = trxHariIni  ?? [];
 const trx7    = trx7Raw     ?? [];
 const trx30   = trx30Raw    ?? [];
+const piutang = piutangRaw  ?? [];
 
-// ── Statistik produk ───────────────────────────────────────────────────────
+//  Statistik produk
 const totalProduk    = produk.length;
 const avgMargin      = produk.length
   ? Math.round(produk.reduce((s, p) => s + ((p.harga_jual - p.harga_beli) / (p.harga_beli || 1)) * 100, 0) / produk.length)
@@ -75,20 +78,20 @@ const avgMargin      = produk.length
 const lowMargin      = produk.filter(p => p.harga_beli > 0 && ((p.harga_jual - p.harga_beli) / p.harga_beli) < 0.10).length;
 const quickCashCount = produk.filter(p => p.quick_cash).length;
 
-// ── Statistik hari ini ────────────────────────────────────────────────────
+//  Statistik hari ini
 const omsetHari  = hari.reduce((s, t) => s + t.total, 0);
 const cashHari   = hari.filter(t => t.metode_bayar !== "qris").reduce((s, t) => s + t.total, 0);
 const qrisHari   = hari.filter(t => t.metode_bayar === "qris").reduce((s, t) => s + t.total, 0);
 const itemHari   = hari.reduce((s, t) => s + (t.transaksi_item ?? []).reduce((q: number, i: any) => q + i.qty, 0), 0);
 
-// ── Statistik 30 hari ─────────────────────────────────────────────────────
+//  Statistik 30 hari
 const omset30    = trx30.reduce((s, t) => s + t.total, 0);
 const cash30     = trx30.filter(t => t.metode_bayar !== "qris").reduce((s, t) => s + t.total, 0);
 const qris30     = trx30.filter(t => t.metode_bayar === "qris").reduce((s, t) => s + t.total, 0);
 const cashCnt30  = trx30.filter(t => t.metode_bayar !== "qris").length;
 const qrisCnt30  = trx30.filter(t => t.metode_bayar === "qris").length;
 
-// ── Grafik 7 hari ─────────────────────────────────────────────────────────
+//  Grafik 7 hari
 type Day7 = { label: string; date: string; omset: number; trx: number };
 const days7: Day7[] = [];
 for (let i = 6; i >= 0; i--) {
@@ -121,7 +124,7 @@ const vsKemarin    = omsetKemarin > 0
   ? Math.round(((omsetHari - omsetKemarin) / omsetKemarin) * 100)
   : null;
 
-// ── Top Seller ────────────────────────────────────────────────────────────
+//  Top Seller
 const topMap = new Map<string, { nama: string; total: number }>();
 (topItems ?? []).forEach(i => {
   const cur = topMap.get(i.produk_id ?? i.nama_produk) ?? { nama: i.nama_produk, total: 0 };
@@ -130,22 +133,82 @@ const topMap = new Map<string, { nama: string; total: number }>();
 });
 const topSellers = [...topMap.values()].sort((a, b) => b.total - a.total).slice(0, 5);
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-function rp(n: number) {
-  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
-}
+//  Statistik Piutang
+const piutangAktif      = piutang.filter(p => p.status !== "lunas");
+const totalNilaiPiutang = piutangAktif.reduce((s, p) => s + Math.max(0, p.total_hutang - p.terbayar), 0);
+const jumlahDebitur     = piutangAktif.length;
+const piutangJatuhTempo = piutangAktif.filter(p => {
+  if (!p.jatuh_tempo) return false;
+  return new Date(p.jatuh_tempo) < new Date();
+}).length;
+const piutangDekat = piutangAktif.filter(p => {
+  if (!p.jatuh_tempo) return false;
+  const diff = (new Date(p.jatuh_tempo).getTime() - Date.now()) / 86400000;
+  return diff >= 0 && diff <= 3;
+}).length;
+
+const piutangPreview = piutangAktif.slice(0, 5);
+
+const avatarColorMap: Record<string, string> = {
+  A:'background:#fef3c7;color:#92400e', B:'background:#dbeafe;color:#1e40af',
+  C:'background:#fce7f3;color:#9d174d', D:'background:#d1fae5;color:#065f46',
+  E:'background:#ede9fe;color:#5b21b6', F:'background:#fee2e2;color:#991b1b',
+  G:'background:#e0f2fe;color:#0c4a6e', H:'background:#fef9c3;color:#713f12',
+  I:'background:#f0fdf4;color:#14532d', J:'background:#fff7ed;color:#9a3412',
+  K:'background:#f5f3ff;color:#4c1d95', L:'background:#ecfdf5;color:#064e3b',
+  M:'background:#fffbeb;color:#78350f', N:'background:#eff6ff;color:#1e3a8a',
+  O:'background:#fdf4ff;color:#6b21a8', P:'background:#f0f9ff;color:#0c4a6e',
+  Q:'background:#fff1f2;color:#881337', R:'background:#f7fee7;color:#3f6212',
+  S:'background:#fef2f2;color:#7f1d1d', T:'background:#f0fdfa;color:#134e4a',
+  U:'background:#fefce8;color:#713f12', V:'background:#f8fafc;color:#1e293b',
+  W:'background:#fdf2f8;color:#831843', X:'background:#ecfeff;color:#164e63',
+  Y:'background:#f0fdf4;color:#166534', Z:'background:#fff7ed;color:#7c2d12',
+};
+
+const piutangListComputed = piutangPreview.map(p => {
+  const sisa        = Math.max(0, p.total_hutang - (p.terbayar ?? 0));
+  const pct         = p.total_hutang > 0 ? Math.min(100, Math.round(((p.terbayar ?? 0) / p.total_hutang) * 100)) : 0;
+  const inisial     = (p.nama || '?').trim().charAt(0).toUpperCase();
+  const avatarStyle = avatarColorMap[inisial] ?? 'background:#f3f4f6;color:#374151';
+  const progColor   = pct >= 70 ? '#10b981' : pct >= 30 ? '#f97316' : '#ef4444';
+  let badgeClass = '';
+  let badgeLabel = '';
+  if (p.jatuh_tempo) {
+    const diff = (new Date(p.jatuh_tempo).getTime() - Date.now()) / 86400000;
+    if (diff < 0) { badgeClass = 'piutang-badge-lewat'; badgeLabel = 'Lewat'; }
+    else if (diff <= 3) { badgeClass = 'piutang-badge-dekat'; badgeLabel = Math.ceil(diff) + 'h lagi'; }
+  }
+  return { ...p, sisa, pct, inisial, avatarStyle, progColor, badgeClass, badgeLabel };
+});
+
+// ── FIX #3: Pre-compute margin & color class untuk tabel produk ──────────────
+// Semua kalkulasi TypeScript dipindah ke frontmatter — tidak boleh ada const
+// di dalam .map() di template Astro.
 function margin(beli: number, jual: number) {
   if (!beli) return 0;
   return Math.round(((jual - beli) / beli) * 100);
-}
-function timeStr(iso: string) {
-  return toWIB(iso).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 }
 
 const katColors: Record<string, string> = {
   Minuman: "kat-blue", Snack: "kat-yellow", Rokok: "kat-red",
   Sembako: "kat-green", Lainnya: "kat-gray",
 };
+
+const produkComputed = produk.slice(0, 8).map(p => {
+  const m  = margin(p.harga_beli, p.harga_jual);
+  const mc = m >= 20 ? "m-good" : m >= 10 ? "m-mid" : "m-low";
+  return { ...p, m, mc };
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
+//  Helpers
+function rp(n: number) {
+  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(n);
+}
+function timeStr(iso: string) {
+  return toWIB(iso).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+}
+
 const katBreakdown = ["Minuman","Snack","Rokok","Sembako","Lainnya"].map(kat => {
   const items = produk.filter((p: any) => p.kategori === kat);
   const avgM  = items.length
@@ -162,9 +225,8 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
 
 <Layout title="Dashboard" active="dashboard" nonce={nonce}>
 
-<style nonce={nonce}>
-
-  /* ── Turnstile wrapper ── */
+<style>
+  /*  Turnstile wrapper  */
   .hm-turnstile-wrap {
     display: flex;
     justify-content: center;
@@ -172,13 +234,12 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
     min-height: 65px;
   }
   .hm-turnstile-wrap:empty::after {
-    content: 'Memuat verifikasi…';
+    content: 'Memuat verifikasi...';
     font-size: .72rem;
     color: var(--muted);
     align-self: center;
   }
 
-  /* ── Turnstile loading state ── */
   .ts-loading-msg {
     display: flex;
     align-items: center;
@@ -196,7 +257,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
   }
   @keyframes ts-spin { to { transform: rotate(360deg); } }
 
-  /* ── Turnstile error state ── */
   .ts-error-msg {
     display: flex;
     align-items: center;
@@ -216,7 +276,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
   }
   .ts-retry-btn:hover { color: #9a3412; }
 
-  /* ── Verified state indicator ── */
   .ts-verified-msg {
     display: flex;
     align-items: center;
@@ -234,7 +293,7 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
     flex-shrink: 0;
   }
 
-  /* ══ Modal ═══════════════════════════════════════════════════════════════ */
+  /*  Modal  */
   .modal-backdrop {
     display: none;
     position: fixed;
@@ -269,80 +328,44 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
     justify-content: center;
     flex-shrink: 0;
   }
-  .modal-title {
-    font-size: .9rem;
-    font-weight: 700;
-    color: #0f0d0b;
-    margin: 0;
-  }
-  .modal-subtitle {
-    font-size: .68rem;
-    color: #9ca3af;
-    margin: 1px 0 0;
-  }
+  .modal-title    { font-size: .9rem; font-weight: 700; color: #0f0d0b; margin: 0; }
+  .modal-subtitle { font-size: .68rem; color: #9ca3af; margin: 1px 0 0; }
   .modal-close-btn {
     margin-left: auto;
     width: 28px; height: 28px;
     border: none; background: none;
-    cursor: pointer;
-    color: #9ca3af;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    cursor: pointer; color: #9ca3af;
+    display: flex; align-items: center; justify-content: center;
     border-radius: 6px;
     transition: background .12s, color .12s;
   }
   .modal-close-btn:hover { background: #f3f4f6; color: #374151; }
-
   .modal-body {
     padding: 1.375rem 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+    display: flex; flex-direction: column; gap: 1rem;
   }
-  .modal-field-label {
-    font-size: .7rem;
-    font-weight: 600;
-    color: #374151;
-    display: block;
-    margin-bottom: .5rem;
-  }
-  .radio-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: .5rem;
-  }
+  .modal-field-label { font-size: .7rem; font-weight: 600; color: #374151; display: block; margin-bottom: .5rem; }
+  .radio-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
   .radio-label {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
+    display: flex; align-items: center; gap: .5rem;
     padding: .6rem .75rem;
-    border: 1.5px solid #e5e7eb;
-    border-radius: 7px;
+    border: 1.5px solid #e5e7eb; border-radius: 7px;
     cursor: pointer;
     transition: border-color .12s, background .12s;
   }
   .radio-label-text-bold { font-size: .75rem; font-weight: 600; color: #0f0d0b; }
   .radio-label-text      { font-size: .75rem; font-weight: 500; color: #374151; }
-
   .warning-box {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    border-radius: 7px;
-    padding: .75rem 1rem;
-    display: flex;
-    gap: .5rem;
-    align-items: flex-start;
+    background: #fef2f2; border: 1px solid #fecaca;
+    border-radius: 7px; padding: .75rem 1rem;
+    display: flex; gap: .5rem; align-items: flex-start;
   }
   .warning-icon { flex-shrink: 0; margin-top: 1px; }
   .warning-text { font-size: .7rem; color: #dc2626; margin: 0; line-height: 1.5; }
-
   .modal-footer {
     padding: 1rem 1.5rem;
     border-top: 1px solid rgba(15,13,11,.07);
-    display: flex;
-    gap: .625rem;
-    justify-content: flex-end;
+    display: flex; gap: .625rem; justify-content: flex-end;
   }
   .btn-cancel {
     padding: .5rem 1rem;
@@ -356,18 +379,17 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
   .btn-danger {
     padding: .5rem 1.25rem;
     font-size: .78rem; font-weight: 700;
-    border: none;
-    background: #dc2626; color: #fff;
+    border: none; background: #dc2626; color: #fff;
     border-radius: 7px; cursor: pointer;
     display: flex; align-items: center; gap: .4rem;
     transition: background .12s, opacity .12s;
   }
-  .btn-danger:hover                          { background: #b91c1c; }
-  .btn-danger:disabled                       { opacity: .45; cursor: not-allowed; background: #dc2626; }
-  .btn-cancel:disabled                       { opacity: .6; cursor: not-allowed; }
+  .btn-danger:hover    { background: #b91c1c; }
+  .btn-danger:disabled { opacity: .45; cursor: not-allowed; background: #dc2626; }
+  .btn-cancel:disabled { opacity: .6; cursor: not-allowed; }
   .spinner { display: none; }
 
-  /* ══ Toast ═══════════════════════════════════════════════════════════════ */
+  /*  Toast  */
   .toast {
     position: fixed;
     bottom: 1.5rem; right: 1.5rem;
@@ -383,96 +405,47 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
     pointer-events: none;
   }
 
-  /* ══ Today cards ═════════════════════════════════════════════════════════ */
-  .today-omset-label {
-    font-size: .62rem; font-weight: 700;
-    text-transform: uppercase; letter-spacing: .07em;
-    opacity: .45; margin-bottom: 5px;
-  }
-  .today-omset-value {
-    font-size: 1.45rem; font-weight: 800; line-height: 1.1;
-  }
-  .today-omset-meta {
-    display: flex; align-items: center; gap: 6px; margin-top: 5px;
-  }
-  .today-omset-sub { font-size: .65rem; opacity: .55; }
+  /*  Today cards  */
+  .today-omset-label { font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; opacity: .45; margin-bottom: 5px; }
+  .today-omset-value { font-size: 1.45rem; font-weight: 800; line-height: 1.1; }
+  .today-omset-meta  { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
+  .today-omset-sub   { font-size: .65rem; opacity: .55; }
+  .today-cash-label  { font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #15803d; margin-bottom: 5px; }
+  .today-cash-value  { font-size: 1.35rem; font-weight: 800; color: #14532d; line-height: 1.1; }
+  .today-cash-sub    { font-size: .65rem; color: #16a34a; margin-top: 5px; }
+  .today-qris-label  { font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #1d4ed8; margin-bottom: 5px; }
+  .today-qris-value  { font-size: 1.35rem; font-weight: 800; color: #1e3a8a; line-height: 1.1; }
+  .today-qris-sub    { font-size: .65rem; color: #2563eb; margin-top: 5px; }
+  .today-item-label  { font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #b45309; margin-bottom: 5px; }
+  .today-item-value  { font-size: 1.35rem; font-weight: 800; color: #78350f; line-height: 1.1; }
+  .today-item-sub    { font-size: .65rem; color: #d97706; margin-top: 5px; }
 
-  .today-cash-label {
-    font-size: .62rem; font-weight: 700;
-    text-transform: uppercase; letter-spacing: .07em;
-    color: #15803d; margin-bottom: 5px;
-  }
-  .today-cash-value { font-size: 1.35rem; font-weight: 800; color: #14532d; line-height: 1.1; }
-  .today-cash-sub   { font-size: .65rem; color: #16a34a; margin-top: 5px; }
-
-  .today-qris-label {
-    font-size: .62rem; font-weight: 700;
-    text-transform: uppercase; letter-spacing: .07em;
-    color: #1d4ed8; margin-bottom: 5px;
-  }
-  .today-qris-value { font-size: 1.35rem; font-weight: 800; color: #1e3a8a; line-height: 1.1; }
-  .today-qris-sub   { font-size: .65rem; color: #2563eb; margin-top: 5px; }
-
-  .today-item-label {
-    font-size: .62rem; font-weight: 700;
-    text-transform: uppercase; letter-spacing: .07em;
-    color: #b45309; margin-bottom: 5px;
-  }
-  .today-item-value { font-size: 1.35rem; font-weight: 800; color: #78350f; line-height: 1.1; }
-  .today-item-sub   { font-size: .65rem; color: #d97706; margin-top: 5px; }
-
-  /* ══ vs-kemarin badge ════════════════════════════════════════════════════ */
   .badge-up   { font-size:.6rem;font-weight:700;padding:1px 5px;border-radius:99px;background:rgba(34,197,94,.2);color:#4ade80; }
   .badge-down { font-size:.6rem;font-weight:700;padding:1px 5px;border-radius:99px;background:rgba(248,113,113,.2);color:#f87171; }
 
-  /* ══ Mini-chart bars ═════════════════════════════════════════════════════ */
-  .mc-bar-today  { background: #c84b1f; }
-  .mc-bar-normal { background: #f3d5cc; }
-
-  /* ══ Tren section header ═════════════════════════════════════════════════ */
-  .tren-header-right {
-    display: flex; align-items: center; justify-content: space-between;
-  }
   .tren-total-label { font-size: .68rem; color: #9ca3af; margin-top: 1px; }
   .tren-total-val   { font-weight: 600; color: #0f0d0b; }
 
-  .mini-chart-pad { padding: 1.125rem 1.375rem .875rem; }
+  .trx-count-note { font-size: .62rem; color: #9ca3af; flex-shrink: 0; }
+  .trx-empty      { font-size: .75rem; color: #9ca3af; text-align: center; padding: 2rem 1rem; }
+  .trx-row-total  { font-size: .77rem; font-weight: 600; color: #0f0d0b; }
+  .trx-row-time   { font-size: .62rem; color: #9ca3af; }
 
-  /* ══ Transaksi terbaru ═══════════════════════════════════════════════════ */
-  .trx-section-head {
-    display: flex; align-items: center; justify-content: space-between;
-  }
-  .trx-count-note  { font-size: .62rem; color: #9ca3af; flex-shrink: 0; }
-  .trx-empty       { font-size: .75rem; color: #9ca3af; text-align: center; padding: 2rem 1rem; }
-
-  .trx-row-total   { font-size: .77rem; font-weight: 600; color: #0f0d0b; }
-  .trx-row-time    { font-size: .62rem; color: #9ca3af; }
-
-  /* ══ Ringkasan pembayaran ════════════════════════════════════════════════ */
-  .pay-section-head {
-    display: flex; align-items: center;
-    justify-content: space-between;
-  }
+  .pay-section-head { display: flex; align-items: center; justify-content: space-between; }
   .pay-method-row {
     display: flex; align-items: center; gap: 12px;
     padding: .85rem 1.375rem;
     border-bottom: 1px solid rgba(15,13,11,.05);
   }
-  .pay-method-icon {
-    width: 30px; height: 30px; border-radius: 6px;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-  }
+  .pay-method-icon       { width: 30px; height: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .pay-method-icon-green { background: #dcfce7; }
   .pay-method-icon-blue  { background: #dbeafe; }
-
-  .pay-method-detail   { flex: 1; min-width: 0; }
-  .pay-method-name-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+  .pay-method-detail     { flex: 1; min-width: 0; }
+  .pay-method-name-row   { display: flex; justify-content: space-between; margin-bottom: 5px; }
   .pay-method-name         { font-size: .77rem; font-weight: 600; color: #0f0d0b; }
   .pay-method-amount-green { font-size: .77rem; font-weight: 700; color: #15803d; }
   .pay-method-amount-blue  { font-size: .77rem; font-weight: 700; color: #1d4ed8; }
   .pay-method-note         { font-size: .62rem; color: #9ca3af; margin-top: 3px; }
-
   .pay-total-row {
     padding: .8rem 1.375rem;
     background: #fdf9f6;
@@ -481,102 +454,115 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
   .pay-total-label { font-size: .72rem; color: #6b7280; font-weight: 500; }
   .pay-total-value { font-size: .95rem; font-weight: 800; color: #0f0d0b; }
 
-  /* ══ Stat mini grid ══════════════════════════════════════════════════════ */
-  .stat-mini-card { padding: 1.1rem 1.375rem; }
+  .stat-mini-card          { padding: 1.1rem 1.375rem; }
   .stat-mini-card-border-b { border-bottom: 1px solid rgba(15,13,11,.06); }
-  .stat-mini-card-border-r { border-right: 1px solid rgba(15,13,11,.06); }
-
-  .stat-mini-label {
-    font-size: .62rem; font-weight: 600;
-    text-transform: uppercase; letter-spacing: .06em;
-    color: #9ca3af; margin-bottom: 5px;
-  }
-  .stat-mini-val { font-size: 1.15rem; font-weight: 800; line-height: 1.15; }
-  .stat-mini-sub { font-size: .62rem; color: #9ca3af; margin-top: 2px; }
-
+  .stat-mini-card-border-r { border-right:  1px solid rgba(15,13,11,.06); }
+  .stat-mini-label { font-size: .62rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #9ca3af; margin-bottom: 5px; }
+  .stat-mini-val   { font-size: 1.15rem; font-weight: 800; line-height: 1.15; }
+  .stat-mini-sub   { font-size: .62rem; color: #9ca3af; margin-top: 2px; }
   .stat-mini-color-primary { color: #0f0d0b; }
   .stat-mini-color-accent  { color: #c84b1f; }
   .stat-mini-color-green   { color: #15803d; }
   .stat-mini-color-blue    { color: #1d4ed8; }
 
-  /* ══ Stat cards produk ═══════════════════════════════════════════════════ */
-  .stat-top { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
-
-  .stat-label {
-    font-size: .65rem; font-weight: 600;
-    color: #9ca3af;
-    text-transform: uppercase; letter-spacing: .05em;
-  }
-  .stat-value {
-    font-size: 1.9rem; font-weight: 700;
-    color: #0f0d0b;
-    line-height: 1; margin-top: .5rem;
-  }
+  .stat-top   { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
+  .stat-label { font-size: .65rem; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: .05em; }
+  .stat-value { font-size: 1.9rem; font-weight: 700; color: #0f0d0b; line-height: 1; margin-top: .5rem; }
   .stat-value-danger { color: #ef4444; }
-  .stat-sub { font-size: .68rem; color: #9ca3af; margin-top: .375rem; }
+  .stat-sub   { font-size: .68rem; color: #9ca3af; margin-top: .375rem; }
+  .stat-icon-wrap        { background: #fdf6f3; }
+  .stat-icon-wrap-danger { background: #fef2f2; }
 
-  .stat-icon-wrap         { background: #fdf6f3; }
-  .stat-icon-wrap-danger  { background: #fef2f2; }
-
-  /* ══ Tabel produk ════════════════════════════════════════════════════════ */
-  .prod-name-cell  { display: flex; align-items: center; gap: .5rem; }
-  .prod-name-text  { font-weight: 500; color: #0f0d0b; }
-  .quick-cash-dot  { width: 5px; height: 5px; border-radius: 50%; background: #c84b1f; flex-shrink: 0; display: inline-block; }
-
+  .prod-name-cell { display: flex; align-items: center; gap: .5rem; }
+  .prod-name-text { font-weight: 500; color: #0f0d0b; }
+  .quick-cash-dot { width: 5px; height: 5px; border-radius: 50%; background: #c84b1f; flex-shrink: 0; display: inline-block; }
   .tabel-produk-empty { padding: 2.5rem 1.375rem; text-align: center; color: #9ca3af; font-size: .8rem; }
   .tabel-produk-link  { color: #c84b1f; font-weight: 600; }
   .tabel-produk-link:hover { text-decoration: underline; }
 
-  /* ══ Top Seller ══════════════════════════════════════════════════════════ */
-  .top-seller-row   { display: flex; align-items: center; gap: .6rem; }
-  .top-seller-rank  { font-size: .65rem; font-weight: 700; color: #d1d5db; width: 1rem; text-align: right; flex-shrink: 0; }
-  .top-seller-info  { flex: 1; min-width: 0; }
-  .top-seller-name  { font-size: .77rem; font-weight: 500; color: #0f0d0b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .top-seller-qty   { font-size: .7rem; font-weight: 600; color: #6b7280; flex-shrink: 0; }
-  .top-seller-pad   { padding: .875rem 1.375rem; display: flex; flex-direction: column; gap: .7rem; }
+  .top-seller-row  { display: flex; align-items: center; gap: .6rem; }
+  .top-seller-rank { font-size: .65rem; font-weight: 700; color: #d1d5db; width: 1rem; text-align: right; flex-shrink: 0; }
+  .top-seller-info { flex: 1; min-width: 0; }
+  .top-seller-name { font-size: .77rem; font-weight: 500; color: #0f0d0b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top-seller-qty  { font-size: .7rem; font-weight: 600; color: #6b7280; flex-shrink: 0; }
+  .top-seller-pad  { padding: .875rem 1.375rem; display: flex; flex-direction: column; gap: .7rem; }
   .top-seller-empty { font-size: .75rem; color: #9ca3af; text-align: center; padding: .75rem 0; }
 
-  /* ══ Log perubahan harga ═════════════════════════════════════════════════ */
   .log-name      { font-size: .77rem; font-weight: 500; color: #0f0d0b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .log-price-row { display: flex; align-items: center; gap: .5rem; margin-top: 2px; }
-  .log-price-old { font-size: .65rem; color: #9ca3af; text-decoration: line-through; }
+  .log-price-old   { font-size: .65rem; color: #9ca3af; text-decoration: line-through; }
   .log-price-arrow { width: 9px; height: 9px; color: #d1d5db; flex-shrink: 0; }
   .log-price-new   { font-size: .65rem; font-weight: 700; color: #c84b1f; }
   .log-price-date  { font-size: .6rem; color: #d1d5db; margin-left: auto; flex-shrink: 0; }
   .log-empty       { font-size: .75rem; color: #9ca3af; text-align: center; padding: 1.25rem; }
 
-  /* ══ Breakdown kategori ══════════════════════════════════════════════════ */
-  .kat-card {
-    text-align: center; padding: 1rem;
-    border: 1px solid rgba(15,13,11,.07); border-radius: 6px;
-    transition: box-shadow .15s, transform .15s;
-  }
+  .kat-card { text-align: center; padding: 1rem; border: 1px solid rgba(15,13,11,.07); border-radius: 6px; transition: box-shadow .15s, transform .15s; }
   .kat-card:hover { box-shadow: 0 4px 14px rgba(15,13,11,.08); transform: translateY(-2px); }
   .kat-count  { font-size: 1.7rem; font-weight: 700; color: #0f0d0b; margin: .5rem 0 0; }
   .kat-sub    { font-size: .65rem; color: #9ca3af; margin: 1px 0 .375rem; }
   .kat-margin { font-size: .68rem; font-weight: 600; color: #c84b1f; }
   .kat-grid-pad { padding: 1.125rem 1.375rem; }
 
-  /* ══ Section head variants ═══════════════════════════════════════════════ */
-  .section-head-col {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1px;
-  }
-
-  /* ══ Heading font ════════════════════════════════════════════════════════ */
+  .section-head-col { flex-direction: column; align-items: flex-start; gap: 1px; }
   .dash-title { font-family: 'DM Serif Display', serif; }
-
-  /* ══ Tabel — padding kolom pertama & terakhir ════════════════════════════ */
   .th-pad-left,  .td-pad-left  { padding-left:  1.375rem !important; }
   .th-pad-right, .td-pad-right { padding-right: 1.375rem !important; }
+
+  /*  Piutang section  */
+  .piutang-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-bottom: 1px solid rgba(15,13,11,.06);
+  }
+  .piutang-stat-item {
+    padding: .95rem 1.375rem;
+    border-right: 1px solid rgba(15,13,11,.06);
+  }
+  .piutang-stat-item:last-child { border-right: none; }
+  .piutang-stat-lbl {
+    font-size: .6rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .06em;
+    color: #9ca3af; margin-bottom: 4px;
+  }
+  .piutang-stat-val { font-size: 1.1rem; font-weight: 800; line-height: 1.1; }
+  .piutang-stat-sub { font-size: .62rem; color: #9ca3af; margin-top: 2px; }
+
+  .piutang-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: .75rem 1.375rem;
+    border-bottom: 1px solid rgba(15,13,11,.04);
+    transition: background .1s;
+  }
+  .piutang-row:last-child { border-bottom: none; }
+  .piutang-row:hover { background: #fafafa; }
+  .piutang-avatar {
+    width: 28px; height: 28px; border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .72rem; font-weight: 800; flex-shrink: 0;
+  }
+  .piutang-info { flex: 1; min-width: 0; }
+  .piutang-nama { font-size: .78rem; font-weight: 600; color: #0f0d0b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .piutang-meta { font-size: .6rem; color: #9ca3af; margin-top: 1px; }
+  .piutang-sisa { text-align: right; flex-shrink: 0; }
+  .piutang-sisa-val { font-size: .78rem; font-weight: 700; color: #0f0d0b; }
+  .piutang-sisa-pct { font-size: .6rem; color: #9ca3af; margin-top: 1px; }
+  .piutang-badge {
+    font-size: .58rem; font-weight: 700;
+    padding: 2px 6px; border-radius: 99px; flex-shrink: 0;
+  }
+  .piutang-badge-lewat { background: #fef2f2; color: #dc2626; }
+  .piutang-badge-dekat { background: #fff7ed; color: #c2410c; }
+  .piutang-badge-ok    { background: #f0fdf4; color: #15803d; }
+  .piutang-progress {
+    height: 3px; background: #f1f5f9; border-radius: 99px; margin-top: 3px; overflow: hidden;
+  }
+  .piutang-progress-fill { height: 100%; border-radius: 99px; }
+  .piutang-empty { font-size: .75rem; color: #9ca3af; text-align: center; padding: 2rem 1rem; }
 </style>
 
-<!-- ── Modal Hapus Histori ────────────────────────────────────────────────── -->
-<div id="modalHapus" class="modal-backdrop"
-  role="dialog" aria-modal="true" aria-labelledby="modalHapusTitle">
+<!-- Modal Hapus Histori -->
+<div id="modalHapus" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalHapusTitle">
   <div class="modal-box">
-
     <div class="modal-header">
       <div class="modal-header-icon">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -594,7 +580,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         </svg>
       </button>
     </div>
-
     <div class="modal-body">
       <div>
         <label class="modal-field-label">Hapus data apa?</label>
@@ -609,7 +594,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
           </label>
         </div>
       </div>
-
       <div>
         <label class="modal-field-label">Rentang waktu</label>
         <div class="radio-grid">
@@ -626,7 +610,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
           ))}
         </div>
       </div>
-
       <div class="warning-box">
         <svg class="warning-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -637,12 +620,9 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         </p>
       </div>
     </div>
-
-    <!-- ── Turnstile verification area ── -->
     <div class="hm-turnstile-wrap">
       <div id="hm-turnstile-container"></div>
     </div>
-
     <div class="modal-footer">
       <button id="hapusCancelBtn" class="btn-cancel">Batal</button>
       <button id="hapusKonfirmasiBtn" class="btn-danger" disabled>
@@ -652,17 +632,16 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         <span id="hapusBtnLabel">Hapus Sekarang</span>
       </button>
     </div>
-
   </div>
 </div>
 
-<!-- ── Toast Notifikasi ───────────────────────────────────────────────────── -->
+<!-- Toast -->
 <div id="toastNotif" class="toast" role="status" aria-live="polite">
   <span id="toastIcon"></span>
   <span id="toastText"></span>
 </div>
 
-<!-- ── Sticky Header ─────────────────────────────────────────────────────── -->
+<!-- Sticky Header -->
 <div class="bg-white border-b border-black/[0.07] px-4 sm:px-6 lg:px-8 py-4
             flex items-center justify-between sticky top-0 z-20 fade-up">
   <div class="flex items-center gap-3">
@@ -678,7 +657,7 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
       <h1 class="dash-title text-[1.2rem] leading-tight text-[#0f0d0b]">Dashboard</h1>
       <p class="text-[.7rem] text-gray-400 hidden sm:block">
         {salam}, <span class="font-medium text-gray-600">{userEmail.split("@")[0]}</span>
-        <span class="text-gray-300 mx-1">·</span>
+        <span class="text-gray-300 mx-1"></span>
         <span>{tanggalStr}</span>
       </p>
     </div>
@@ -707,14 +686,13 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
   </div>
 </div>
 
-<!-- ── Konten ─────────────────────────────────────────────────────────────── -->
+<!-- Konten -->
 <div class="page-pad p-5 lg:p-7 space-y-5 max-w-[1400px] mx-auto">
 
-  <!-- ① HARI INI ────────────────────────────────────────────────────────── -->
+  <!-- HARI INI -->
   <div class="fade-up d1">
     <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Hari Ini</p>
     <div class="today-grid grid grid-cols-4 gap-3">
-
       <div class="today-card dark">
         <p class="today-omset-label">Omset</p>
         <p class="today-omset-value">{rp(omsetHari)}</p>
@@ -727,19 +705,16 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
           )}
         </div>
       </div>
-
       <div class="today-card green">
         <p class="today-cash-label">Cash / Manual</p>
         <p class="today-cash-value">{rp(cashHari)}</p>
         <p class="today-cash-sub">{hari.filter(t => t.metode_bayar !== "qris").length} transaksi</p>
       </div>
-
       <div class="today-card blue">
         <p class="today-qris-label">QRIS · Statis</p>
         <p class="today-qris-value">{rp(qrisHari)}</p>
         <p class="today-qris-sub">{hari.filter(t => t.metode_bayar === "qris").length} transaksi</p>
       </div>
-
       <div class="today-card amber">
         <p class="today-item-label">Item Terjual</p>
         <p class="today-item-value">{itemHari}</p>
@@ -747,13 +722,11 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
           {hari.length > 0 ? `~${(itemHari / hari.length).toFixed(1)} item/trx` : "belum ada transaksi"}
         </p>
       </div>
-
     </div>
   </div>
 
-  <!-- ② TREN 7 HARI + TRANSAKSI TERBARU ───────────────────────────────── -->
+  <!-- TREN 7 HARI + TRANSAKSI TERBARU -->
   <div class="trx-chart-grid grid grid-cols-5 gap-4 fade-up d2">
-
     <div class="col-span-3 section-card">
       <div class="section-head">
         <div>
@@ -764,11 +737,12 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         </div>
         <a href="/dashboard/analisis"
           class="text-[.72rem] font-semibold text-[#c84b1f] hover:underline whitespace-nowrap flex-shrink-0">
-          Analisis lengkap →
+          Analisis lengkap
         </a>
       </div>
       <div class="mini-chart-pad">
         <div class="mini-chart">
+          {/* ── FIX #2: function body {} + return() diakhiri dengan ; })} ── */}
           {days7.map(d => {
             const pct     = (d.omset / maxOmset7) * 100;
             const isToday = d.date === todayKey;
@@ -784,7 +758,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         </div>
       </div>
     </div>
-
     <div class="col-span-2 section-card" style="display:flex;flex-direction:column">
       <div class="section-head">
         <div>
@@ -810,22 +783,19 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         ))
       }
     </div>
-
   </div>
 
-  <!-- ③ RINGKASAN PEMBAYARAN 30 HARI ───────────────────────────────────── -->
+  <!-- RINGKASAN PEMBAYARAN 30 HARI -->
   <div class="fade-up d3">
     <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-widest mb-2.5">
       Ringkasan Pembayaran · 30 Hari Terakhir
     </p>
     <div class="pay-grid grid grid-cols-2 gap-4">
-
       <div class="section-card">
         <div class="section-head pay-section-head">
           <div><h2>Total per Metode Bayar</h2></div>
           <span class="trx-count-note">{trx30.length} transaksi</span>
         </div>
-
         <div class="pay-method-row">
           <div class="pay-method-icon pay-method-icon-green">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5" aria-hidden="true">
@@ -845,7 +815,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
             </p>
           </div>
         </div>
-
         <div class="pay-method-row">
           <div class="pay-method-icon pay-method-icon-blue">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2.5" aria-hidden="true">
@@ -866,20 +835,18 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
             </p>
           </div>
         </div>
-
         <div class="pay-total-row">
           <span class="pay-total-label">Total Omset 30 Hari</span>
           <span class="pay-total-value">{rp(omset30)}</span>
         </div>
       </div>
-
       <div class="section-card"
         style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr">
         {[
-          { lbl: "Total Transaksi", val: String(trx30.length), sub: "30 hari", colorClass: "stat-mini-color-primary" },
-          { lbl: "Omset / Hari", val: rp(Math.round(omset30 / 30)), sub: "rata-rata harian", colorClass: "stat-mini-color-accent" },
+          { lbl: "Total Transaksi",  val: String(trx30.length), sub: "30 hari", colorClass: "stat-mini-color-primary" },
+          { lbl: "Omset / Hari",     val: rp(Math.round(omset30 / 30)), sub: "rata-rata harian", colorClass: "stat-mini-color-accent" },
           { lbl: "Nilai / Transaksi", val: trx30.length > 0 ? rp(Math.round(omset30 / trx30.length)) : "Rp 0", sub: "rata-rata per trx", colorClass: "stat-mini-color-primary" },
-          { lbl: "Metode Dominan", val: cashCnt30 >= qrisCnt30 ? "Cash" : "QRIS", sub: cashCnt30 >= qrisCnt30 ? `${cashCnt30} dari ${trx30.length} trx` : `${qrisCnt30} dari ${trx30.length} trx`, colorClass: cashCnt30 >= qrisCnt30 ? "stat-mini-color-green" : "stat-mini-color-blue" },
+          { lbl: "Metode Dominan",   val: cashCnt30 >= qrisCnt30 ? "Cash" : "QRIS", sub: cashCnt30 >= qrisCnt30 ? `${cashCnt30} dari ${trx30.length} trx` : `${qrisCnt30} dari ${trx30.length} trx`, colorClass: cashCnt30 >= qrisCnt30 ? "stat-mini-color-green" : "stat-mini-color-blue" },
         ].map((s, i) => (
           <div class={["stat-mini-card", i < 2 ? "stat-mini-card-border-b" : "", i % 2 === 0 ? "stat-mini-card-border-r" : ""].filter(Boolean).join(" ")}>
             <p class="stat-mini-label">{s.lbl}</p>
@@ -888,13 +855,83 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
           </div>
         ))}
       </div>
-
     </div>
   </div>
 
-  <!-- ④ STAT CARDS PRODUK ──────────────────────────────────────────────── -->
-  <div class="stats-grid grid grid-cols-4 gap-3 fade-up d4">
+  <!-- PIUTANG PELANGGAN -->
+  <div class="fade-up d4">
+    <p class="text-[.65rem] font-semibold text-gray-400 uppercase tracking-widest mb-2.5">Piutang Pelanggan</p>
+    <div class="section-card overflow-hidden">
 
+      <!-- Stat strip -->
+      <div class="piutang-stat-grid">
+        <div class="piutang-stat-item">
+          <p class="piutang-stat-lbl">Total Piutang</p>
+          <p class="piutang-stat-val" style="color:#c84b1f">{rp(totalNilaiPiutang)}</p>
+          <p class="piutang-stat-sub">belum terbayar</p>
+        </div>
+        <div class="piutang-stat-item">
+          <p class="piutang-stat-lbl">Debitur Aktif</p>
+          <p class="piutang-stat-val" style="color:#0f0d0b">{jumlahDebitur}</p>
+          <p class="piutang-stat-sub">orang</p>
+        </div>
+        <div class="piutang-stat-item">
+          <p class="piutang-stat-lbl">Jatuh Tempo</p>
+          <p class="piutang-stat-val" style={piutangJatuhTempo > 0 ? "color:#dc2626" : "color:#15803d"}>
+            {piutangJatuhTempo}
+          </p>
+          <p class="piutang-stat-sub">{piutangJatuhTempo > 0 ? "sudah lewat" : "semua aman"}</p>
+        </div>
+        <div class="piutang-stat-item">
+          <p class="piutang-stat-lbl">Hampir Jatuh Tempo</p>
+          <p class="piutang-stat-val" style={piutangDekat > 0 ? "color:#ea580c" : "color:#15803d"}>
+            {piutangDekat}
+          </p>
+          <p class="piutang-stat-sub">{piutangDekat > 0 ? "dalam 3 hari" : "tidak ada"}</p>
+        </div>
+      </div>
+
+      <!-- Daftar piutang terbaru -->
+      {piutangPreview.length === 0 ? (
+        <p class="piutang-empty">Tidak ada piutang aktif. <a href="/dashboard/piutang" class="tabel-produk-link">Kelola piutang →</a></p>
+      ) : (
+        <>
+          {/* ── FIX #1: gunakan p.avatarStyle, p.inisial, dst. — bukan variabel bebas ── */}
+          {piutangListComputed.map(p => (
+            <div class="piutang-row">
+              <div class="piutang-avatar" style={p.avatarStyle}>{p.inisial}</div>
+              <div class="piutang-info">
+                <p class="piutang-nama">{p.nama}</p>
+                <div class="piutang-progress">
+                  <div class="piutang-progress-fill" style={`width:${p.pct}%;background:${p.progColor}`}></div>
+                </div>
+                <p class="piutang-meta">{p.pct}% terbayar · dari {rp(p.total_hutang)}</p>
+              </div>
+              {p.badgeLabel && (
+                <span class={`piutang-badge ${p.badgeClass}`}>{p.badgeLabel}</span>
+              )}
+              <div class="piutang-sisa">
+                <p class="piutang-sisa-val">{rp(p.sisa)}</p>
+                <p class="piutang-sisa-pct">sisa hutang</p>
+              </div>
+            </div>
+          ))}
+          <div style="padding:.75rem 1.375rem;border-top:1px solid rgba(15,13,11,.05);display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:.65rem;color:#9ca3af">
+              {jumlahDebitur > 5 ? `Menampilkan 5 dari ${jumlahDebitur} debitur aktif` : `${jumlahDebitur} debitur aktif`}
+            </span>
+            <a href="/dashboard/piutang"
+              class="text-[.72rem] font-semibold text-[#c84b1f] hover:underline">
+              Kelola semua piutang
+            </a>
+          </div>
+        </>
+      )}
+    </div>
+  </div>
+
+  <!-- STAT CARDS PRODUK -->
+  <div class="stats-grid grid grid-cols-4 gap-3 fade-up d5">
     <div class="stat-card">
       <div class="stat-top">
         <div>
@@ -909,7 +946,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         </div>
       </div>
     </div>
-
     <div class="stat-card">
       <div class="stat-top">
         <div>
@@ -924,7 +960,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         </div>
       </div>
     </div>
-
     <div class="stat-card">
       <div class="stat-top">
         <div>
@@ -944,7 +979,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         </div>
       </div>
     </div>
-
     <div class="stat-card">
       <div class="stat-top">
         <div>
@@ -959,17 +993,15 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
         </div>
       </div>
     </div>
-
   </div>
 
-  <!-- ⑤ TABEL PRODUK + KOLOM KANAN ────────────────────────────────────── -->
-  <div class="grid-main grid grid-cols-3 gap-5 fade-up d5">
-
+  <!-- TABEL PRODUK + KOLOM KANAN -->
+  <div class="grid-main grid grid-cols-3 gap-5 fade-up d6">
     <div class="col-span-2 section-card">
       <div class="section-head">
         <div><h2>Daftar Produk</h2></div>
         <a href="/dashboard/produk" class="text-[.72rem] text-[#c84b1f] font-semibold hover:underline whitespace-nowrap">
-          Lihat semua →
+          Lihat semua
         </a>
       </div>
       <div class="overflow-x-auto">
@@ -983,29 +1015,26 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
             </tr>
           </thead>
           <tbody>
-            {produk.slice(0, 8).map(p => {
-              const m  = margin(p.harga_beli, p.harga_jual);
-              const mc = m >= 20 ? "m-good" : m >= 10 ? "m-mid" : "m-low";
-              return (
-                <tr>
-                  <td class="td-pad-left">
-                    <div class="prod-name-cell">
-                      {p.quick_cash && <span title="Quick Cash" class="quick-cash-dot"></span>}
-                      <span class="prod-name-text">{p.nama_produk}</span>
-                    </div>
-                  </td>
-                  <td class="hide-xs">
-                    <span class={`${katColors[p.kategori] ?? "kat-gray"} inline-block px-2 py-0.5 rounded text-[.62rem] font-semibold`}>
-                      {p.kategori}
-                    </span>
-                  </td>
-                  <td class="prod-name-text">{rp(p.harga_jual)}</td>
-                  <td class="td-pad-right">
-                    <span class={`${mc} inline-block px-2 py-0.5 rounded text-[.63rem] font-bold`}>{m}%</span>
-                  </td>
-                </tr>
-              );
-            })}
+            {/* ── FIX #3: pakai produkComputed (pre-computed di frontmatter) ── */}
+            {produkComputed.map(p => (
+              <tr>
+                <td class="td-pad-left">
+                  <div class="prod-name-cell">
+                    {p.quick_cash && <span title="Quick Cash" class="quick-cash-dot"></span>}
+                    <span class="prod-name-text">{p.nama_produk}</span>
+                  </div>
+                </td>
+                <td class="hide-xs">
+                  <span class={`${katColors[p.kategori] ?? "kat-gray"} inline-block px-2 py-0.5 rounded text-[.62rem] font-semibold`}>
+                    {p.kategori}
+                  </span>
+                </td>
+                <td class="prod-name-text">{rp(p.harga_jual)}</td>
+                <td class="td-pad-right">
+                  <span class={`${p.mc} inline-block px-2 py-0.5 rounded text-[.63rem] font-bold`}>{p.m}%</span>
+                </td>
+              </tr>
+            ))}
             {produk.length === 0 && (
               <tr>
                 <td colspan="4" class="tabel-produk-empty">
@@ -1020,7 +1049,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
     </div>
 
     <div class="col-right space-y-4">
-
       <div class="section-card">
         <div class="section-head section-head-col">
           <h2>Top Seller</h2>
@@ -1038,7 +1066,7 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
                     <div class="ts-bar" style={`width:${Math.min(100,(t.total/(topSellers[0]?.total||1))*100)}%`}></div>
                   </div>
                 </div>
-                <span class="top-seller-qty">{t.total}×</span>
+                <span class="top-seller-qty">{t.total}x</span>
               </div>
             ))
           }
@@ -1069,12 +1097,11 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
           ))
         }
       </div>
-
     </div>
   </div>
 
-  <!-- ⑥ BREAKDOWN KATEGORI ─────────────────────────────────────────────── -->
-  <div class="section-card fade-up d6">
+  <!-- BREAKDOWN KATEGORI -->
+  <div class="section-card fade-up d7">
     <div class="section-head">
       <div><h2>Breakdown per Kategori</h2></div>
     </div>
@@ -1096,15 +1123,12 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
 
 </div>
 
-<!-- ── Inject site key aman ke window (tidak expose di HTML source langsung) ── -->
 <script is:inline nonce={nonce} define:vars={{ PUBLIC_TURNSTILE_SITEKEY }}>
   window.__TS_SITEKEY = PUBLIC_TURNSTILE_SITEKEY;
 </script>
 
-<!-- ── Load Turnstile SDK (render=explicit agar kita kontrol kapan render) ── -->
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 
-<!-- ── Script Modal Hapus Histori + Turnstile ─────────────────────────────── -->
 <script is:inline nonce={nonce}>
 (function () {
   "use strict";
@@ -1128,31 +1152,28 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
 
     if (!modal || !btnBuka) return;
 
-    // ── State Turnstile ────────────────────────────────────────────
     var _widgetId  = null;
     var _token     = null;
     var _pollTimer = null;
 
-    // ── Sidebar ────────────────────────────────────────────────────
     if (btnSidebar) {
       btnSidebar.onclick = function () {
         if (window.openSidebar) window.openSidebar();
       };
     }
 
-    // ── Warning messages ───────────────────────────────────────────
     var WARN = {
       transaksi: {
         hari_ini:  "Histori transaksi hari ini akan dihapus permanen, termasuk seluruh item transaksi terkait.",
         "7_hari":  "Histori transaksi 7 hari terakhir akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.",
         "30_hari": "Histori transaksi 30 hari terakhir akan dihapus permanen. Pastikan data sudah dicatat sebelum melanjutkan.",
-        semua:     "⚠️ SELURUH histori transaksi akan dihapus permanen. Data tidak dapat dipulihkan sama sekali!",
+        semua:     "SELURUH histori transaksi akan dihapus permanen. Data tidak dapat dipulihkan sama sekali!",
       },
       harga_log: {
         hari_ini:  "Log perubahan harga hari ini akan dihapus permanen.",
         "7_hari":  "Log perubahan harga 7 hari terakhir akan dihapus permanen.",
         "30_hari": "Log perubahan harga 30 hari terakhir akan dihapus permanen.",
-        semua:     "⚠️ SELURUH log perubahan harga akan dihapus permanen. Riwayat harga tidak dapat dipulihkan!",
+        semua:     "SELURUH log perubahan harga akan dihapus permanen. Riwayat harga tidak dapat dipulihkan!",
       },
     };
 
@@ -1180,7 +1201,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
       updateWarning();
     }
 
-    // ── Toast ──────────────────────────────────────────────────────
     var toastTimer = null;
     function showToast(msg, ok) {
       if (!toast || !toastTxt || !toastIco) return;
@@ -1200,25 +1220,20 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
       }, 3500);
     }
 
-    // ── Turnstile UI states ────────────────────────────────────────
     function setTsState(state) {
       if (!tsContainer) return;
-
       if (state === "loading") {
         tsContainer.innerHTML =
           '<div class="ts-loading-msg">' +
             '<div class="ts-loading-spinner"></div>' +
-            '<span>Memuat verifikasi…</span>' +
+            '<span>Memuat verifikasi...</span>' +
           '</div>';
         btnKonfirm.disabled = true;
-
       } else if (state === "widget") {
         tsContainer.innerHTML = "";
         btnKonfirm.disabled = true;
-
       } else if (state === "verified") {
         btnKonfirm.disabled = false;
-
       } else if (state === "error") {
         tsContainer.innerHTML =
           '<div class="ts-error-msg">' +
@@ -1231,33 +1246,26 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
       }
     }
 
-    // ── Render Turnstile widget ────────────────────────────────────
     function renderWidget() {
       if (!tsContainer) return;
-
       if (_widgetId !== null) {
         try { window.turnstile.remove(_widgetId); } catch (e) {}
         _widgetId = null;
         _token    = null;
       }
-
       setTsState("widget");
-
       _widgetId = window.turnstile.render(tsContainer, {
         sitekey: window.__TS_SITEKEY,
         theme:   "light",
         size:    "normal",
-
         callback: function (token) {
           _token = token;
           setTsState("verified");
         },
-
         "expired-callback": function () {
           _token = null;
           btnKonfirm.disabled = true;
         },
-
         "error-callback": function () {
           _token = null;
           setTsState("error");
@@ -1265,41 +1273,32 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
       });
     }
 
-    // ── Tunggu SDK siap lalu render ────────────────────────────────
     function initTurnstile() {
       setTsState("loading");
-      if (window.turnstile) {
-        renderWidget();
-        return;
-      }
+      if (window.turnstile) { renderWidget(); return; }
       var attempts = 0;
       _pollTimer = setInterval(function () {
         attempts++;
         if (window.turnstile) {
-          clearInterval(_pollTimer);
-          _pollTimer = null;
+          clearInterval(_pollTimer); _pollTimer = null;
           renderWidget();
         } else if (attempts > 50) {
-          clearInterval(_pollTimer);
-          _pollTimer = null;
+          clearInterval(_pollTimer); _pollTimer = null;
           setTsState("error");
         }
       }, 200);
     }
 
-    // ── Bersihkan widget & timer saat modal ditutup ────────────────
     function destroyTurnstile() {
       if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
       if (_widgetId !== null && window.turnstile) {
         try { window.turnstile.remove(_widgetId); } catch (e) {}
       }
-      _widgetId = null;
-      _token    = null;
+      _widgetId = null; _token = null;
       if (tsContainer) tsContainer.innerHTML = "";
       btnKonfirm.disabled = true;
     }
 
-    // ── Buka / tutup modal ─────────────────────────────────────────
     function onEsc(e) { if (e.key === "Escape") tutupModal(); }
 
     function bukaModal() {
@@ -1327,36 +1326,25 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
       el.addEventListener("change", syncRadioStyles);
     });
 
-    // ── Eksekusi hapus ─────────────────────────────────────────────
     btnKonfirm.addEventListener("click", function () {
       var type  = getSelected("hapusType");
       var range = getSelected("hapusRange");
       if (!type || !range) return;
-
-      if (!_token) {
-        showToast("Selesaikan verifikasi terlebih dahulu.", false);
-        return;
-      }
-
+      if (!_token) { showToast("Selesaikan verifikasi terlebih dahulu.", false); return; }
       if (range === "semua") {
         var label = type === "transaksi" ? "SELURUH histori transaksi" : "SELURUH log perubahan harga";
-        if (!window.confirm("⚠️ Yakin ingin menghapus " + label + "?\n\nData tidak dapat dipulihkan!")) return;
+        if (!window.confirm("Yakin ingin menghapus " + label + "?\n\nData tidak dapat dipulihkan!")) return;
       }
-
       btnKonfirm.disabled   = true;
       btnBatal.disabled     = true;
       spinner.style.display = "block";
       btnLabel.textContent  = "Menghapus...";
 
-      fetch("/api/admin/hapus-histori", {
+      fetch("/dashboard/api/admin/hapus-histori", {
         method:      "DELETE",
         credentials: "same-origin",
         headers:     { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type:           type,
-          range:          range,
-          turnstileToken: _token,
-        }),
+        body: JSON.stringify({ type: type, range: range, turnstileToken: _token }),
       })
       .then(function (res) {
         return res.json().then(function (data) {
@@ -1364,7 +1352,7 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
             tutupModal();
             var deleted   = data.deleted || 0;
             var typeLabel = type === "transaksi" ? "transaksi" : "log harga";
-            showToast("✓ " + deleted + " " + typeLabel + " berhasil dihapus", true);
+            showToast(deleted + " " + typeLabel + " berhasil dihapus", true);
             setTimeout(function () { window.location.reload(); }, 1500);
           } else {
             showToast(data.error || "Gagal menghapus data.", false);
@@ -1391,7 +1379,6 @@ const tanggalStr = nowWIB.toLocaleDateString("id-ID", { weekday: "long", day: "n
   } else {
     initDashboard();
   }
-
 }());
 </script>
 
