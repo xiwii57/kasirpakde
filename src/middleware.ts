@@ -48,14 +48,7 @@ const ROUTE_CONFIG = {
 const PUBLIC_ROUTES    = new Set<string>(ROUTE_CONFIG.public);
 const AUTH_FORM_ROUTES = new Set<string>(ROUTE_CONFIG.authForms);
 
-const PROTECTED_PREFIXES = [
-    "/dashboard",
-"/kasir",
-"/produk",
-"/dashboard/api/kasir",
-"/dashboard/api/admin",
-"/dashboard/api/produk",
-];
+const PROTECTED_PREFIXES = ["/dashboard"];
 
 const STATIC_EXTS        = /\.(ico|png|jpg|jpeg|webp|svg|gif|woff2?|ttf|otf|css|js|map|txt|xml|json)$/i;
 const MAX_BODY_BYTES      = 512 * 1024;
