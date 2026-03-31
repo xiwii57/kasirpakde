@@ -29,6 +29,14 @@ if (!SUPABASE_URL.startsWith("https://")) {
 
 const ADMIN_EMAIL_NORMALIZED = ADMIN_EMAIL.toLowerCase().trim();
 
+// ── Durasi sesi ────────────────────────────────────────────────────
+// Access token (JWT Supabase) tetap ~1 jam (dikontrol Supabase).
+// Refresh token cookie kita batasi 1 hari — setelah itu harus login ulang.
+// Sesi absolut juga dibatasi 1 hari via MAX_SESSION_AGE_MS.
+const ACCESS_TOKEN_MAX_AGE  = 60 * 60;            // 1 jam (detik)
+const REFRESH_TOKEN_MAX_AGE = 60 * 60 * 24;       // 1 hari (detik)
+const MAX_SESSION_AGE_MS    = 24 * 60 * 60 * 1000; // 1 hari (ms) — batas absolut sesi
+
 const COOKIE_OPTIONS = {
     path:     "/",
     httpOnly: true,
@@ -83,9 +91,6 @@ function isVercelHost(host: string): boolean {
     return VERCEL_HOST_RE.test(hostname);
 }
 
-// FIX: kode lama — new URL(url.pathname + url.search + url.hash)
-// crash karena pathname saja bukan URL absolut yang valid.
-// Solusi: clone url object lengkap lalu ganti protocol & host.
 function redirectToCanonical(url: URL): Response {
     const canonical    = new URL(url.toString());
     canonical.protocol = "https:";
@@ -126,7 +131,7 @@ interface RateRecord {
 
 const rateStore = new Map<string, RateRecord>();
 
-const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+const CLEANUP_INTERVAL_MS = 3 * 60 * 1000; // lebih sering dari sebelumnya (5 → 3 menit)
 setInterval(() => {
     const now = Date.now();
     let cleaned = 0;
@@ -142,15 +147,15 @@ setInterval(() => {
 const RATE_CONFIG = {
     login: {
         maxAttempts:      5,
-        windowMs:         15 * 60 * 1000,
-        blockMs:          30 * 60 * 1000,
+        windowMs:         15 * 60 * 1000,  // 15 menit
+        blockMs:          60 * 60 * 1000,  // 1 jam (diperkuat dari 30 menit)
         maxStrikes:       3,
-        strikeMultiplier: 2,
+        strikeMultiplier: 3,               // diperkuat dari 2×
     },
     api: {
         maxAttempts:      60,
         windowMs:         60 * 1000,
-        blockMs:          5 * 60 * 1000,
+        blockMs:          10 * 60 * 1000,  // 10 menit (diperkuat dari 5 menit)
         maxStrikes:       10,
         strikeMultiplier: 1.5,
     },
@@ -213,8 +218,6 @@ function getClientIp(request: Request): string {
     return request.headers.get("x-real-ip")?.trim().slice(0, 45) ?? "0.0.0.0";
 }
 
-// FIX: tambah guard — PUBLIC_ROUTES tidak boleh dianggap protected
-// meski path-nya diawali "/dashboard" (contoh: logout).
 function isProtectedRoute(pathname: string): boolean {
     if (PUBLIC_ROUTES.has(pathname)) return false;
     return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
@@ -239,6 +242,43 @@ function safeCompare(a: string, b: string): boolean {
 function clearAuthCookies(cookies: AstroCookies): void {
     cookies.delete("sb-access-token",  COOKIE_OPTIONS);
     cookies.delete("sb-refresh-token", COOKIE_OPTIONS);
+    cookies.delete("sb-session-meta",  COOKIE_OPTIONS); // cookie metadata sesi baru
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SESSION METADATA COOKIE
+// Menyimpan: waktu login (iat) untuk penegakan batas 1 hari absolut.
+// Dienkode base64url + HMAC-SHA256 agar tidak bisa dipalsukan klien.
+// ══════════════════════════════════════════════════════════════════
+
+// Gunakan SUPABASE_ANON_KEY sebagai base kunci HMAC (tersedia di env).
+// Di produksi nyata, idealnya gunakan env var SECRET terpisah.
+async function getHmacKey(): Promise<CryptoKey> {
+    const raw = new TextEncoder().encode(SUPABASE_ANON_KEY.slice(0, 64));
+    return crypto.subtle.importKey("raw", raw, { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
+}
+
+async function signSessionMeta(issuedAt: number): Promise<string> {
+    const payload = issuedAt.toString();
+    const key     = await getHmacKey();
+    const sig     = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+    const sigB64  = btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+    return `${payload}.${sigB64}`;
+}
+
+async function verifySessionMeta(value: string): Promise<number | null> {
+    const parts = value.split(".");
+    if (parts.length !== 2) return null;
+    const [payload, sigB64] = parts as [string, string];
+    const issuedAt = parseInt(payload, 10);
+    if (isNaN(issuedAt) || issuedAt <= 0) return null;
+    // Verifikasi HMAC
+    const key         = await getHmacKey();
+    const sigBytes    = Uint8Array.from(atob(sigB64.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+    const valid       = await crypto.subtle.verify("HMAC", key, sigBytes, new TextEncoder().encode(payload));
+    if (!valid) return null;
+    return issuedAt;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -304,7 +344,7 @@ function checkOrigin(request: Request, url: URL): boolean {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// JWT STRUCTURE VALIDATOR
+// JWT STRUCTURE VALIDATOR (diperkuat)
 // ══════════════════════════════════════════════════════════════════
 
 function isValidJwtStructure(token: string): boolean {
@@ -318,9 +358,23 @@ function isValidJwtStructure(token: string): boolean {
         const padded  = parts[1]!.replace(/-/g, "+").replace(/_/g, "/");
         const decoded = atob(padded);
         const payload = JSON.parse(decoded) as Record<string, unknown>;
+
+        // exp: harus ada, belum lewat
         if (typeof payload.exp !== "number")                         return false;
         if (payload.exp * 1000 < Date.now())                        return false;
+
+        // sub: harus ada dan tidak kosong
         if (typeof payload.sub !== "string" || !payload.sub.trim()) return false;
+
+        // iat: harus ada dan masuk akal (tidak di masa depan, tidak lebih dari 1 hari lalu)
+        if (typeof payload.iat !== "number")                         return false;
+        const iatMs = payload.iat * 1000;
+        if (iatMs > Date.now() + 60_000)                            return false; // toleransi clock skew 1 menit
+        if (Date.now() - iatMs > MAX_SESSION_AGE_MS + 60_000)       return false; // lebih dari 1 hari
+
+        // nbf (not before): jika ada, token belum boleh dipakai sebelum waktu ini
+        if (typeof payload.nbf === "number" && payload.nbf * 1000 > Date.now() + 60_000) return false;
+
         return true;
     } catch { return false; }
 }
@@ -398,7 +452,7 @@ async function refreshSessionFromToken(refreshToken: string): Promise<{
 }
 
 // ══════════════════════════════════════════════════════════════════
-// SESSION CACHE (30 detik)
+// SESSION CACHE (dikurangi ke 15 detik untuk keamanan lebih ketat)
 // ══════════════════════════════════════════════════════════════════
 
 interface SessionResult {
@@ -411,7 +465,7 @@ interface SessionResult {
 }
 
 const sessionCache      = new Map<string, { result: SessionResult; expiresAt: number }>();
-const SESSION_CACHE_TTL = 30_000;
+const SESSION_CACHE_TTL = 15_000; // 15 detik (diperkuat dari 30 detik)
 
 setInterval(() => {
     const now = Date.now();
@@ -420,7 +474,7 @@ setInterval(() => {
         if (now > entry.expiresAt) { sessionCache.delete(k); cleaned++; }
     }
     if (cleaned > 0) console.info(`[Middleware] SessionCache cleanup: ${cleaned} entry dihapus.`);
-}, 2 * 60 * 1000);
+}, 60 * 1000); // cleanup setiap 1 menit (lebih sering dari sebelumnya)
 
 async function getSessionCacheKey(token: string): Promise<string> {
     const encoded = new TextEncoder().encode(token);
@@ -470,6 +524,8 @@ async function validateSession(accessToken: string, refreshToken: string): Promi
         const { data: rd, error: re } = await refreshSessionFromToken(refreshToken);
         if (re || !rd) return { valid: false, isAdmin: false };
         const isAdmin = safeCompare((rd.user.email ?? "").toLowerCase().trim(), ADMIN_EMAIL_NORMALIZED);
+        // Setelah refresh, invalidasi cache lama agar token lama tidak bisa dipakai lagi
+        sessionCache.delete(cacheKey);
         return {
             valid:           true,
             isAdmin,
@@ -743,8 +799,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
 
     // ── 11. Route publik — dicek SEBELUM protected ────────────────
-    // Logout (/dashboard/api/auth/logout) harus lolos di sini,
-    // tidak boleh tertangkap isProtectedRoute() di step 12.
     if (PUBLIC_ROUTES.has(pathname)) {
         const response = await next();
         return applySecurityWithNonce(response, nonce, isApiRoute);
@@ -754,6 +808,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     if (isProtectedRoute(pathname)) {
         const accessToken  = cookies.get("sb-access-token")?.value  ?? "";
         const refreshToken = cookies.get("sb-refresh-token")?.value ?? "";
+        const sessionMeta  = cookies.get("sb-session-meta")?.value  ?? "";
 
         if (
             !accessToken || !refreshToken ||
@@ -764,6 +819,30 @@ export const onRequest = defineMiddleware(async (context, next) => {
             return isApiRoute
             ? jsonError("Autentikasi diperlukan.", 401)
             : htmlErrorRedirect(401);
+        }
+
+        // ── Cek batas sesi absolut 1 hari via metadata cookie ──────
+        // Jika cookie metadata ada, verifikasi HMAC-nya lalu cek umur sesi.
+        // Jika tidak ada (login lama sebelum fitur ini), izinkan tapi set ulang.
+        let sessionIssuedAt: number | null = null;
+        if (sessionMeta) {
+            sessionIssuedAt = await verifySessionMeta(sessionMeta);
+            if (sessionIssuedAt === null) {
+                // Tanda tangan tidak valid — kemungkinan cookie dipalsukan
+                console.warn(`[Middleware] Session meta tidak valid — IP: ${ip.slice(0, 8)}***`);
+                clearAuthCookies(cookies);
+                return isApiRoute
+                ? jsonError("Sesi tidak valid.", 401)
+                : htmlErrorRedirect(401);
+            }
+            if (Date.now() - sessionIssuedAt > MAX_SESSION_AGE_MS) {
+                // Sesi sudah lebih dari 1 hari — paksa login ulang
+                console.info(`[Middleware] Sesi kadaluarsa (>1 hari) — IP: ${ip.slice(0, 8)}***`);
+                clearAuthCookies(cookies);
+                return isApiRoute
+                ? jsonError("Sesi telah berakhir. Silakan login kembali.", 401)
+                : htmlErrorRedirect(401);
+            }
         }
 
         const session = await validateSession(accessToken, refreshToken);
@@ -793,10 +872,19 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
         const response = await next();
 
+        // ── Set/perbarui cookie setelah validasi berhasil ───────────
         if (session.newAccessToken && session.newRefreshToken) {
-            const expiresIn = session.newExpiresIn ?? 3600;
+            const expiresIn = session.newExpiresIn ?? ACCESS_TOKEN_MAX_AGE;
             cookies.set("sb-access-token",  session.newAccessToken,  { ...COOKIE_OPTIONS, maxAge: expiresIn });
-            cookies.set("sb-refresh-token", session.newRefreshToken, { ...COOKIE_OPTIONS, maxAge: 60 * 60 * 24 * 7 });
+            cookies.set("sb-refresh-token", session.newRefreshToken, { ...COOKIE_OPTIONS, maxAge: REFRESH_TOKEN_MAX_AGE });
+        }
+
+        // Set metadata cookie jika belum ada (sesi lama) atau jika baru login
+        if (!sessionMeta && !session.newAccessToken) {
+            // Sesi lama tanpa metadata — set sekarang dengan waktu saat ini
+            // (sesi akan expire 1 hari dari request ini, bukan dari login awal)
+            const metaValue = await signSessionMeta(Date.now());
+            cookies.set("sb-session-meta", metaValue, { ...COOKIE_OPTIONS, maxAge: REFRESH_TOKEN_MAX_AGE });
         }
 
         return applySecurityWithNonce(response, nonce, isApiRoute);
@@ -806,3 +894,30 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const response = await next();
     return applySecurityWithNonce(response, nonce, isApiRoute);
 });
+
+// ══════════════════════════════════════════════════════════════════
+// CATATAN INTEGRASI — Login Handler
+// ══════════════════════════════════════════════════════════════════
+//
+// Di endpoint login (/dashboard/api/auth/login), setelah Supabase
+// mengembalikan token, set tiga cookie berikut:
+//
+//   cookies.set("sb-access-token",  data.session.access_token,  {
+//       path: "/", httpOnly: true, sameSite: "strict", secure: IS_PROD,
+//       maxAge: 60 * 60,          // 1 jam
+//   });
+//   cookies.set("sb-refresh-token", data.session.refresh_token, {
+//       path: "/", httpOnly: true, sameSite: "strict", secure: IS_PROD,
+//       maxAge: 60 * 60 * 24,     // 1 hari
+//   });
+//
+//   // Cookie metadata sesi — tandatangani di sisi server
+//   import { signSessionMeta } from "./middleware"; // atau duplikasi fungsinya
+//   const metaValue = await signSessionMeta(Date.now());
+//   cookies.set("sb-session-meta", metaValue, {
+//       path: "/", httpOnly: true, sameSite: "strict", secure: IS_PROD,
+//       maxAge: 60 * 60 * 24,     // 1 hari
+//   });
+//
+// Ini memastikan batas 1 hari dihitung dari waktu login yang sebenarnya.
+// ══════════════════════════════════════════════════════════════════
