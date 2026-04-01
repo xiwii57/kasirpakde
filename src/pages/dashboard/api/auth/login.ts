@@ -282,8 +282,19 @@ export const POST: APIRoute = async ({ request, cookies, clientAddress }) => {
     // ── 10. Login sukses — set cookie ─────────────────────────────
     const { access_token, refresh_token, expires_in } = data.session;
 
+    // Buat session meta (HMAC dari waktu login)
+    const issuedAt  = Date.now();
+    const payload   = issuedAt.toString();
+    const raw       = new TextEncoder().encode(SUPABASE_ANON_KEY.slice(0, 64));
+    const key       = await crypto.subtle.importKey("raw", raw, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const sig       = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+    const sigB64    = btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+    const metaValue = `${payload}.${sigB64}`;
+
     cookies.set("sb-access-token",  access_token,  { ...COOKIE_OPTIONS, maxAge: expires_in });
-    cookies.set("sb-refresh-token", refresh_token, { ...COOKIE_OPTIONS, maxAge: 60 * 60 * 24 * 7 });
+    cookies.set("sb-refresh-token", refresh_token, { ...COOKIE_OPTIONS, maxAge: 60 * 60 * 24 });
+    cookies.set("sb-session-meta",  metaValue,     { ...COOKIE_OPTIONS, maxAge: 60 * 60 * 24 });
 
     console.info(`[Login] ✓ Admin login berhasil dari IP ${ip.slice(0, 8)}***`);
 

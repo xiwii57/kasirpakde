@@ -21,6 +21,7 @@ function clearSessionCookies(): string[] {
     return [
         `sb-access-token=; ${base}`,
         `sb-refresh-token=; ${base}`,
+        `sb-session-meta=;  ${base}`,
     ];
 }
 
