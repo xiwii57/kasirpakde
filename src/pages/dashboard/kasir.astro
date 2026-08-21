@@ -846,7 +846,7 @@ const kategoriList = [...new Set(produk.map(p => p.kategori).filter(Boolean))].s
           <input
             id="cash-diterima-input"
             class="cash-input-field"
-            type="number"
+            type="text"
             min="0"
             placeholder="0"
             inputmode="numeric"
@@ -945,6 +945,16 @@ function timeStr(iso) {
 }
 function dateStr(iso) {
   return new Date(iso).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
+}
+
+/* ── Format angka Rupiah untuk input ──────────────────────────────────── */
+function toDigits(str) {
+  return String(str || '').replace(/\D/g, '');
+}
+function formatRibuan(str) {
+  var d = toDigits(str);
+  if (!d) return '';
+  return parseInt(d, 10).toLocaleString('id-ID');
 }
 
 /* ── Sound ─────────────────────────────────────────────────────────────── */
@@ -1635,16 +1645,28 @@ function initKasir() {
   var cashInp = document.getElementById('cash-diterima-input');
   if(cashInp){
     cashInp.addEventListener('input', function(){
-      var totalStr = document.getElementById('cash-disp').textContent;
-      /* extract numeric from rp string */
+      var cursorPos = this.selectionStart;
+      var digitsBefore = toDigits(this.value.slice(0, cursorPos)).length;
+
+      var digits = toDigits(this.value);
+      var formatted = digits ? parseInt(digits,10).toLocaleString('id-ID') : '';
+      this.value = formatted;
+
+      /* reposisikan kursor supaya tetap wajar saat ngetik/hapus */
+      var count = 0, pos = 0;
+      for (pos = 0; pos < formatted.length; pos++) {
+        if (/\d/.test(formatted[pos])) count++;
+        if (count === digitsBefore) { pos++; break; }
+      }
+      this.setSelectionRange(pos, pos);
+
       var total = getTotal();
-      var diterima = parseFloat(this.value)||0;
+      var diterima = digits ? parseInt(digits,10) : 0;
       var kb2=document.getElementById('kembalian-box');
       var kv=document.getElementById('kembalian-val');
       var kh=document.getElementById('kembalian-hint');
       var cf=document.getElementById('cash-confirm');
 
-      /* clear active chip */
       document.querySelectorAll('.denom-chip').forEach(function(b){ b.classList.toggle('active', +b.dataset.val===diterima); });
 
       if(diterima<=0){
@@ -1668,7 +1690,7 @@ function initKasir() {
     });
   }
 
-  /* Cash exact button */
+  /* Cash exact button — tidak perlu diubah, cukup pastikan set string mentah lalu trigger input */
   var exactBtn=document.getElementById('cash-exact-btn');
   if(exactBtn) exactBtn.addEventListener('click',function(){
     var total=getTotal();
@@ -1688,7 +1710,7 @@ function initKasir() {
   var cf=document.getElementById('cash-confirm');
   if(cf) cf.addEventListener('click', async function(){
     var total=getTotal();
-    var diterima=parseFloat(document.getElementById('cash-diterima-input').value)||0;
+    var diterima = parseInt(toDigits(document.getElementById('cash-diterima-input').value), 10) || 0; // ← diubah
     this.disabled=true; this.textContent='Menyimpan…';
     try {
       _lastTrx = {total:total, metode_bayar:'cash', created_at:new Date().toISOString(), uang_diterima:diterima,
